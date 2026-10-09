@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="fr" data-fr-scheme="system">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="noindex, nofollow">
+<meta name="format-detection" content="telephone=no">
+<title>Indicateurs d’excellence scientifique</title>
+<style>/*__DSFR_CSS__*/</style>
+<style>/*__APP_CSS__*/</style>
+</head>
+<body>
+<div class="fr-skiplinks">
+  <nav class="fr-container" role="navigation" aria-label="Accès rapide">
+    <ul class="fr-skiplinks__list"><li><a class="fr-link" href="#main">Contenu</a></li></ul>
+  </nav>
+</div>
+
+<header role="banner" class="fr-header">
+  <div class="fr-header__body">
+    <div class="fr-container">
+      <div class="fr-header__body-row">
+        <div class="fr-header__brand">
+          <div class="fr-header__brand-top">
+            <div class="fr-header__logo"><p class="fr-logo">République<br>Française</p></div>
+            <div class="fr-header__navbar">
+              <button type="button" class="fr-btn--menu fr-btn app-auth-only" data-fr-opened="false" aria-controls="header-menu" aria-haspopup="menu" id="btn-menu" title="Menu">Menu</button>
+            </div>
+          </div>
+          <div class="fr-header__service">
+            <p class="fr-header__service-title">Indicateurs d’excellence scientifique</p>
+            <p class="fr-header__service-tagline">Positionnement de la recherche française</p>
+          </div>
+        </div>
+        <div class="fr-header__tools">
+          <div class="fr-header__tools-links">
+            <ul class="fr-btns-group">
+              <li><span class="fr-btn fr-icon-user-line app-user app-auth-only app-user-name"></span></li>
+              <li><button type="button" class="fr-btn fr-icon-logout-box-r-line app-auth-only app-logout" id="btn-logout">Se déconnecter</button></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fr-header__menu fr-modal" id="header-menu" aria-labelledby="btn-menu">
+    <div class="fr-container">
+      <button type="button" class="fr-btn--close fr-btn" aria-controls="header-menu" title="Fermer">Fermer</button>
+      <div class="fr-header__menu-links"></div>
+    </div>
+  </div>
+</header>
+
+<main id="main" role="main">
+
+  <!-- ===================================================== Connexion -->
+  <section id="login-view" class="fr-container fr-my-7w">
+    <div class="fr-grid-row fr-grid-row--center">
+      <div class="fr-col-12 fr-col-md-8 fr-col-lg-5">
+        <div class="app-login-card">
+          <h1 class="fr-h3">Connexion</h1>
+          <p class="fr-text--sm fr-text-mention--grey">Accès réservé. Les données de ce tableau de bord sont chiffrées ; elles ne sont lisibles qu’avec un identifiant et un mot de passe valides.</p>
+          <form id="login-form" novalidate>
+            <fieldset class="fr-fieldset" aria-labelledby="login-legend">
+              <legend class="fr-sr-only" id="login-legend">Identifiants</legend>
+              <div class="fr-fieldset__element">
+                <div class="fr-input-group">
+                  <label class="fr-label" for="login">Identifiant</label>
+                  <input class="fr-input" id="login" name="username" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+                </div>
+              </div>
+              <div class="fr-fieldset__element">
+                <div class="fr-password" id="password-group">
+                  <label class="fr-label" for="password">Mot de passe</label>
+                  <div class="fr-input-wrap">
+                    <input class="fr-password__input fr-input" id="password" name="password" type="password" autocomplete="current-password" required>
+                  </div>
+                  <div class="fr-password__checkbox fr-checkbox-group fr-checkbox-group--sm">
+                    <input aria-label="Afficher le mot de passe" id="password-show" type="checkbox">
+                    <label class="fr-password__checkbox fr-label" for="password-show">Afficher</label>
+                  </div>
+                </div>
+              </div>
+              <div class="fr-fieldset__element" id="login-error" hidden>
+                <div class="fr-alert fr-alert--error fr-alert--sm" role="alert"><p id="login-error-text">Identifiant ou mot de passe incorrect.</p></div>
+              </div>
+              <div class="fr-fieldset__element">
+                <button class="fr-btn fr-icon-lock-line fr-btn--icon-left" type="submit" id="login-btn">Se connecter</button>
+              </div>
+            </fieldset>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== Tableau de bord -->
+  <section id="app-view" hidden>
+    <div class="fr-notice fr-notice--info" id="demo-notice" hidden>
+      <div class="fr-container"><div class="fr-notice__body">
+        <p class="fr-notice__title">Données de démonstration : les valeurs affichées sont synthétiques et ne décrivent aucune réalité. Lancez l’extraction OpenAlex pour obtenir les vrais chiffres.</p>
+      </div></div>
+    </div>
+
+    <div class="fr-container fr-mt-4w fr-mb-7w">
+      <h1 class="fr-h2 fr-mb-3w">Tableau de bord de l’excellence scientifique</h1>
+
+      <div class="fr-tabs">
+        <ul class="fr-tabs__list" role="tablist" aria-label="Familles d’indicateurs">
+          <li role="presentation"><button type="button" id="tab-biblio" class="fr-tabs__tab" tabindex="0" role="tab" aria-selected="true" aria-controls="panel-biblio">Bibliométrie</button></li>
+          <li role="presentation"><button type="button" id="tab-reco" class="fr-tabs__tab" tabindex="-1" role="tab" aria-selected="false" aria-controls="panel-reco">Reconnaissance de l’écosystème</button></li>
+          <li role="presentation"><button type="button" id="tab-innov" class="fr-tabs__tab" tabindex="-1" role="tab" aria-selected="false" aria-controls="panel-innov">Innovation</button></li>
+          <li role="presentation"><button type="button" id="tab-attr" class="fr-tabs__tab" tabindex="-1" role="tab" aria-selected="false" aria-controls="panel-attr">Attractivité internationale</button></li>
+        </ul>
+
+        <!-- ------------------------------------------------ Bibliométrie -->
+        <div id="panel-biblio" class="fr-tabs__panel fr-tabs__panel--selected" role="tabpanel" aria-labelledby="tab-biblio" tabindex="0">
+
+          <form class="app-filters" id="filters" aria-label="Filtres">
+            <div class="fr-grid-row fr-grid-row--gutters fr-grid-row--bottom">
+              <div class="fr-col-12 fr-col-lg-4">
+                <div class="fr-select-group"><label class="fr-label" for="f-disc">Discipline</label><select class="fr-select" id="f-disc"></select></div>
+              </div>
+              <div class="fr-col-12 fr-col-sm-6 fr-col-lg-4">
+                <div class="fr-select-group"><label class="fr-label" for="f-region">Région</label><select class="fr-select" id="f-region"></select></div>
+              </div>
+              <div class="fr-col-12 fr-col-sm-6 fr-col-lg-4">
+                <div class="fr-select-group"><label class="fr-label" for="f-etab">Établissement</label><select class="fr-select" id="f-etab"></select></div>
+              </div>
+              <div class="fr-col-12 fr-col-sm-6 fr-col-lg-4">
+                <div class="app-years">
+                  <div class="fr-select-group"><label class="fr-label" for="f-y0">Début</label><select class="fr-select" id="f-y0"></select></div>
+                  <div class="fr-select-group"><label class="fr-label" for="f-y1">Fin</label><select class="fr-select" id="f-y1"></select></div>
+                </div>
+              </div>
+              <div class="fr-col-12 fr-col-sm-6 fr-col-lg-4">
+                <button type="button" class="fr-btn fr-btn--tertiary fr-btn--sm app-reset" id="f-reset" title="Réinitialiser les filtres">Réinitialiser</button>
+              </div>
+            </div>
+          </form>
+          <div class="app-perimeter fr-mt-3w">
+            <p class="fr-text--lead fr-mb-1v" id="perimeter"></p>
+            <p class="fr-text--sm fr-mb-0 app-scope" id="scope-note"></p>
+          </div>
+
+          <!-- Chiffres clés -->
+          <section class="fr-mt-4w" aria-labelledby="h-kpi">
+            <h2 class="fr-h5 fr-mb-2w" id="h-kpi">Influence et prestige</h2>
+            <div class="fr-grid-row fr-grid-row--gutters" id="kpis"></div>
+          </section>
+
+          <!-- Comparaison internationale -->
+          <section class="fr-mt-6w" aria-labelledby="h-intl" id="intl" hidden>
+            <div class="app-section-head">
+              <div>
+                <h2 class="fr-h4 fr-mb-1v" id="h-intl">Comparaison internationale</h2>
+                <p class="fr-text--sm fr-mb-0" id="intl-sub"></p>
+              </div>
+              <fieldset class="fr-segmented fr-segmented--sm app-seg" id="seg-intl">
+                <legend class="fr-segmented__legend fr-sr-only">Indicateur</legend>
+                <div class="fr-segmented__elements">
+                  <div class="fr-segmented__element"><input value="t10" checked type="radio" id="si-t10" name="seg-intl"><label class="fr-label" for="si-t10">Influence · top 10 %</label></div>
+                  <div class="fr-segmented__element"><input value="tj" type="radio" id="si-tj" name="seg-intl"><label class="fr-label" for="si-tj">Prestige · revues de tête</label></div>
+                </div>
+              </fieldset>
+            </div>
+            <div class="app-chart" id="chart-intl"></div>
+            <div class="app-legend" id="intl-legend"></div>
+            <details class="app-ost fr-mt-2w">
+              <summary>Correspondance avec l’étude de l’OST (« La France dans la compétition scientifique mondiale », 2026)</summary>
+              <div class="fr-table fr-table--sm fr-table--no-caption app-table app-method-table"><div class="fr-table__wrapper"><div class="fr-table__container"><div class="fr-table__content">
+              <table><caption>Correspondance OST</caption>
+                <thead><tr><th scope="col">Ce tableau de bord</th><th scope="col">Étude OST</th><th scope="col">Différences</th></tr></thead>
+                <tbody>
+                  <tr><td>Part du top 10 % mondial</td><td>Figure 6 : part mondiale dans le décile des publications les plus citées (« influence »)</td><td rowspan="2">OpenAlex ici, Web of Science à l’OST. Compte entier ici (un article co-signé compte 1 pour chaque pays), compte fractionnaire à l’OST : les niveaux sont plus élevés ici, surtout pour les petits pays très internationalisés (Suisse, Pays-Bas). Les classements et les tendances sont comparables.</td></tr>
+                  <tr><td>Part des revues de tête</td><td>Figure 7 : part mondiale dans le décile des revues les plus citées (« prestige »)</td></tr>
+                  <tr><td>Revues de tête : 10 revues SJR par axe disciplinaire, soit 380 revues</td><td>Décile des revues les plus citées de chaque discipline</td><td>Sélection plus étroite ici : les revues phares de chaque discipline.</td></tr>
+                  <tr><td>38 axes, regroupés en 7 macro-disciplines</td><td>3 grands domaines (sciences physiques et de l’ingénieur, sciences du vivant, SHS)</td><td>Pour comparer, choisir la macro-discipline la plus proche.</td></tr>
+                </tbody>
+              </table></div></div></div></div>
+            </details>
+            <button type="button" class="fr-btn fr-btn--tertiary fr-btn--sm fr-btn--icon-left fr-icon-download-line fr-mt-2w" id="btn-intl-csv">Exporter les valeurs par pays et par année (CSV)</button>
+          </section>
+
+          <!-- 38 disciplines -->
+          <section class="fr-mt-6w" aria-labelledby="h-comp">
+            <div class="app-section-head">
+              <div>
+                <h2 class="fr-h4 fr-mb-1v" id="h-comp">Les disciplines : 38 axes disciplinaires et 19 axes transverses</h2>
+                <p class="fr-text--sm fr-mb-0 fr-text-mention--grey" id="bars-sub"></p>
+              </div>
+              <fieldset class="fr-segmented fr-segmented--sm app-seg" id="seg-bar">
+                <legend class="fr-segmented__legend fr-sr-only">Indicateur</legend>
+                <div class="fr-segmented__elements">
+                  <div class="fr-segmented__element"><input value="t10" checked type="radio" id="sb-t10" name="seg-bar"><label class="fr-label" for="sb-t10">Influence · top 10 %</label></div>
+                  <div class="fr-segmented__element"><input value="tj" type="radio" id="sb-tj" name="seg-bar"><label class="fr-label" for="sb-tj">Prestige · revues de tête</label></div>
+                </div>
+              </fieldset>
+            </div>
+            <div class="app-legend" id="bars-legend"></div>
+            <div class="app-chart" id="chart-bars"></div>
+          </section>
+
+          <!-- Matrice -->
+          <section class="fr-mt-6w" aria-labelledby="h-quad">
+            <div class="app-section-head">
+              <div>
+                <h2 class="fr-h4 fr-mb-1v" id="h-quad">Matrice : niveau et progression des disciplines</h2>
+                <p class="fr-text--sm fr-mb-0 fr-text-mention--grey" id="quad-sub"></p>
+              </div>
+              <fieldset class="fr-segmented fr-segmented--sm app-seg" id="seg-mx">
+                <legend class="fr-segmented__legend fr-sr-only">Indicateur</legend>
+                <div class="fr-segmented__elements">
+                  <div class="fr-segmented__element"><input value="t10" checked type="radio" id="sm-t10" name="seg-mx"><label class="fr-label" for="sm-t10">Influence · top 10 %</label></div>
+                  <div class="fr-segmented__element"><input value="tj" type="radio" id="sm-tj" name="seg-mx"><label class="fr-label" for="sm-tj">Prestige · revues de tête</label></div>
+                </div>
+              </fieldset>
+              <fieldset class="fr-segmented fr-segmented--sm app-seg" id="seg-mxset">
+                <legend class="fr-segmented__legend fr-sr-only">Axes affichés</legend>
+                <div class="fr-segmented__elements">
+                  <div class="fr-segmented__element"><input value="d" checked type="radio" id="sx-d" name="seg-mxset"><label class="fr-label" for="sx-d">38 axes disciplinaires</label></div>
+                  <div class="fr-segmented__element"><input value="t" type="radio" id="sx-t" name="seg-mxset"><label class="fr-label" for="sx-t">19 axes transverses</label></div>
+                </div>
+              </fieldset>
+            </div>
+            <div class="app-chart" id="chart-quad"></div>
+            <div class="app-quad-how" id="quad-how"></div>
+            <div id="quad-key"></div>
+          </section>
+
+          <!-- Évolution -->
+          <section class="fr-mt-6w" aria-labelledby="h-trend">
+            <h2 class="fr-h4 fr-mb-1v" id="h-trend">Évolution annuelle</h2>
+            <p class="fr-text--sm fr-mb-2w fr-text-mention--grey" id="trend-sub"></p>
+            <div class="fr-grid-row fr-grid-row--gutters">
+              <div class="fr-col-12 fr-col-md-6"><div class="app-chart app-chart--sm" id="chart-t-t10"></div></div>
+              <div class="fr-col-12 fr-col-md-6"><div class="app-chart app-chart--sm" id="chart-t-tj"></div></div>
+            </div>
+          </section>
+
+          <!-- Tableau -->
+          <section class="fr-mt-6w" aria-labelledby="h-table">
+            <div class="app-section-head">
+              <div>
+                <h2 class="fr-h4 fr-mb-1v" id="h-table">Tableau détaillé</h2>
+                <p class="fr-text--sm fr-mb-0 fr-text-mention--grey" id="table-sub"></p>
+              </div>
+              <button type="button" class="fr-btn fr-btn--secondary fr-btn--sm fr-btn--icon-left fr-icon-download-line" id="btn-csv">Exporter (CSV)</button>
+            </div>
+            <div class="fr-table fr-table--no-caption fr-table--sm app-table">
+              <div class="fr-table__wrapper"><div class="fr-table__container"><div class="fr-table__content">
+                <table id="detail-table"><caption>Indicateurs par discipline</caption><thead></thead><tbody></tbody></table>
+              </div></div></div>
+            </div>
+          </section>
+
+          <!-- Revues -->
+          <section class="fr-mt-6w" aria-labelledby="h-journals" id="revues">
+            <div class="app-section-head">
+              <div>
+                <h2 class="fr-h4 fr-mb-1v" id="h-journals">Revues de tête (10 revues SJR par axe)</h2>
+                <p class="fr-text--sm fr-mb-0 fr-text-mention--grey">Les revues utilisées pour l’indicateur « Part des revues de tête », axe par axe.</p>
+              </div>
+              <div class="fr-select-group app-journals-select">
+                <label class="fr-label" for="j-disc">Axe</label>
+                <select class="fr-select" id="j-disc"></select>
+              </div>
+            </div>
+            <p class="fr-text--sm fr-mb-1w" id="journals-sub"></p>
+            <div id="journals-cats"></div>
+            <div class="fr-table fr-table--no-caption fr-table--sm app-table app-journals">
+              <div class="fr-table__wrapper"><div class="fr-table__container"><div class="fr-table__content">
+                <table id="journals-table"><caption>Revues de tête</caption>
+                  <thead><tr><th scope="col" class="num">Rang</th><th scope="col">Revue</th><th scope="col" class="num">SJR</th><th scope="col">ISSN</th><th scope="col">Fiche OpenAlex</th></tr></thead>
+                  <tbody></tbody></table>
+              </div></div></div>
+            </div>
+            <ul class="fr-btns-group fr-btns-group--inline-sm fr-btns-group--sm fr-btns-group--icon-left fr-mt-2w">
+              <li><button type="button" class="fr-btn fr-btn--secondary fr-icon-download-line" id="btn-journals-csv">Exporter cette liste (CSV)</button></li>
+              <li><button type="button" class="fr-btn fr-btn--tertiary fr-icon-download-line" id="btn-journals-all">Exporter les listes de tous les axes (CSV)</button></li>
+            </ul>
+          </section>
+
+          <!-- Méthodologie -->
+          <section class="fr-mt-4w">
+            <div class="fr-accordions-group">
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title"><button type="button" class="fr-accordion__btn" aria-expanded="false" aria-controls="acc-method">Méthodologie : comment chaque chiffre est calculé</button></h3>
+                <div class="fr-collapse" id="acc-method">
+                  <div class="app-method">
+                    <h4 class="fr-h6">1. Influence et prestige : deux parts mondiales</h4>
+                    <p>Comme l’OST, on distingue l’<strong>influence</strong> (être lu et cité : poids dans les articles les plus cités au monde) et le <strong>prestige</strong> (publier dans les revues les plus réputées de sa discipline).</p>
+                    <div class="fr-table fr-table--sm fr-table--no-caption app-table app-method-table"><div class="fr-table__wrapper"><div class="fr-table__container"><div class="fr-table__content">
+                    <table><caption>Définitions</caption>
+                      <thead><tr><th scope="col">Indicateur</th><th scope="col">Calcul (pour une entité, une discipline, une année ou une période)</th><th scope="col">Lecture</th></tr></thead>
+                      <tbody>
+                        <tr><td><strong>Influence</strong> : part du top 10 % mondial</td><td>Articles de l’entité figurant parmi les 10 % les plus cités au monde (même année de publication, même sous-domaine : centile OpenAlex) <strong>÷</strong> ensemble des articles mondiaux de ce top 10 %.</td><td>Poids de l’entité dans l’excellence mondiale. Dépend de la taille : un grand pays a mécaniquement une part plus forte.</td></tr>
+                        <tr><td><strong>Prestige</strong> : part des revues de tête</td><td>Articles de l’entité parus dans les 10 meilleures revues SJR de la discipline <strong>÷</strong> ensemble des articles mondiaux parus dans ces revues.</td><td>Poids de l’entité dans les revues phares de chaque discipline. Dépend aussi de la taille.</td></tr>
+                        <tr><td><strong>Nombre</strong></td><td>Le numérateur de chaque part (articles de l’entité), affiché avec le dénominateur (articles mondiaux).</td><td>Pour vérifier chaque part.</td></tr>
+                        <tr><td><strong>Évolution P1 → P2</strong></td><td>Part sur P2 ÷ part sur P1 − 1.</td><td>+10 % : la part a augmenté d’un dixième (par exemple 4,0 % → 4,4 %).</td></tr>
+                        <tr><td><strong>Rang</strong> (France)</td><td>Classement de la France parmi les <span class="m-n-all"></span> pays des panels (et parmi les <span class="m-n-eu1"></span> pays européens), par part décroissante.</td><td>1<sup>er</sup> = plus forte part.</td></tr>
+                        <tr><td><strong>Part de la France</strong> (région, établissement)</td><td>Articles de l’entité ÷ articles de la France, même indicateur.</td><td>Poids de l’entité dans l’excellence française.</td></tr>
+                      </tbody>
+                    </table></div></div></div></div>
+
+                    <h4 class="fr-h6">2. Les 38 disciplines, et leurs agrégats</h4>
+                    <p>Un article est rattaché à une discipline par son <strong>topic principal</strong> OpenAlex. OpenAlex attribue à chaque article jusqu’à trois topics (parmi ~4 500) et en désigne un comme principal ; chaque topic appartient à un <strong>sous-domaine</strong> (codes ASJC, identiques aux catégories SJR). Chacun des <strong>38 axes disciplinaires</strong> est défini par :</p>
+                    <ul>
+                      <li>une liste de <strong>sous-domaines</strong> : tous les topics de ces sous-domaines lui reviennent ;</li>
+                      <li>pour quelques axes (notamment les axes transverses), des <strong>topics ajoutés par mots-clés</strong> (technologies quantiques, par exemple), recherchés dans le nom et les mots-clés des topics ; un tel topic compte aussi dans l’axe de son sous-domaine, d’où un léger recouvrement.</li>
+                    </ul>
+                    <p>Tous les indicateurs sont calculés <strong>axe par axe</strong>. Les niveaux intermédiaires (les <strong>7 macro-disciplines</strong> A à G) et « <strong>Toutes disciplines</strong> » <strong>additionnent les comptes de leurs axes</strong>, au numérateur comme au dénominateur mondial. Les <strong>19 axes transverses</strong> (H : développement durable, batteries, cybersécurité…) sont calculés de la même façon, axe par axe, mais <strong>présentés à part</strong> : ils recoupent volontairement les axes disciplinaires (un article sur les batteries compte à la fois en H.08 et dans un axe B), donc ils ne sont ni additionnés entre eux, ni inclus dans les macro-disciplines ou dans « toutes disciplines ». Ce rattachement est une proposition à faire valider par des experts disciplinaires ; il se règle dans <code>config/axes.json</code>.</p>
+                    <div class="app-topics" id="m-topics">
+                      <h5 class="fr-text--md fr-text--bold fr-mb-1w">Topics rattachés à chaque discipline</h5>
+                      <div class="fr-grid-row fr-grid-row--gutters fr-grid-row--bottom">
+                        <div class="fr-col-12 fr-col-md-6"><div class="fr-select-group fr-mb-0"><label class="fr-label" for="tp-axis">Axe</label><select class="fr-select" id="tp-axis"></select></div></div>
+                        <div class="fr-col-12 fr-col-md-6"><div class="fr-input-group fr-mb-0"><label class="fr-label" for="tp-search">Rechercher un topic ou un sous-domaine, dans tous les axes</label><input class="fr-input" type="search" id="tp-search" autocomplete="off"></div></div>
+                      </div>
+                      <p class="fr-text--sm fr-mt-2w fr-mb-1w" id="tp-sum"></p>
+                      <div class="fr-table fr-table--sm fr-table--no-caption app-table app-topics__table"><div class="fr-table__wrapper"><div class="fr-table__container"><div class="fr-table__content">
+                        <table id="tp-table"><caption>Topics rattachés</caption><thead></thead><tbody></tbody></table>
+                      </div></div></div></div>
+                      <ul class="fr-btns-group fr-btns-group--inline-sm fr-btns-group--sm fr-btns-group--icon-left fr-mt-1w">
+                        <li><button type="button" class="fr-btn fr-btn--secondary fr-icon-download-line" id="tp-csv">Exporter cet axe (CSV)</button></li>
+                        <li><button type="button" class="fr-btn fr-btn--tertiary fr-icon-download-line" id="tp-csv-all">Exporter le rattachement complet (CSV)</button></li>
+                      </ul>
+                    </div>
+
+                    <h4 class="fr-h6">3. Revues de tête : 10 revues par axe</h4>
+                    <p>Pour chacun des 38 axes disciplinaires et des 19 axes transverses, les <strong>10 revues les mieux classées par le SJR</strong> (Scimago) dans les catégories ASJC qui composent l’axe (pour un axe défini par mots-clés : les catégories qui regroupent au moins 10 % de ses topics), sans « top 10 global » (qui n’aurait pas de sens d’une discipline à l’autre). Pour un axe, on compte les articles de l’axe parus dans ses 10 revues. Pour une macro-discipline ou toutes disciplines, on additionne les axes. Un seul classement SJR est appliqué à toutes les années. Les revues sont retrouvées dans OpenAlex par ISSN.</p>
+
+                    <h4 class="fr-h6">4. Ce qui est compté</h4>
+                    <p>Des <strong>articles</strong> indexés dans OpenAlex : <strong>articles de recherche</strong> (type <code>article</code>) et <strong>articles de synthèse</strong> (type <code>review</code>). Sont exclus : communications de colloque, prépublications, ouvrages et chapitres, éditoriaux, lettres, errata. <span id="m-maxaut"></span> Ce périmètre sous-représente les sciences du numérique (axes E, où les conférences dominent) et une partie des SHS (axes D, où les livres pèsent lourd).</p>
+                    <p>Un article est attribué à une entité dès qu’<strong>au moins un auteur</strong> y est affilié (<strong>compte entier</strong>) : un article franco-allemand compte 1 pour chacun, et la somme des parts des pays dépasse 100 %. La France inclut l’outre-mer. Une région agrège ses établissements sans double compte ; les organismes nationaux ne sont rattachés à aucune région.</p>
+
+                    <h4 class="fr-h6">5. Périodes</h4>
+                    <ul>
+                      <li><strong>Revues de tête</strong> : toutes les années choisies dans les filtres. La revue de parution est connue dès la publication : pas besoin d’attendre les citations.</li>
+                      <li><strong>Top 10 %</strong> : les mêmes années, arrêtées à <strong><span id="m-ce"></span></strong>. Un article n’entre dans le top 10 % qu’au vu de ses citations : ceux de la dernière année n’ont pas encore eu le temps d’être cités, et leur classement changerait fortement dans les mois qui viennent (l’OST écarte aussi les années trop récentes).</li>
+                      <li><strong>P1 et P2</strong> : la fenêtre est coupée en deux sous-périodes qui se suivent, sans année écartée ; si le nombre d’années est impair, l’année du milieu va dans P1. Exemples : top 10 % 2015–2023 → P1 = 2015–2019, P2 = 2020–2023 ; revues de tête 2015–2024 → P1 = 2015–2019, P2 = 2020–2024. Les deux indicateurs étant des parts (des rapports), des sous-périodes de durées un peu différentes restent comparables.</li>
+                    </ul>
+
+                    <h4 class="fr-h6">6. La matrice</h4>
+                    <p>Chaque bulle est un axe. <strong>Horizontalement</strong> : la part mondiale de l’entité dans l’axe (échelle logarithmique : un pas = ×2). <strong>Verticalement</strong> : l’évolution de cette part entre P1 et P2. Les axes de lecture se croisent sur la valeur « toutes disciplines » de l’entité : à droite, les disciplines où elle pèse plus que dans l’ensemble ; en haut, celles qui progressent mieux que l’ensemble. Une ligne pointillée marque l’évolution nulle. Taille des bulles = nombre d’articles comptés.</p>
+                    <ul>
+                      <li><strong>Points forts qui se renforcent</strong> : part au-dessus de l’ensemble, évolution meilleure que l’ensemble.</li>
+                      <li><strong>Points forts qui s’érodent</strong> : part au-dessus, évolution moins bonne.</li>
+                      <li><strong>Positions en progression</strong> : part en dessous, évolution meilleure.</li>
+                      <li><strong>Points faibles qui reculent</strong> : part en dessous, évolution moins bonne.</li>
+                    </ul>
+
+                    <h4 class="fr-h6">7. Panels et comparaison internationale</h4>
+                    <p><strong>Panel Europe</strong> (<span id="m-n-eu"></span> pays) : <span id="m-panel-eu"></span>. <strong>Panel monde</strong> : les <span id="m-n-world"></span> premiers pays producteurs sur <span id="m-world-years"></span> (méthode de l’OST), figé à la première extraction : <span id="m-panel-world"></span>. Les rubans montrent, chaque année, la part de chaque pays, empilés du plus fort au plus faible (épaisseur proportionnelle à la part, avec un minimum pour rester visible).</p>
+
+                    <h4 class="fr-h6">8. Pourquoi les niveaux diffèrent de ceux de l’OST</h4>
+                    <ul>
+                      <li><strong>Compte entier ici, fractionnaire à l’OST.</strong> Les co-publications internationales, plus citées et plus présentes dans les grandes revues, comptent 1 pour chaque pays : les parts sont plus élevées ici, surtout pour les petits pays très internationalisés (Suisse, Pays-Bas, Danemark) et dans les disciplines à très grandes collaborations (physique des particules, astronomie). <span id="m-maxaut2"></span></li>
+                      <li><strong>Couverture des affiliations.</strong> Un article n’est rattaché à un pays que si OpenAlex a identifié l’affiliation de ses auteurs ; les articles mondiaux sans affiliation pèsent dans le dénominateur.</li>
+                      <li><strong>Une baisse commune à presque tous les pays</strong> : la Chine et les pays émergents occupent une part croissante du top 10 % et des revues de tête (effet réel, décrit par l’OST), et OpenAlex renseigne de mieux en mieux les affiliations des articles récents (effet de source). Une baisse s’interprète donc par comparaison avec les autres pays et les autres disciplines.</li>
+                    </ul>
+                    <p><strong>Les rangs et les écarts entre pays ou entre disciplines sont interprétables ; les niveaux absolus le sont moins.</strong></p>
+
+                    <p class="fr-text--sm fr-text-mention--grey" id="method-generated"></p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+
+        <!-- ------------------------------------------------ Autres onglets (à venir) -->
+        <div id="panel-reco" class="fr-tabs__panel" role="tabpanel" aria-labelledby="tab-reco" tabindex="0">
+          <p class="fr-text-mention--grey">Onglet en préparation.</p>
+        </div>
+        <div id="panel-innov" class="fr-tabs__panel" role="tabpanel" aria-labelledby="tab-innov" tabindex="0">
+          <p class="fr-text-mention--grey">Onglet en préparation.</p>
+        </div>
+        <div id="panel-attr" class="fr-tabs__panel" role="tabpanel" aria-labelledby="tab-attr" tabindex="0">
+          <p class="fr-text-mention--grey">Onglet en préparation.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <div class="app-tooltip" id="tooltip" role="tooltip" hidden></div>
+</main>
+
+<footer class="fr-footer" role="contentinfo" id="footer">
+  <div class="fr-container">
+    <div class="fr-footer__body">
+      <div class="fr-footer__brand">
+        <p class="fr-logo">République<br>Française</p>
+      </div>
+      <div class="fr-footer__content">
+        <p class="fr-footer__content-desc">Sources : OpenAlex (licence CC0) ; SCImago Journal &amp; Country Rank (SJR). Tableau de bord à usage interne.</p>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script type="application/json" id="payload">__PAYLOAD__</script>
+<script type="module">/*__DSFR_JS__*/</script>
+<script>/*__APP_JS__*/</script>
+</body>
+</html>

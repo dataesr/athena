@@ -1,0 +1,53 @@
+{
+  "annee_debut": 2015,
+  "annee_fin": 2024,
+  "annee_fin_citations": 2023,
+  "_annee_fin_citations": "Dernière année prise en compte pour le top 10 % des plus cités : les articles plus récents n'ont pas encore une fenêtre de citation suffisante (même choix que l'OST, qui écarte la dernière année).",
+  "types_documents": [
+    "article",
+    "review"
+  ],
+  "codes_pays_france": [
+    "FR",
+    "GP",
+    "MQ",
+    "GF",
+    "RE",
+    "YT",
+    "PM",
+    "BL",
+    "MF",
+    "NC",
+    "PF",
+    "WF",
+    "TF"
+  ],
+  "_codes_pays_france": "France métropolitaine + outre-mer (DROM et COM) : OpenAlex code chaque territoire séparément (ISO 3166).",
+  "filtre_france": "authorships.countries:FR|GP|MQ|GF|RE|YT|PM|BL|MF|NC|PF|WF|TF",
+  "filtre_top10": "citation_normalized_percentile.is_in_top_10_percent:true",
+  "sjr_types_retenus": [
+    "journal"
+  ],
+  "top_revues_n": 10,
+  "seuil_sous_domaine_pour_axes_par_mots_cles": 0.1,
+  "inclure_monde": true,
+  "requetes_par_seconde": 5,
+  "panel_europe": [
+    "DE",
+    "GB",
+    "IT",
+    "ES",
+    "NL",
+    "CH",
+    "SE",
+    "BE",
+    "DK",
+    "AT"
+  ],
+  "_panel_europe": "Pays européens comparables : leur MOYENNE (non pondérée, chaque pays compte pour un) sert de référence aux indices de la France.",
+  "panel_monde_taille": 20,
+  "panel_monde_annees": 3,
+  "_panel_monde": "Panel monde = les N premiers pays producteurs (articles et revues de synthèse, compte entier) sur les 3 dernières années de la période, comme l'OST. Calculé à la première extraction puis figé dans config/panel_monde.json (supprimer ce fichier ou lancer --recalculer-panel-monde pour le recalculer).",
+  "max_auteurs": null,
+  "_max_auteurs": "Si renseigné (ex. 100), exclut de TOUS les comptages les articles de plus de N auteurs (très grandes collaborations : CERN, astronomie, climat…). null = aucun filtre."
+}

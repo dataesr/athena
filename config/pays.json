@@ -1,0 +1,13 @@
+{
+  "_doc": "Noms français des pays (codes ISO 3166-1 alpha-2 utilisés par OpenAlex).",
+  "FR": "France", "DE": "Allemagne", "GB": "Royaume-Uni", "IT": "Italie", "ES": "Espagne", "NL": "Pays-Bas",
+  "CH": "Suisse", "SE": "Suède", "BE": "Belgique", "DK": "Danemark", "AT": "Autriche", "US": "États-Unis",
+  "CN": "Chine", "JP": "Japon", "CA": "Canada", "AU": "Australie", "KR": "Corée du Sud", "IN": "Inde",
+  "BR": "Brésil", "RU": "Russie", "TR": "Turquie", "IR": "Iran", "TW": "Taïwan", "PL": "Pologne",
+  "SA": "Arabie saoudite", "EG": "Égypte", "PK": "Pakistan", "MY": "Malaisie", "SG": "Singapour",
+  "NO": "Norvège", "FI": "Finlande", "PT": "Portugal", "IE": "Irlande", "IL": "Israël", "CZ": "Tchéquie",
+  "GR": "Grèce", "MX": "Mexique", "ZA": "Afrique du Sud", "ID": "Indonésie", "TH": "Thaïlande",
+  "NG": "Nigeria", "AR": "Argentine", "CL": "Chili", "CO": "Colombie", "NZ": "Nouvelle-Zélande",
+  "HU": "Hongrie", "RO": "Roumanie", "UA": "Ukraine", "VN": "Viêt Nam", "BD": "Bangladesh", "IQ": "Irak",
+  "AE": "Émirats arabes unis", "HK": "Hong Kong"
+}

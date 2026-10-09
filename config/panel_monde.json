@@ -1,0 +1,51 @@
+{
+  "_doc": "Panel monde figé le 2026-10-09 : les 20 premiers pays producteurs d'articles (2022-2024, compte entier). Supprimer ce fichier pour le recalculer.",
+  "annees": [
+    2022,
+    2024
+  ],
+  "pays": [
+    "CN",
+    "US",
+    "ID",
+    "IN",
+    "GB",
+    "BR",
+    "DE",
+    "RU",
+    "JP",
+    "FR",
+    "IT",
+    "ES",
+    "TR",
+    "CA",
+    "AU",
+    "KR",
+    "IR",
+    "UA",
+    "PL",
+    "EG"
+  ],
+  "articles": {
+    "CN": 2607927,
+    "US": 2040679,
+    "ID": 1403195,
+    "IN": 832923,
+    "GB": 652197,
+    "BR": 606538,
+    "DE": 525200,
+    "RU": 473563,
+    "JP": 433830,
+    "FR": 414798,
+    "IT": 405308,
+    "ES": 381502,
+    "TR": 373325,
+    "CA": 360192,
+    "AU": 325113,
+    "KR": 291639,
+    "IR": 230225,
+    "UA": 221922,
+    "PL": 215809,
+    "EG": 210648
+  }
+}

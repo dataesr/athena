@@ -1,0 +1,87 @@
+{
+  "_doc": [
+    "Référentiel disciplinaire : 8 macro-disciplines, 38 axes disciplinaires (A à G) et 19 axes transverses (H).",
+    "Chaque axe est rattaché à des sous-domaines OpenAlex (= codes ASJC Scopus, identiques aux catégories SJR/Scimago).",
+    "  - subfields          : codes ASJC dont toutes les publications (topic principal) sont rattachées à l'axe.",
+    "  - catchall_prefixes  : préfixes ASJC (ex. '27' = Médecine) dont les sous-domaines non attribués à un autre axe disciplinaire reviennent à cet axe.",
+    "  - topic_keywords     : mots-clés recherchés dans le nom et les mots-clés des ~4 500 topics OpenAlex ; les topics trouvés s'ajoutent à l'axe.",
+    "Les axes disciplinaires A–G forment une quasi-partition ; les axes transverses H recoupent volontairement les axes disciplinaires.",
+    "Ce rattachement est une PROPOSITION à faire valider par des experts : le pipeline produit data/referentiel_topics.csv pour revue."
+  ],
+  "macros": [
+    {"code": "A", "label": "Sciences de l’environnement", "short": "Environnement"},
+    {"code": "B", "label": "Sciences de la matière et de l’ingénierie", "short": "Matière & ingénierie"},
+    {"code": "C", "label": "Sciences de la vie", "short": "Vie"},
+    {"code": "D", "label": "Sciences humaines et sociales", "short": "SHS"},
+    {"code": "E", "label": "Sciences du numérique", "short": "Numérique"},
+    {"code": "F", "label": "Mathématiques et leurs interactions", "short": "Mathématiques"},
+    {"code": "G", "label": "Physique subatomique ; sciences de l’Univers et sciences de la Terre", "short": "Univers & Terre"},
+    {"code": "H", "label": "Axes transverses", "short": "Transverses", "transverse": true}
+  ],
+  "axes": [
+    {"code": "A.01", "label": "Terre solide et enveloppes fluides", "subfields": [1902, 1903, 1904, 1905, 1909, 1910, 2306]},
+    {"code": "A.02", "label": "Terre vivante", "subfields": [1104, 1105, 1107, 1111, 2302, 2303, 2309], "catchall_prefixes": ["23", "11"]},
+    {"code": "A.03", "label": "Biologie des animaux, des organismes photosynthétiques et des micro-organismes", "subfields": [1103, 1108, 1109, 1110, 2404], "catchall_prefixes": ["34"]},
+    {"code": "A.04", "label": "Alimentation et systèmes alimentaires", "subfields": [1102, 1106, 2916]},
+
+    {"code": "B.01", "label": "Polymères, composites, physico-chimie de la matière molle", "subfields": [1505, 2503, 2507]},
+    {"code": "B.02", "label": "Matériaux métalliques et inorganiques", "subfields": [2211, 2505, 2506, 2508], "catchall_prefixes": ["25"]},
+    {"code": "B.03", "label": "Sciences de l’ingénierie et des procédés", "subfields": [1502, 1504, 1506, 1507, 1508, 2202, 2203, 2209, 2210, 2212], "catchall_prefixes": ["21", "22", "15"]},
+    {"code": "B.04", "label": "Chimie moléculaire", "subfields": [1503, 1604, 1605]},
+    {"code": "B.05", "label": "Chimie analytique, chimie théorique et modélisation", "subfields": [1602, 1603, 1606, 1607], "catchall_prefixes": ["16"]},
+    {"code": "B.06", "label": "Physique des concepts fondamentaux et physique de la matière diluée", "subfields": [3102, 3107, 3108, 3109]},
+    {"code": "B.07", "label": "Physique de la matière condensée", "subfields": [3104, 3110]},
+
+    {"code": "C.01", "label": "Biochimie et chimie du vivant", "subfields": [1303, 1308]},
+    {"code": "C.02", "label": "Caractérisation des structures et relations structure-fonction des macro-molécules biologiques", "subfields": [1304, 1315]},
+    {"code": "C.03", "label": "Génétique, génomique et ARN", "subfields": [1311, 1312, 2716]},
+    {"code": "C.04", "label": "Biologie cellulaire, biologie du développement et de l’évolution", "subfields": [1307, 1309, 2710]},
+    {"code": "C.05", "label": "Physiologie et physiopathologie", "subfields": [1302, 1310, 1314, 2712, 2737, 2807]},
+    {"code": "C.06", "label": "Immunologie, Infectiologie et Inflammation", "subfields": [2403, 2405, 2406, 2723, 2725, 2726], "catchall_prefixes": ["24"]},
+    {"code": "C.07", "label": "Neurosciences moléculaires et cellulaires – Neurobiologie du développement", "subfields": [2804, 2806]},
+    {"code": "C.08", "label": "Neurosciences intégratives et cognitives", "subfields": [2802, 2803, 2805, 2808, 2809, 3206], "catchall_prefixes": ["28"]},
+    {"code": "C.09", "label": "Recherche translationnelle en santé", "subfields": [1306, 2705, 2715, 2720, 2721, 2724, 2727, 2728, 2730, 2738, 2740, 2745, 2746], "catchall_prefixes": ["27", "29", "35", "36"]},
+    {"code": "C.10", "label": "Innovation biomédicale", "subfields": [1305, 1313, 2736, 3002, 3003, 3004], "catchall_prefixes": ["30", "13"]},
+    {"code": "C.11", "label": "Biologie et Médecine régénératrice", "subfields": [], "topic_keywords": ["stem cell", "regenerat", "tissue engineering", "organoid", "pluripotent"]},
+
+    {"code": "D.01", "label": "Individus, entreprises, marchés, finance, management", "subfields": [1402, 1403, 1406, 1407, 1408, 1409, 1410, 2002, 2003], "catchall_prefixes": ["14", "20"]},
+    {"code": "D.02", "label": "Institutions et organisations, cadres juridiques et normes, gouvernance, relations internationales", "subfields": [3308, 3320, 3321]},
+    {"code": "D.03", "label": "Les sociétés contemporaines : états, dynamiques et transformations", "subfields": [3304, 3312, 3314, 3315, 3316, 3317, 3318, 3319], "catchall_prefixes": ["33"]},
+    {"code": "D.04", "label": "Cognition, comportements, langage", "subfields": [1203, 3202, 3203, 3204, 3205, 3207, 3310], "catchall_prefixes": ["32"]},
+    {"code": "D.05", "label": "Arts, langues, littératures, philosophies", "subfields": [1205, 1207, 1208, 1210, 1211, 1212, 1213], "catchall_prefixes": ["12"]},
+    {"code": "D.06", "label": "Études du passé, patrimoines, cultures", "subfields": [1202, 1204, 1206, 1209, 3302]},
+    {"code": "D.07", "label": "Sociétés et territoires en transition", "subfields": [3303, 3305, 3322]},
+
+    {"code": "E.01", "label": "Fondements du numérique : informatique, automatique, traitement du signal et des images", "subfields": [1703, 1707, 1711, 2207, 2614]},
+    {"code": "E.02", "label": "Intelligence artificielle et science des données", "subfields": [1702, 1710, 1802]},
+    {"code": "E.03", "label": "Sciences et technologies du logiciel, réseaux du futur, informatique en nuage et en périphérie", "subfields": [1705, 1706, 1708, 1712], "catchall_prefixes": ["17"]},
+    {"code": "E.04", "label": "Interaction, robotique, univers immersifs", "subfields": [1704, 1709, 2214], "topic_keywords": ["robot", "virtual reality", "augmented reality", "haptic"]},
+    {"code": "E.05", "label": "Modélisation, simulation et optimisation, calcul haute performance, sobriété numérique, applications", "subfields": [1803, 2206, 2605, 2606, 2611], "catchall_prefixes": ["18"], "topic_keywords": ["high performance computing", "parallel computing", "energy-efficient computing"]},
+    {"code": "E.06", "label": "Sciences et technologies quantiques", "subfields": [], "topic_keywords": ["quantum"]},
+
+    {"code": "F.01", "label": "Mathématiques", "subfields": [1804, 2602, 2603, 2604, 2607, 2608, 2609, 2610, 2612, 2613], "catchall_prefixes": ["26"]},
+
+    {"code": "G.01", "label": "Planétologie, structure et histoire de la Terre", "subfields": [1906, 1907, 1908, 1911, 1912, 1913], "catchall_prefixes": ["19"]},
+    {"code": "G.02", "label": "Physique subatomique et astrophysique", "subfields": [3103, 3106], "catchall_prefixes": ["31"]},
+
+    {"code": "H.01", "label": "Science de la durabilité", "group": "Axe transversal", "subfields": [2308], "topic_keywords": ["sustainab"]},
+    {"code": "H.02", "label": "Contaminants, écosystèmes et santé", "group": "Une seule santé (« One Health »)", "subfields": [2304, 2307, 2310, 3005]},
+    {"code": "H.03", "label": "Maladies infectieuses et environnement", "group": "Une seule santé (« One Health »)", "subfields": [], "topic_keywords": ["zoono", "vector-borne", "mosquito", "tick-borne", "antimicrobial resistance", "one health", "emerging infectious", "wildlife disease"]},
+    {"code": "H.04", "label": "Santé publique, santé et sociétés", "group": "Une seule santé (« One Health »)", "subfields": [2713, 2719, 2739, 3306]},
+    {"code": "H.05", "label": "Méthodologies, instrumentations, capteurs et solutions pour la transition écologique", "group": "Transition écologique et environnementale", "subfields": [2305, 2311, 2312], "topic_keywords": ["environmental monitoring"]},
+    {"code": "H.06", "label": "Dynamique des socio-écosystèmes naturels et productifs", "group": "Transition écologique et environnementale", "subfields": [], "topic_keywords": ["agroecolog", "land use", "fisheries", "ecosystem services", "socio-ecological", "agroforestry"]},
+    {"code": "H.07", "label": "Bioéconomie : transition sociétale et technologies associées", "group": "Transition écologique et environnementale", "subfields": [], "topic_keywords": ["biorefin", "biomass", "bio-based", "biofuel", "bioeconomy", "lignocellulos"]},
+    {"code": "H.08", "label": "Sciences de base pour l’énergie", "group": "Transition énergétique", "subfields": [], "topic_keywords": ["battery", "batteries", "electrocatal", "photovoltaic", "solar cell", "hydrogen", "fuel cell", "thermoelectric", "supercapacitor", "fusion plasma"]},
+    {"code": "H.09", "label": "Une énergie durable, propre, sûre et efficace", "group": "Transition énergétique", "subfields": [2102, 2103, 2104, 2105]},
+    {"code": "H.10", "label": "Nanostructures, nano-objets et nanomatériaux à propriétés (multi)fonctionnelles", "group": "Transitions technologiques", "subfields": [], "topic_keywords": ["nanopart", "nanostruct", "nanomaterial", "nanowire", "graphene", "nanotube", "quantum dot", "2d material"]},
+    {"code": "H.11", "label": "Capteurs, imageurs et instrumentation", "group": "Transitions technologiques", "subfields": [3105], "topic_keywords": ["sensor", "imaging system", "spectrometer"]},
+    {"code": "H.12", "label": "Micro et nanotechnologies pour l’électronique, la photonique, et le numérique", "group": "Transitions technologiques", "subfields": [2208, 2504], "topic_keywords": ["photonic", "semiconductor"]},
+    {"code": "H.13", "label": "Technologies pour la santé", "group": "Transitions technologiques", "subfields": [2204, 2502, 2741]},
+    {"code": "H.14", "label": "Interfaces : mathématiques, sciences du numérique – biologie, santé", "group": "La transformation numérique", "subfields": [2718], "topic_keywords": ["bioinformatic", "computational biology", "machine learning in health", "artificial intelligence in health", "medical image", "computational drug", "in silico"]},
+    {"code": "H.15", "label": "Interfaces : mathématiques, sciences du numérique – sciences humaines et sociales", "group": "La transformation numérique", "subfields": [], "topic_keywords": ["digital humanities", "social media", "misinformation", "computational social", "digital economy", "e-government", "digital transformation"]},
+    {"code": "H.16", "label": "Interfaces : mathématiques, sciences du numérique – sciences du système Terre dont climat, environnement et biodiversité", "group": "La transformation numérique", "subfields": [1903, 2302], "topic_keywords": ["climate model", "remote sensing", "earth observation"]},
+    {"code": "H.17", "label": "Sécurité globale, résilience et gestion de crise, cybersécurité", "group": "Transformations des systèmes sociotechniques", "subfields": [2213, 3311], "topic_keywords": ["cybersecur", "intrusion detection", "malware", "cryptograph", "disaster", "crisis", "emergency management"]},
+    {"code": "H.18", "label": "Villes, bâtiments et construction, transport et mobilité : transition vers la durabilité", "group": "Transformations des systèmes sociotechniques", "subfields": [2205, 2215, 2216, 3313, 3322]},
+    {"code": "H.19", "label": "Transformation des systèmes productifs de biens et de services : enjeux humains, organisationnels et technologiques", "group": "Transformations des systèmes sociotechniques", "subfields": [1405, 2209, 3307], "topic_keywords": ["industry 4.0", "supply chain", "digital twin"]}
+  ]
+}
