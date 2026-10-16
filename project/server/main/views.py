@@ -5,8 +5,6 @@ import redis
 from flask import Blueprint, current_app, jsonify, render_template, request
 from rq import Connection, Queue
 from project.server.main.tasks import create_task_compute
-from mycode.cordis import check_cordis, gather_cordis
-from mycode.coverage.tasks import test_mother_duck
 from project.server.main.logger import get_logger
 
 default_timeout = 4320000
@@ -29,49 +27,10 @@ def run_task_compute():
     args = request.get_json(force=True)
 
     with Connection(redis.from_url(current_app.config["REDIS_URL"])):
-        q = Queue(name="sandbox", default_timeout=default_timeout)
+        q = Queue(name="athena", default_timeout=default_timeout)
         task = q.enqueue(create_task_compute, args)
     response_object = {"status": "success", "data": {"task_id": task.get_id()}}
     return jsonify(response_object), 202
-
-
-@main_blueprint.route("/coverage_test", methods=["POST"])
-def run_task_coverage_test():
-    args = request.get_json(force=True)
-
-    with Connection(redis.from_url(current_app.config["REDIS_URL"])):
-        q = Queue(name="sandbox", default_timeout=default_timeout)
-        task = q.enqueue(test_mother_duck, args)
-    response_object = {"status": "success", "data": {"task_id": task.get_id()}}
-    return jsonify(response_object), 202
-
-
-@main_blueprint.route("/check_cordis", methods=["POST"])
-def run_task_check_cordus():
-    args = request.get_json(force=True)
-    projects_ids =args.get('projects')
-    assert(isinstance(projects_ids, list))
-    suffixes = {}
-    for p in projects_ids:
-        if isinstance(p, str) and len(p)>0:
-            suffix = p[-2:]
-            if suffix not in suffixes:
-                suffixes[suffix]=[]
-            suffixes[suffix].append(p)
-    extract_tasks = []
-    for suffix in suffixes:
-        current_args = {"projects": suffixes[suffix], "suffix": suffix, "output_file": args.get('output_file')}
-        with Connection(redis.from_url(current_app.config["REDIS_URL"])):
-            q = Queue(name="sandbox", default_timeout=default_timeout)
-            task = q.enqueue(check_cordis, current_args)
-            extract_tasks.append(task)
-        
-    with Connection(redis.from_url(current_app.config["REDIS_URL"])):
-        q = Queue(name="sandbox", default_timeout=default_timeout)
-        task = q.enqueue(gather_cordis, args, depends_on=extract_tasks)
-    response_object = {"status": "success", "data": {"task_id": task.get_id()}}
-    return jsonify(response_object), 202
-
 
 @main_blueprint.route("/tasks/<task_id>", methods=["GET"])
 def get_status(task_id):

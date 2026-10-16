@@ -1,18 +1,6 @@
-CURRENT_VERSION=$(shell cat project/__init__.py | cut -d "'" -f 2)
-DOCKER_IMAGE_NAME=dataesr/sandbox
+DOCKER_IMAGE_NAME=dataesr/athena
 GHCR_IMAGE_NAME=ghcr.io/$(DOCKER_IMAGE_NAME)
-
-test: unit
-
-unit:
-	@echo Running unit tests...
-	python3 -m pytest
-	@echo End of unit tests
-
-install:
-	@echo Installing dependencies...
-	pip install -r requirements.txt
-	@echo End of dependencies installation
+CURRENT_VERSION=$(shell cat project/__init__.py | cut -d "'" -f 2)
 
 docker-build:
 	@echo Building a new docker image
@@ -21,9 +9,13 @@ docker-build:
 
 docker-push:
 	@echo Pushing a new docker image
-	docker push $(GHCR_IMAGE_NAME):$(CURRENT_VERSION)
-	docker push $(GHCR_IMAGE_NAME):latest
+	docker push -a $(GHCR_IMAGE_NAME)
 	@echo Docker image pushed
+
+install:
+	@echo Installing dependencies...
+	pip install -r requirements.txt
+	@echo End of dependencies installation
 
 release:
 	echo "__version__ = '$(VERSION)'" > project/__init__.py

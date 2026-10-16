@@ -1,0 +1,7 @@
+# Profil AWS pour les snapshots quotidiens OpenAlex (offre payante).
+# Commande de la documentation OpenAlex, à une différence près : la clé est lue
+# dans la variable d'environnement OPENALEX_API_KEY au lieu d'être écrite ici.
+#   aws s3 ls s3://openalex-snapshots/full/ --profile openalex
+[profile openalex]
+credential_process = sh -c 'curl -sf -X POST "https://api.openalex.org/snapshots/credentials?api_key=$OPENALEX_API_KEY"'
+region = us-east-1

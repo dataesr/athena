@@ -1,0 +1,11 @@
+# Établissements proposés dans le sélecteur du dashboard (une ligne = un établissement).
+# Supprimer / ajouter des lignes ; l'ordre des lignes = ordre d'affichage quand la recherche est vide.
+# ror   : ROR court (02feahw73) ou URL (https://ror.org/02feahw73)
+# nom   : nom affiché (vide = nom OpenAlex)
+# alias : termes de recherche supplémentaires, séparés par |
+# Fichier complet de départ (tous les établissements français, à élaguer) :
+#   from project.server.main.export_dashboard import write_etab_selection
+#   write_etab_selection(overwrite=True)
+ror;nom;alias
+02feahw73;;CNRS
+02vjkv261;;Inserm

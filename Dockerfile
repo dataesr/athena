@@ -1,23 +1,26 @@
-FROM python:3
+FROM python:3.12-slim
 
-RUN curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
-    gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg \
-    --dearmor
-RUN echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+# C.UTF-8 existe dans l'image (en_US.UTF-8 n'y est pas installé)
+# AWS_CONFIG_FILE : profil « openalex » disponible quel que soit l'utilisateur
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    AWS_CONFIG_FILE=/etc/aws/config
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    mongodb-org \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# curl : utilisé par le profil AWS « openalex » (docker/aws_config)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
-ENV LC_ALL en_US.UTF-8
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US.UTF-8
-
 COPY requirements.txt /src/requirements.txt
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt --proxy=${HTTP_PROXY}
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir -r requirements.txt
+
+# Accès aux snapshots quotidiens OpenAlex par AWS CLI (profil « openalex »,
+# commande curl de la documentation OpenAlex) ; la clé reste dans la variable
+# d'environnement OPENALEX_API_KEY, elle n'est pas écrite dans l'image
+COPY docker/aws_config /etc/aws/config
 
 COPY . /src

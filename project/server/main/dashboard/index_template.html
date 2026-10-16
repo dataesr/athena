@@ -1,0 +1,1326 @@
+<!doctype html>
+<html lang="fr" data-fr-scheme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>{{TITRE}}</title>
+<meta name="description" content="{{SOUS_TITRE}}">
+<link rel="stylesheet" href="{{DSFR_URL}}/dist/dsfr.min.css">
+<link rel="stylesheet" href="{{DSFR_URL}}/dist/utility/icons/icons.min.css">
+<style>
+  /* Couleurs (palette illustrative DSFR ; influence/prestige validées daltonisme) */
+  :root {
+    --serie-x: #417DC4;      /* Influence : cumulus */
+    --serie-y: #CE614A;      /* Prestige  : tuile   */
+    --serie-s: #666666;      /* Poids (référence)   */
+    --focus-entite: #000091; /* entité sélectionnée : bleu France */
+    --hausse: #18753C; --baisse: #CE0500;
+    /* Régions (palette illustrative DSFR, validée daltonisme ; libellés toujours présents) */
+    --reg-france: #417DC4; --reg-europe: #00A95F; --reg-ameriques: #C8AA39;
+    --reg-asie: #A558A0; --reg-autres: #A6A6A6;
+    /* Grands domaines ERC (validés daltonisme, contraste >= 3:1) */
+    --dom-ls: #009081; --dom-pe: #5770BE; --dom-sh: #D64D00; --dom-autre: #7B7B7B;
+  }
+  .ws { margin: 0 0 2rem; }
+  .ws .fr-callout__title { font-size: 1.125rem; }
+  .ws ol { margin: .5rem 0 .5rem 1.25rem; padding: 0; }
+  .ws li { margin: 0 0 .25rem; }
+  .ws .ws-live { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .quad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 48em) { .quad-grid { grid-template-columns: 1fr; } }
+  .quad { background: var(--background-alt-grey); padding: 1rem 1.25rem; border-top: 4px solid #3a3a3a; }
+  .quad h4 { margin: 0 0 .25rem; font-size: 1rem; }
+  .quad p.def { margin: 0 0 .5rem; font-size: .8125rem; color: var(--text-mention-grey); }
+  .quad table { width: 100%; border-collapse: collapse; font-size: .875rem; font-variant-numeric: tabular-nums; }
+  .quad td { padding: .2rem .25rem; border-top: 1px solid var(--border-default-grey); vertical-align: top; }
+  .quad td.num { text-align: right; white-space: nowrap; }
+  .quad .vide { font-size: .875rem; color: var(--text-mention-grey); margin: 0; }
+  .pastille { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: .375rem; }
+  .quad tr.focus td { font-weight: 700; }
+  /* Recherche d'établissement (liste de suggestions) */
+  .combo { position: relative; }
+  .combo__liste { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; margin: 0; padding: 0; list-style: none;
+                  max-height: 360px; overflow-y: auto; background: var(--background-default-grey);
+                  border: 1px solid var(--border-default-grey); box-shadow: 0 6px 18px rgba(0,0,18,.16); }
+  .combo__liste li { padding: .5rem .75rem; cursor: pointer; border-bottom: 1px solid var(--border-default-grey); line-height: 1.25rem; }
+  .combo__liste li[aria-selected="true"], .combo__liste li:hover { background: var(--background-alt-blue-france); }
+  .combo__liste li small { display: block; color: var(--text-mention-grey); font-size: .75rem; }
+  .combo__liste li mark { background: none; color: inherit; font-weight: 700; padding: 0; }
+  .combo__liste li.combo__vide { cursor: default; color: var(--text-mention-grey); }
+  .legende { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; margin: 0 0 .75rem; font-size: .875rem; }
+  .legende span { display: inline-flex; align-items: center; gap: .375rem; }
+  .legende i { display: inline-block; width: 14px; height: 14px; border-radius: 2px; }
+  .kpi { height: 100%; padding: 1.25rem 1.5rem; background: var(--background-alt-grey);
+         border-top: 4px solid var(--kpi-color, var(--border-default-grey)); }
+  .kpi__label { font-weight: 700; margin: 0 0 .25rem; }
+  .kpi__value { font-size: 2.25rem; line-height: 2.75rem; font-weight: 700; margin: 0; }
+  .kpi__sub   { margin: .25rem 0 0; color: var(--text-mention-grey); font-size: .875rem; }
+  .kpi__effectif { display: inline-block; margin-top: .5rem; font-weight: 700; }
+  .calc { margin: .5rem 0 0; font-size: .8125rem; line-height: 1.25rem; color: var(--text-mention-grey);
+          font-variant-numeric: tabular-nums; }
+  .calc b { color: var(--text-default-grey); }
+  .formule { border-left: 4px solid var(--border-default-blue-france); padding: .75rem 1rem;
+             background: var(--background-alt-blue-france); margin: 0 0 1.5rem; font-size: .875rem; }
+  .formule p { margin: 0 0 .25rem; } .formule p:last-child { margin: 0; }
+  .chart-box { position: relative; width: 100%; }
+  .chart-box--evol { height: 340px; }
+  .chart-box--profil { height: 820px; }
+  .chart-box--matrice { height: 640px; }
+  .filtres { align-items: flex-end; }
+  .muted { color: var(--text-mention-grey); }
+  #chargement { padding: 3rem 0; }
+  .fr-table td.num, .fr-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .faible { color: var(--text-mention-grey); }
+  .vue[hidden] { display: none !important; }
+  /* Comparaison : graphique des rangs */
+  #bump-wrap { position: relative; border: 1px solid var(--border-default-grey); padding: .5rem 0; }
+  #bump text { font-family: Marianne, arial, sans-serif; font-size: 12px; fill: #3a3a3a; }
+  #bump text.focus { font-weight: 700; fill: #161616; }
+  #bump path.ruban { transition: opacity .12s; cursor: pointer; }
+  .infobulle { position: absolute; pointer-events: none; background: #fff; border: 1px solid var(--border-default-grey);
+               box-shadow: 0 2px 6px rgba(0,0,18,.16); padding: .5rem .75rem; font-size: .8125rem; line-height: 1.25rem;
+               max-width: 360px; z-index: 5; font-variant-numeric: tabular-nums; }
+  .infobulle b { font-size: .9375rem; }
+  .resume-rang { font-size: 1.0625rem; }
+  .fleche-baisse { color: var(--baisse); } .fleche-hausse { color: var(--hausse); }
+  .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
+</style>
+</head>
+<body>
+
+<header role="banner" class="fr-header">
+  <div class="fr-header__body">
+    <div class="fr-container">
+      <div class="fr-header__body-row">
+        <div class="fr-header__brand fr-enlarge-link">
+          <div class="fr-header__brand-top">
+            <div class="fr-header__logo"><p class="fr-logo">République<br>Française</p></div>
+          </div>
+          <div class="fr-header__service">
+            <a href="#" title="Accueil - {{TITRE}}"><p class="fr-header__service-title">{{TITRE}}</p></a>
+            <p class="fr-header__service-tagline">{{SOUS_TITRE}}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="contenu" role="main" class="fr-container fr-my-4w">
+
+  <!-- Filtres communs à tous les onglets -->
+  <div class="fr-grid-row fr-grid-row--gutters filtres fr-mb-2w">
+    <div class="fr-col-12 fr-col-md-4">
+      <div class="fr-input-group">
+        <label class="fr-label" for="f-entite">Établissement
+          <span class="fr-hint-text">Nom, sigle (CNRS, Inserm…) ou ROR</span></label>
+        <div class="combo">
+          <input class="fr-input" type="search" id="f-entite" autocomplete="off" role="combobox"
+                 aria-autocomplete="list" aria-expanded="false" aria-controls="lb-entite">
+          <ul class="combo__liste" id="lb-entite" role="listbox" aria-label="Établissements" hidden></ul>
+        </div>
+      </div>
+    </div>
+    <div class="fr-col-12 fr-col-md-4">
+      <div class="fr-select-group"><label class="fr-label" for="f-discipline">Discipline (panel ERC)
+        <span class="fr-hint-text">S'applique à tous les onglets</span></label>
+        <select class="fr-select" id="f-discipline"></select></div>
+    </div>
+    <div class="fr-col-6 fr-col-md-2">
+      <div class="fr-select-group"><label class="fr-label" for="f-debut">De
+        <span class="fr-hint-text">&nbsp;</span></label>
+        <select class="fr-select" id="f-debut"></select></div>
+    </div>
+    <div class="fr-col-6 fr-col-md-2">
+      <div class="fr-select-group"><label class="fr-label" for="f-fin">À
+        <span class="fr-hint-text">&nbsp;</span></label>
+        <select class="fr-select" id="f-fin"></select></div>
+    </div>
+  </div>
+
+  <div class="fr-tabs">
+    <ul class="fr-tabs__list" role="tablist" aria-label="Thématiques">
+      <li role="presentation"><button id="tab-biblio" class="fr-tabs__tab" tabindex="0" role="tab"
+          aria-selected="true" aria-controls="panel-biblio">Bibliométrie</button></li>
+      <li role="presentation"><button id="tab-fin" class="fr-tabs__tab" tabindex="-1" role="tab"
+          aria-selected="false" aria-controls="panel-fin">Financements</button></li>
+      <li role="presentation"><button id="tab-inno" class="fr-tabs__tab" tabindex="-1" role="tab"
+          aria-selected="false" aria-controls="panel-inno">Innovation</button></li>
+    </ul>
+
+    <!-- ===================== Bibliométrie ===================== -->
+    <div id="panel-biblio" class="fr-tabs__panel fr-tabs__panel--selected" role="tabpanel"
+         aria-labelledby="tab-biblio" tabindex="0">
+      <div id="chargement" class="muted">Chargement des données…</div>
+
+      <div id="biblio" hidden>
+        <div class="fr-grid-row fr-grid-row--gutters fr-mb-2w filtres">
+          <div class="fr-col-12 fr-col-md-5">
+            <div class="fr-select-group"><label class="fr-label" for="f-monde">Monde de référence
+              <span class="fr-hint-text">Ensemble d'articles qui sert de dénominateur</span></label>
+              <select class="fr-select" id="f-monde">
+                <option value="1">Revues indexées SJR (≈ Scopus)</option>
+                <option value="0">Toutes les revues OpenAlex</option>
+              </select></div>
+          </div>
+          <div class="fr-col-12 fr-col-md-7">
+            <div class="fr-toggle">
+              <input type="checkbox" class="fr-toggle__input" id="f-multi" checked aria-describedby="l-multi">
+              <label class="fr-toggle__label" for="f-multi">Prestige : inclure les revues multidisciplinaires</label>
+              <p class="fr-hint-text" id="l-multi"></p>
+              <p class="fr-hint-text"><a href="#multi-detail" class="fr-link fr-link--sm">Effet sur le calcul</a></p>
+            </div>
+          </div>
+        </div>
+
+        <fieldset class="fr-segmented fr-mb-4w">
+          <legend class="fr-segmented__legend fr-sr-only">Vue</legend>
+          <div class="fr-segmented__elements">
+            <div class="fr-segmented__element"><input value="synthese" checked type="radio" id="v-synthese" name="vue">
+              <label class="fr-label" for="v-synthese">Synthèse</label></div>
+            <div class="fr-segmented__element"><input value="position" type="radio" id="v-position" name="vue">
+              <label class="fr-label" for="v-position">Positionnement</label></div>
+            <div class="fr-segmented__element"><input value="compar" type="radio" id="v-compar" name="vue">
+              <label class="fr-label" for="v-compar">Comparaison internationale</label></div>
+          </div>
+        </fieldset>
+
+        <h2 class="fr-h4 fr-mb-1w" id="titre-selection"></h2>
+        <p class="fr-text--sm muted fr-mb-3w" id="sous-titre-selection"></p>
+
+        <!-- ---------- Vue 1 : Synthèse ---------- -->
+        <section class="vue" id="vue-synthese">
+          <div class="fr-grid-row fr-grid-row--gutters fr-mb-4w">
+            <div class="fr-col-12 fr-col-md-4">
+              <div class="kpi" style="--kpi-color: var(--serie-x)">
+                <p class="kpi__label">Influence — être cité</p>
+                <p class="kpi__value" id="kpi-x">–</p>
+                <p class="kpi__sub">du top 10 % mondial des articles les plus cités de leur discipline</p>
+                <span class="kpi__effectif" id="kpi-nx"></span>
+                <p class="calc" id="calc-x"></p>
+              </div>
+            </div>
+            <div class="fr-col-12 fr-col-md-4">
+              <div class="kpi" style="--kpi-color: var(--serie-y)">
+                <p class="kpi__label">Prestige — publier dans les revues de tête</p>
+                <p class="kpi__value" id="kpi-y">–</p>
+                <p class="kpi__sub">des articles parus dans les revues de tête de leur discipline</p>
+                <span class="kpi__effectif" id="kpi-ny"></span>
+                <p class="calc" id="calc-y"></p>
+              </div>
+            </div>
+            <div class="fr-col-12 fr-col-md-4">
+              <div class="kpi" style="--kpi-color: var(--serie-s)">
+                <p class="kpi__label">Poids — production</p>
+                <p class="kpi__value" id="kpi-s">–</p>
+                <p class="kpi__sub">de l'ensemble des articles du monde</p>
+                <span class="kpi__effectif" id="kpi-n"></span>
+                <p class="calc" id="calc-s"></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="formule" id="multi-detail">
+            <p><b>Prestige : ce que change « inclure les revues multidisciplinaires »</b></p>
+            <p id="multi-def"></p>
+            <div class="fr-table fr-table--sm fr-table--no-caption fr-mb-1w"><div class="fr-table__wrapper"><div class="fr-table__container">
+              <div class="fr-table__content"><table id="t-multi"><caption>Décomposition du prestige</caption>
+                <thead><tr><th scope="col">Articles parus dans…</th><th scope="col" class="num" id="t-multi-ent">Entité</th>
+                  <th scope="col" class="num">Monde</th><th scope="col">Compté ?</th></tr></thead>
+                <tbody></tbody></table></div></div></div></div>
+            <p id="multi-res"></p>
+          </div>
+
+          <div class="fr-callout fr-icon-information-line ws" id="ws">
+            <h3 class="fr-callout__title">Comment se compte le top 10 % — méthode de Waltman et Schreiber</h3>
+            <div class="fr-callout__text fr-text--sm">
+              <ol>
+                <li>Pour chaque discipline et chaque année de publication, les articles du monde sont classés selon
+                  les citations reçues dans une fenêtre fixe (année de parution + 3 ans). Les articles jamais cités
+                  n'entrent jamais dans le top.</li>
+                <li>Le top contient <b>exactement 10 % des articles</b> de la discipline et de l'année. Ce nombre n'est
+                  pas toujours entier : 10 % de 1 534 843 articles = <b>153 484,3</b> places.</li>
+                <li>Au seuil, plusieurs articles ont souvent le même nombre de citations. Plutôt que de tous les prendre
+                  (le top dépasserait 10 %) ou de tous les exclure, ils <b>se partagent les places restantes</b> :
+                  3 articles ex aequo pour 1 place comptent chacun pour 1/3.</li>
+                <li>Le top se mesure donc en <b>équivalent-articles</b>, d'où des décimales. Avantage : le top fait
+                  10 % dans toutes les disciplines, même celles où beaucoup d'articles ont peu de citations, et les
+                  disciplines restent comparables.</li>
+              </ol>
+              <p class="fr-mb-0" id="ws-live"></p>
+              <p class="fr-mb-0 fr-mt-1w muted">Référence : L. Waltman et M. Schreiber (2013), « On the calculation of
+                percentile-based bibliometric indicators », <i>Journal of the American Society for Information Science
+                and Technology</i>, 64(2), 372–379.</p>
+            </div>
+          </div>
+
+          <h3 class="fr-h5">Évolution annuelle</h3>
+          <div class="formule">
+            <p>Chaque point : part de l'entité dans le monde pour l'année, calculée comme dans les tuiles ci-dessus.</p>
+            <p>Les années dont la fenêtre de citation n'est pas close sont en pointillé pour l'influence (valeur provisoire).</p>
+          </div>
+          <div class="chart-box chart-box--evol fr-mb-4w"><canvas id="c-evol"
+              role="img" aria-label="Évolution annuelle des parts : influence, prestige, poids"></canvas></div>
+
+          <h3 class="fr-h5">Profil disciplinaire</h3>
+          <div class="formule">
+            <p><b>Influence</b> de la discipline = articles de l'entité dans le top 10 % de la discipline (éq.-articles)
+              ÷ ensemble du top 10 % mondial de la discipline.</p>
+            <p><b>Prestige</b> de la discipline = articles de l'entité dans les revues de tête de la discipline
+              ÷ ensemble des articles mondiaux de ces revues.</p>
+            <p>Périodes cumulées : effectifs additionnés, puis ratio. Barres vides : moins de 30 articles, valeur peu fiable.
+              La couleur de la bande à gauche indique le grand domaine ERC.</p>
+          </div>
+          <div class="legende" id="leg-domaines"></div>
+          <div class="chart-box chart-box--profil fr-mb-4w"><canvas id="c-profil"
+              role="img" aria-label="Influence et prestige par discipline"></canvas></div>
+
+          <div class="fr-grid-row fr-grid-row--middle fr-mb-1w">
+            <div class="fr-col"><h3 class="fr-h5 fr-mb-0">Détail par discipline</h3></div>
+            <div class="fr-col-auto"><button class="fr-btn fr-btn--secondary fr-btn--sm fr-icon-download-line fr-btn--icon-left"
+                id="b-csv">Télécharger (CSV)</button></div>
+          </div>
+          <div class="fr-table fr-table--no-caption fr-mb-4w">
+            <div class="fr-table__wrapper"><div class="fr-table__container"><div class="fr-table__content">
+              <table id="t-detail">
+                <caption>Indicateurs par discipline</caption>
+                <thead><tr>
+                  <th scope="col">Discipline</th><th scope="col" class="num">Articles</th>
+                  <th scope="col" class="num">Top 10 % en éq.-articles (entité / monde)</th>
+                  <th scope="col" class="num">Influence</th>
+                  <th scope="col" class="num">Revues de tête (entité / monde)</th>
+                  <th scope="col" class="num">Prestige</th><th scope="col" class="num">Poids</th>
+                </tr></thead>
+                <tbody></tbody>
+              </table>
+            </div></div></div>
+          </div>
+        </section>
+
+        <!-- ---------- Vue 2 : Positionnement ---------- -->
+        <section class="vue" id="vue-position" hidden>
+          <h3 class="fr-h5">Matrice de positionnement : niveau × dynamique</h3>
+          <fieldset class="fr-segmented fr-mb-2w">
+            <legend class="fr-segmented__legend fr-sr-only">Indicateur</legend>
+            <div class="fr-segmented__elements">
+              <div class="fr-segmented__element"><input value="x" checked type="radio" id="p-ind-x" name="p-ind">
+                <label class="fr-label" for="p-ind-x">Influence · top 10 %</label></div>
+              <div class="fr-segmented__element"><input value="y" type="radio" id="p-ind-y" name="p-ind">
+                <label class="fr-label" for="p-ind-y">Prestige · revues de tête</label></div>
+            </div>
+          </fieldset>
+          <div class="fr-grid-row fr-grid-row--gutters filtres fr-mb-2w">
+            <div class="fr-col-12 fr-col-md-4">
+              <div class="fr-select-group"><label class="fr-label" for="p-points">Chaque point représente</label>
+                <select class="fr-select" id="p-points">
+                  <option value="disc">une discipline de l'entité</option>
+                  <option value="pays">un pays</option>
+                  <option value="etab">un établissement comparable</option>
+                </select></div>
+            </div>
+            <div class="fr-col-12 fr-col-md-4">
+              <div class="fr-select-group"><label class="fr-label" for="p-dyn">Dynamique mesurée par</label>
+                <select class="fr-select" id="p-dyn">
+                  <option value="rel">l'évolution relative de la part (%)</option>
+                  <option value="pts">l'écart de part (points de %)</option>
+                </select></div>
+            </div>
+            <div class="fr-col-12 fr-col-md-4">
+              <div class="fr-select-group"><label class="fr-label" for="p-echelle">Axe du niveau</label>
+                <select class="fr-select" id="p-echelle">
+                  <option value="log">échelle logarithmique</option>
+                  <option value="lin">échelle linéaire</option>
+                </select></div>
+            </div>
+          </div>
+          <div class="formule" id="p-formule"></div>
+          <h4 class="fr-h6 fr-mb-1w" id="p-titre"></h4>
+          <div class="legende" id="p-legende"></div>
+          <div class="chart-box chart-box--matrice fr-mb-1w"><canvas id="c-mat" role="img"
+            aria-label="Matrice niveau × dynamique"></canvas></div>
+          <p class="fr-text--sm muted fr-mb-4w" id="p-note"></p>
+
+          <h3 class="fr-h5">Qui est dans chaque quadrant ?</h3>
+          <p class="fr-text--sm muted" id="p-quad-intro"></p>
+          <div class="quad-grid fr-mb-4w" id="p-quadrants"></div>
+        </section>
+
+        <!-- ---------- Vue 3 : Comparaison internationale ---------- -->
+        <section class="vue" id="vue-compar" hidden>
+          <div class="fr-grid-row fr-grid-row--gutters filtres fr-mb-1w">
+            <div class="fr-col-12 fr-col-md-4">
+              <div class="fr-select-group"><label class="fr-label" for="c-mode">Comparer</label>
+                <select class="fr-select" id="c-mode">
+                  <option value="pays">les pays</option>
+                  <option value="taille">des établissements comparables</option>
+                  <option value="choix">des établissements choisis</option>
+                </select></div>
+            </div>
+            <div class="fr-col-12 fr-col-md-4" id="c-critere-box">
+              <div class="fr-select-group"><label class="fr-label" for="c-critere">Comparables selon</label>
+                <select class="fr-select" id="c-critere">
+                  <option value="mixte">la taille et le profil disciplinaire</option>
+                  <option value="taille">la taille seulement</option>
+                  <option value="profil">le profil disciplinaire seulement</option>
+                </select></div>
+            </div>
+            <div class="fr-col-12 fr-col-md-4" id="c-perim-box">
+              <div class="fr-select-group"><label class="fr-label" for="c-perim">Établissements</label>
+                <select class="fr-select" id="c-perim">
+                  <option value="tous">français et étrangers</option>
+                  <option value="etr">étrangers seulement</option>
+                  <option value="fr">français seulement</option>
+                </select></div>
+            </div>
+          </div>
+          <div id="c-choix-box" hidden>
+            <div class="fr-input-group">
+              <label class="fr-label" for="c-ajout">Ajouter un établissement (France ou étranger)
+                <span class="fr-hint-text">Nom, sigle ou ROR</span></label>
+              <div class="combo">
+                <input class="fr-input" type="search" id="c-ajout" autocomplete="off" role="combobox"
+                       aria-autocomplete="list" aria-expanded="false" aria-controls="lb-ajout">
+                <ul class="combo__liste" id="lb-ajout" role="listbox" aria-label="Établissements" hidden></ul>
+              </div>
+            </div>
+            <div class="chips" id="c-chips"></div>
+          </div>
+          <fieldset class="fr-segmented fr-segmented--sm fr-mb-2w">
+            <legend class="fr-segmented__legend fr-sr-only">Indicateur comparé</legend>
+            <div class="fr-segmented__elements">
+              <div class="fr-segmented__element"><input value="x" checked type="radio" id="c-ind-x" name="c-ind">
+                <label class="fr-label" for="c-ind-x">Influence · top 10 %</label></div>
+              <div class="fr-segmented__element"><input value="y" type="radio" id="c-ind-y" name="c-ind">
+                <label class="fr-label" for="c-ind-y">Prestige · revues de tête</label></div>
+              <div class="fr-segmented__element"><input value="s" type="radio" id="c-ind-s" name="c-ind">
+                <label class="fr-label" for="c-ind-s">Poids · production</label></div>
+            </div>
+          </fieldset>
+          <div class="formule" id="c-formule"></div>
+          <p class="resume-rang" id="c-resume"></p>
+          <p class="muted fr-text--sm" id="c-alerte"></p>
+          <div class="legende" id="c-legende"></div>
+          <div id="bump-wrap"><svg id="bump" role="img" aria-labelledby="c-resume"></svg>
+            <div class="infobulle" id="bump-tip" hidden></div></div>
+          <h3 class="fr-h5 fr-mt-4w">Rang par discipline</h3>
+          <div class="formule" id="c-disc-formule"></div>
+          <div class="fr-table fr-table--no-caption"><div class="fr-table__wrapper"><div class="fr-table__container">
+            <div class="fr-table__content"><table id="t-disc-rangs"><caption>Rang par discipline</caption>
+              <thead></thead><tbody></tbody></table></div></div></div></div>
+          <section class="fr-accordion fr-mt-2w">
+            <h3 class="fr-accordion__title"><button class="fr-accordion__btn" aria-expanded="false"
+              aria-controls="acc-rangs">Tableau des valeurs et des rangs par année</button></h3>
+            <div class="fr-collapse" id="acc-rangs">
+              <div class="fr-table fr-table--no-caption"><div class="fr-table__wrapper"><div class="fr-table__container">
+                <div class="fr-table__content"><table id="t-rangs"><caption>Valeurs et rangs par année</caption>
+                  <thead></thead><tbody></tbody></table></div></div></div></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="fr-accordion fr-mt-4w">
+          <h3 class="fr-accordion__title">
+            <button class="fr-accordion__btn" aria-expanded="false" aria-controls="acc-methode">Méthode et sources</button>
+          </h3>
+          <div class="fr-collapse" id="acc-methode"><ul id="methode"></ul></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ===================== Financements ===================== -->
+    <div id="panel-fin" class="fr-tabs__panel" role="tabpanel" aria-labelledby="tab-fin" tabindex="0">
+      <div class="fr-callout"><h3 class="fr-callout__title">En préparation</h3>
+        <p class="fr-callout__text">Les indicateurs de financement seront ajoutés dans cet onglet,
+          avec le même filtre établissement.</p></div>
+    </div>
+    <!-- ===================== Innovation ===================== -->
+    <div id="panel-inno" class="fr-tabs__panel" role="tabpanel" aria-labelledby="tab-inno" tabindex="0">
+      <div class="fr-callout"><h3 class="fr-callout__title">En préparation</h3>
+        <p class="fr-callout__text">Les indicateurs d'innovation seront ajoutés dans cet onglet,
+          avec le même filtre établissement.</p></div>
+    </div>
+  </div>
+</main>
+
+<footer class="fr-footer" role="contentinfo">
+  <div class="fr-container"><div class="fr-footer__body">
+    <div class="fr-footer__brand fr-enlarge-link"><p class="fr-logo">République<br>Française</p></div>
+    <div class="fr-footer__content"><p class="fr-footer__content-desc" id="pied-sources"></p></div>
+  </div></div>
+</footer>
+
+<!-- Données compressées (gzip + base64), produites par export_dashboard.py -->
+<script type="application/octet-stream" id="data-bibliometrie">{{DATA_B64}}</script>
+
+<script type="module" src="{{DSFR_URL}}/dist/dsfr.module.min.js"></script>
+<script type="text/javascript" nomodule src="{{DSFR_URL}}/dist/dsfr.nomodule.min.js"></script>
+<script src="{{CHARTJS_URL}}"></script>
+<script>
+"use strict";
+(async function () {
+  // =====================================================================
+  // 1. Données
+  // =====================================================================
+  async function decode(id) {
+    const b64 = document.getElementById(id).textContent.trim();
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const stream = new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return JSON.parse(await new Response(stream).text());
+  }
+  let D;
+  try { D = await decode("data-bibliometrie"); }
+  catch (e) { document.getElementById("chargement").textContent =
+      "Impossible de lire les données (navigateur trop ancien ?) : " + e.message; return; }
+  const M = D.monde, E = D.ent, meta = D.meta, ENT = D.entites;   // ENT[i] = [id, nom, type, articles, pays]
+  const parEntite = new Map();
+  for (let i = 0; i < E.e.length; i++) {
+    const k = E.e[i]; if (!parEntite.has(k)) parEntite.set(k, []); parEntite.get(k).push(i);
+  }
+  const estPays = (i) => ENT[i][2] === "pays";
+  const UE = new Set(meta.pays_ue || []);
+
+  // =====================================================================
+  // 2. Formatage
+  // =====================================================================
+  const nf = (d) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+  function pct(v) {
+    if (v == null || !isFinite(v)) return "–"; if (v === 0) return "0 %";
+    const p = v * 100; return (p >= 10 ? nf(1) : p >= 0.1 ? nf(2) : nf(3)).format(p) + " %";
+  }
+  const ent = (v) => new Intl.NumberFormat("fr-FR").format(Math.round(v));
+  const dec = (v) => v == null ? "–" : (Math.abs(v - Math.round(v)) < 1e-9 ? ent(v) : nf(1).format(v));
+  const signe = (v, f) => v == null || !isFinite(v) ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "±") + f(Math.abs(v));
+  const nomEnt = (i) => ENT[i][1];
+
+  // =====================================================================
+  // 3. Calculs : on SOMME les effectifs (articles, top, revues de tête) sur les
+  //    années et disciplines retenues, PUIS on divise. Jamais de moyenne de %.
+  // =====================================================================
+  function totaux(eIdx, w, y0, y1, dFilter) {
+    const t = { n: 0, top: 0, tj: 0, tjd: 0, N: 0, TOP: 0, TJ: 0, TJD: 0 };
+    for (const i of (parEntite.get(eIdx) || [])) {
+      if (E.w[i] !== w || E.y[i] < y0 || E.y[i] > y1 || (dFilter !== null && E.d[i] !== dFilter)) continue;
+      t.n += E.n[i]; t.top += E.top[i]; t.tj += E.tj[i]; t.tjd += E.tjd[i];
+    }
+    for (let i = 0; i < M.w.length; i++) {
+      if (M.w[i] !== w || M.y[i] < y0 || M.y[i] > y1 || (dFilter !== null && M.d[i] !== dFilter)) continue;
+      t.N += M.n[i]; t.TOP += M.top[i]; t.TJ += M.tj[i]; t.TJD += M.tjd[i];
+    }
+    return t;
+  }
+  function ratios(t, multi) {
+    const tj = multi ? t.tj : t.tjd, TJ = multi ? t.TJ : t.TJD;
+    const s = t.N ? t.n / t.N : null, x = t.TOP ? t.top / t.TOP : null, y = TJ ? tj / TJ : null;
+    return { n: t.n, N: t.N, top: t.top, TOP: t.TOP, tj, TJ, s, x, y,
+             // détail du prestige : revues de la discipline (D) / revues multidisciplinaires (M)
+             tjD: t.tjd, TJD: t.TJD, tjM: t.tj - t.tjd, TJM: t.TJ - t.TJD,
+             yD: t.TJD ? t.tjd / t.TJD : null, yA: t.TJ ? t.tj / t.TJ : null };
+  }
+  // Libellés des numérateurs / dénominateurs, pour afficher les calculs
+  const LIB = {
+    x: { nom: "Influence", num: "articles dans le top 10 % (éq.)", den: "articles du top 10 % mondial (éq.)",
+         k: ["top", "TOP"] },
+    y: { nom: "Prestige", num: "articles en revues de tête", den: "articles mondiaux en revues de tête",
+         k: ["tj", "TJ"] },
+    s: { nom: "Poids", num: "articles", den: "articles mondiaux", k: ["n", "N"] },
+  };
+  function calcPart(m, r, qui) {
+    const [a, b] = LIB[m].k;
+    return `${LIB[m].nom} = ${LIB[m].num} ${qui ? "de " + qui + " " : ""}(${dec(r[a])}) ÷ ${LIB[m].den} (${dec(r[b])}) = ${pct(r[m])}`;
+  }
+  // Grands domaines : préfixe alphabétique du code (ERC : LS, PE, SH)
+  const DOM_NOMS = { LS: "Sciences de la vie (LS)", PE: "Sciences physiques et ingénierie (PE)",
+                     SH: "Sciences humaines et sociales (SH)" };
+  const domaineDe = (d) => (String(D.disciplines[d][0]).match(/^[A-Za-z]+/) || ["?"])[0].toUpperCase();
+  const DOMAINES = [...new Set(D.disciplines.map((_, d) => domaineDe(d)))];
+
+  // =====================================================================
+  // 4. Filtres et état
+  // =====================================================================
+  const el = (id) => document.getElementById(id);
+  const fEnt = el("f-entite"), fDeb = el("f-debut"), fFin = el("f-fin"), fMonde = el("f-monde"),
+        fDisc = el("f-discipline"), fMulti = el("f-multi");
+  const libelle = (i) => i === 0 ? "France" : `${ENT[i][1]} (${ENT[i][0]})`;
+  const iFR = ENT.findIndex(e => e[0] === "FR");
+  const etabFR = [], etabTous = [], paysIdx = [];
+  ENT.forEach((e, i) => { if (e[2] === "pays") paysIdx.push(i);
+    else { etabTous.push(i); if (e[4] === "FR") etabFR.push(i); } });
+  const parRor = new Map(ENT.map((x, i) => [x[0], i]));
+  // Établissements proposés dans le sélecteur principal : liste du fichier de
+  // configuration (meta.selecteur, dans son ordre) ou, à défaut, tous les français
+  const selecteur = meta.selecteur ? meta.selecteur.map(r => parRor.get(r)).filter(i => i !== undefined && ENT[i][4] === "FR") : etabFR;
+
+  // Recherche : insensible à la casse et aux accents ; porte sur le nom, le ROR et
+  // les alias (sigles OpenAlex, sigle calculé, alias du fichier de configuration).
+  // Tous les mots tapés doivent être trouvés, dans n'importe quel ordre.
+  const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’'`]/g, " ");
+  const ALIAS = meta.alias || {};
+  const aliasDe = (i) => i === iFR ? ["FR", "France entière"] : (ALIAS[ENT[i][0]] || "").split("|").filter(Boolean);
+  const cles = new Map();
+  const cleDe = (i) => { if (!cles.has(i)) { const al = aliasDe(i);
+    cles.set(i, { nom: norm(ENT[i][1]), al: al.map(norm), tout: norm([ENT[i][1], ENT[i][0], ...al].join(" ")) }); }
+    return cles.get(i); };
+  function chercher(liste, txt, max = 40) {
+    const mots = norm(txt).split(/\s+/).filter(Boolean);
+    if (!mots.length) return liste.slice(0, max);
+    const res = [];
+    for (const i of liste) {
+      const k = cleDe(i); if (!mots.every(m => k.tout.includes(m))) continue;
+      const q = mots.join(" ");
+      const score = k.al.includes(q) ? 0 : ENT[i][0].toLowerCase() === q ? 0 : k.nom === q ? 1 :
+                    k.al.some(a => a.startsWith(q)) ? 2 : k.nom.startsWith(q) ? 3 : 4;
+      res.push({ i, score });
+    }
+    return res.sort((a, b) => a.score - b.score || ENT[b.i][3] - ENT[a.i][3]).slice(0, max).map(r => r.i);
+  }
+  // Liste de suggestions accessible (rôle combobox) : flèches, Entrée, Échap, souris
+  function combobox(input, liste, choisir) {
+    const lb = el(input.getAttribute("aria-controls")); let res = [], actif = -1;
+    const fermer = () => { lb.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); };
+    const marquer = () => [...lb.children].forEach((li, j) => { li.setAttribute("aria-selected", j === actif ? "true" : "false");
+      if (j === actif) { li.scrollIntoView({ block: "nearest" }); input.setAttribute("aria-activedescendant", li.id); } });
+    const ouvrir = (txt) => {
+      res = chercher(liste(), txt); actif = res.length ? 0 : -1; lb.replaceChildren();
+      if (!res.length) { const li = document.createElement("li"); li.className = "combo__vide"; li.textContent = "Aucun établissement trouvé"; lb.appendChild(li); }
+      res.forEach((i, j) => {
+        const li = document.createElement("li"); li.id = `${lb.id}-${j}`; li.setAttribute("role", "option");
+        li.appendChild(document.createTextNode(i === iFR ? "France" : ENT[i][1]));
+        const sm = document.createElement("small"), al = aliasDe(i).slice(0, 3).join(", ");
+        sm.textContent = i === iFR ? "pays" : [al, ENT[i][4] && ENT[i][4] !== "FR" ? ENT[i][4] : "", `ROR ${ENT[i][0]}`,
+          `${ent(ENT[i][3])} articles`].filter(Boolean).join(" · ");
+        li.appendChild(sm);
+        li.addEventListener("mousedown", (ev) => { ev.preventDefault(); valider(i); });
+        lb.appendChild(li); });
+      lb.hidden = false; input.setAttribute("aria-expanded", "true"); marquer(); };
+    const valider = (i) => { fermer(); choisir(i); };
+    input.addEventListener("input", () => ouvrir(input.value));
+    input.addEventListener("focus", () => { input.select(); ouvrir(""); });
+    input.addEventListener("blur", () => setTimeout(fermer, 100));
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { if (lb.hidden) ouvrir(input.value);
+        actif = Math.max(0, Math.min(res.length - 1, actif + (ev.key === "ArrowDown" ? 1 : -1))); marquer(); ev.preventDefault(); }
+      else if (ev.key === "Enter") { if (!lb.hidden && actif >= 0) { valider(res[actif]); ev.preventDefault(); } }
+      else if (ev.key === "Escape") fermer(); });
+  }
+  for (const y of meta.annees) for (const sel of [fDeb, fFin]) {
+    const o = document.createElement("option"); o.value = y; o.textContent = y; sel.appendChild(o); }
+  { const o = document.createElement("option"); o.value = ""; o.textContent = "Toutes disciplines"; fDisc.appendChild(o); }
+  D.disciplines.forEach(([code, nom], i) => {
+    const o = document.createElement("option"); o.value = i; o.textContent = `${code} — ${nom}`; fDisc.appendChild(o); });
+  const NTJ = meta.n_revues_tete || 10, MULTI = meta.multidisciplinaires || [];
+  el("l-multi").textContent = MULTI.length
+    ? `Revues de tête d'une discipline = ses ${NTJ} revues les mieux classées (SJR) + ${MULTI.length} revues multidisciplinaires : ${MULTI.join(", ")}. Ne change que le prestige.`
+    : "Aucune revue multidisciplinaire retenue (option désactivée à l'étape 5).";
+  el("multi-def").textContent = `Chaque article a une seule discipline (celle de son sujet principal). Il compte en « revue de tête » ` +
+    `si sa revue figure parmi les ${NTJ} revues de tête de CETTE discipline, ou, option activée, parmi les ${MULTI.length} revues ` +
+    `multidisciplinaires (${MULTI.join(", ") || "aucune"}). Un article de Nature en immunologie compte donc pour l'immunologie, et pour elle seule. ` +
+    `L'option ajoute ces articles au numérateur (articles de l'entité) ET au dénominateur (articles du monde) ; ` +
+    `elle ne modifie ni l'influence ni le poids.`;
+
+  const q = new URLSearchParams(location.search);
+  let eIdx = parRor.get(q.get("ror") || "FR") ?? iFR;
+  let choix = (q.get("cmp") || "").split(",").map(r => parRor.get(r)).filter(i => i !== undefined);
+  fEnt.value = eIdx === iFR ? "France" : libelle(eIdx);
+  fDeb.value = q.get("de") || meta.annees[0];
+  fFin.value = q.get("a") || meta.annees[meta.annees.length - 1];
+  fMonde.value = q.get("monde") || "1";
+  fDisc.value = q.get("disc") ?? "";
+  fMulti.checked = q.get("multi") !== "0";
+  const vueInit = q.get("vue") || "synthese";
+  document.querySelector(`input[name=vue][value=${vueInit}]`).checked = true;
+  el("c-mode").value = q.get("mode") || "pays";
+  el("c-perim").value = q.get("perim") || "tous";
+  el("c-critere").value = q.get("crit") || "mixte";
+  const indInit = q.get("ind") || "x";
+  document.querySelector(`input[name=c-ind][value=${indInit}]`).checked = true;
+  el("p-points").value = ["disc", "pays", "etab"].includes(q.get("pts")) ? q.get("pts") : "disc";
+  el("p-dyn").value = q.get("dyn") === "pts" ? "pts" : "rel";
+  el("p-echelle").value = q.get("ech") === "lin" ? "lin" : "log";
+  document.querySelector(`input[name=p-ind][value=${q.get("pind") === "y" ? "y" : "x"}]`).checked = true;
+
+  const etat = () => {
+    const y0 = Math.min(+fDeb.value, +fFin.value), y1 = Math.max(+fDeb.value, +fFin.value);
+    return { w: +fMonde.value, y0, y1, d: fDisc.value === "" ? null : +fDisc.value, multi: fMulti.checked,
+             vue: document.querySelector("input[name=vue]:checked").value,
+             ind: document.querySelector("input[name=c-ind]:checked").value,
+             mode: el("c-mode").value, perim: el("c-perim").value, crit: el("c-critere").value,
+             pts: el("p-points").value, dyn: el("p-dyn").value, ech: el("p-echelle").value,
+             pind: document.querySelector("input[name=p-ind]:checked").value };
+  };
+  function majURL(S) {
+    const p = new URLSearchParams({ ror: ENT[eIdx][0], de: S.y0, a: S.y1, monde: S.w, disc: fDisc.value,
+      multi: S.multi ? "1" : "0", vue: S.vue, ind: S.ind, mode: S.mode, perim: S.perim, crit: S.crit,
+      pts: S.pts, pind: S.pind, dyn: S.dyn, ech: S.ech });
+    if (choix.length) p.set("cmp", choix.map(i => ENT[i][0]).join(","));
+    history.replaceState(null, "", "?" + p.toString());
+  }
+
+  // Ensemble comparé (vue Comparaison et matrice « points comparés »)
+  function ensembleCompare(S) {
+    if (S.mode === "pays") return { liste: paysIdx.slice(), focus: iFR, nature: "pays" };
+    if (eIdx === iFR) return { liste: [], focus: iFR, nature: "etab",
+      alerte: "Choisissez un établissement dans le filtre en haut de page pour le comparer à d'autres établissements." };
+    if (S.mode === "choix") {
+      if (!choix.length) choix = proches(S);
+      return { liste: [eIdx, ...choix.filter(i => i !== eIdx)], focus: eIdx, nature: "etab" };
+    }
+    return { liste: [eIdx, ...proches(S)], focus: eIdx, nature: "etab" };
+  }
+  // Profils disciplinaires : articles de chaque établissement par discipline sur la période
+  const cacheProfils = new Map();
+  function profils(S) {
+    const cle = `${S.w}|${S.y0}|${S.y1}`;
+    if (!cacheProfils.has(cle)) {
+      const P = new Map(etabTous.map(i => [i, new Float64Array(D.disciplines.length)]));
+      for (let r = 0; r < E.e.length; r++) {
+        if (E.w[r] !== S.w || E.y[r] < S.y0 || E.y[r] > S.y1) continue;
+        const v = P.get(E.e[r]); if (v) v[E.d[r]] += E.n[r];
+      }
+      cacheProfils.set(cle, P);
+    }
+    return cacheProfils.get(cle);
+  }
+  const somme = (v) => v.reduce((a, b) => a + b, 0);
+  function cosinus(a, b) {   // similarité des profils : 1 = même répartition entre disciplines
+    let ab = 0, aa = 0, bb = 0;
+    for (let k = 0; k < a.length; k++) { ab += a[k] * b[k]; aa += a[k] * a[k]; bb += b[k] * b[k]; }
+    return aa && bb ? ab / Math.sqrt(aa * bb) : 0;
+  }
+  // Établissements comparables : proximité de taille (écart des log du nombre d'articles),
+  // de profil (cosinus), ou des deux (somme des deux rangs)
+  function proches(S, k = 19) {
+    const P = profils(S), p0 = P.get(eIdx), n0 = Math.log(Math.max(1, somme(p0)));
+    const cands = etabTous.filter(i => i !== eIdx && somme(P.get(i)) > 0 &&
+      (S.perim === "tous" || (S.perim === "fr") === (ENT[i][4] === "FR")))
+      .map(i => ({ i, dt: Math.abs(Math.log(Math.max(1, somme(P.get(i)))) - n0), dp: 1 - cosinus(p0, P.get(i)) }));
+    const rangPar = (cle) => { const m = new Map(); [...cands].sort((a, b) => a[cle] - b[cle]).forEach((c, r) => m.set(c.i, r)); return m; };
+    const rt = rangPar("dt"), rp = rangPar("dp");
+    const score = (c) => S.crit === "taille" ? c.dt : S.crit === "profil" ? c.dp : rt.get(c.i) + rp.get(c.i) + c.dt * 1e-6;
+    return cands.sort((a, b) => score(a) - score(b)).slice(0, k).map(c => c.i);
+  }
+  // Couleur par grande région (pays de l'établissement, ou le pays lui-même)
+  const REG = meta.regions || {};
+  const REGIONS = [["france", "France"], ["europe", "Europe (hors France)"], ["ameriques", "Amériques"],
+                   ["asie", "Asie et Océanie"], ["autres", "Afrique, Moyen-Orient et autres"]];
+  const regionDe = (i) => { const p = ENT[i][4] || ENT[i][0]; return p === "FR" ? "france" : (REG[p] || "autres"); };
+  const couleurRegion = (r) => css.getPropertyValue("--reg-" + r).trim();
+
+  // =====================================================================
+  // 5. Graphiques Chart.js (synthèse + matrices)
+  // =====================================================================
+  Chart.defaults.font.family = "Marianne, arial, sans-serif";
+  Chart.defaults.color = "#3a3a3a";
+  Chart.defaults.locale = "fr-FR";
+  const css = getComputedStyle(document.documentElement);
+  const C = { x: css.getPropertyValue("--serie-x").trim(), y: css.getPropertyValue("--serie-y").trim(),
+              s: css.getPropertyValue("--serie-s").trim(), focus: css.getPropertyValue("--focus-entite").trim() };
+  const grille = "#e5e5e5";
+  const provisoires = new Set(meta.annees_provisoires || []);
+
+  const finDeLigne = { id: "finDeLigne", afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    chart.data.datasets.forEach((ds, i) => {
+      const m = chart.getDatasetMeta(i); if (m.hidden) return;
+      const pts = m.data.filter((p, j) => ds.data[j] != null); const p = pts[pts.length - 1]; if (!p) return;
+      ctx.save(); ctx.fillStyle = "#3a3a3a"; ctx.font = "700 12px Marianne, arial"; ctx.textBaseline = "middle";
+      ctx.fillText(ds.label, p.x + 8, p.y); ctx.restore(); }); } };
+  const evol = new Chart(el("c-evol"), {
+    type: "line",
+    data: { labels: [], datasets: [
+      { label: "Influence", data: [], borderColor: C.x, backgroundColor: C.x, borderWidth: 2, pointRadius: 4,
+        segment: { borderDash: (c) => provisoires.has(+evol.data.labels[c.p1DataIndex]) ? [6, 4] : undefined } },
+      { label: "Prestige", data: [], borderColor: C.y, backgroundColor: C.y, borderWidth: 2, pointRadius: 4 },
+      { label: "Poids", data: [], borderColor: C.s, backgroundColor: C.s, borderWidth: 2, pointRadius: 4 } ]},
+    options: { maintainAspectRatio: false, layout: { padding: { right: 80 } },
+      interaction: { mode: "index", intersect: false },
+      scales: { y: { beginAtZero: true, grid: { color: grille },
+                     ticks: { callback: (v) => v === 0 ? "0 %" : nf(v >= 0.01 ? 1 : 2).format(v * 100) + " %" } },
+                x: { grid: { display: false } } },
+      plugins: { legend: { position: "top", align: "start", labels: { usePointStyle: true, pointStyle: "line" } },
+        tooltip: { callbacks: {
+          title: (it) => it[0].label + (provisoires.has(+it[0].label) ? " (influence provisoire)" : ""),
+          label: (c) => ` ${pct(c.raw)}  ${c.dataset.label}`,
+          afterLabel: (c) => { const r = evolDetail[c.dataIndex]; const m = ["x", "y", "s"][c.datasetIndex];
+                               return r ? "   " + calcPart(m, r) : ""; } } } } },
+    plugins: [finDeLigne] });
+  let evolDetail = [];
+
+  // Profil disciplinaire : barres horizontales influence / prestige par discipline,
+  // bande de couleur à gauche = grand domaine, valeur écrite au bout de chaque barre
+  const couleurDomaine = (dom) => (css.getPropertyValue("--dom-" + dom.toLowerCase()).trim()
+                                   || css.getPropertyValue("--dom-autre").trim());
+  const bandeDomaine = { id: "bandeDomaine", afterDraw(chart) {
+    const { ctx, chartArea: a, scales: { y } } = chart; const n = D.disciplines.length; if (!n) return;
+    const pas = (y.getPixelForValue(n - 1) - y.getPixelForValue(0)) / Math.max(1, n - 1) || (a.bottom - a.top);
+    ctx.save();
+    D.disciplines.forEach((_, d) => {
+      const yc = y.getPixelForValue(d); ctx.fillStyle = couleurDomaine(domaineDe(d));
+      ctx.fillRect(2, yc - pas / 2 + 1, 6, pas - 2);
+      if (d > 0 && domaineDe(d) !== domaineDe(d - 1)) {          // séparation entre domaines
+        ctx.strokeStyle = "#929292"; ctx.lineWidth = 1; ctx.beginPath();
+        ctx.moveTo(2, yc - pas / 2); ctx.lineTo(a.right, yc - pas / 2); ctx.stroke(); }
+    });
+    ctx.restore(); } };
+  const valeursBarres = { id: "valeursBarres", afterDatasetsDraw(chart) {
+    const { ctx } = chart; ctx.save(); ctx.font = "11px Marianne, arial"; ctx.fillStyle = "#3a3a3a"; ctx.textBaseline = "middle";
+    chart.data.datasets.forEach((ds, i) => { const m = chart.getDatasetMeta(i); if (m.hidden) return;
+      m.data.forEach((b, j) => { const v = ds.data[j]; if (v == null) return; ctx.fillText(pct(v / 100), b.x + 4, b.y); }); });
+    ctx.restore(); } };
+  let profilDetail = [];
+  const profil = new Chart(el("c-profil"), {
+    type: "bar",
+    data: { labels: D.disciplines.map(d => d[0]), datasets: [
+      { label: "Influence (part du top 10 % mondial)", data: [], backgroundColor: C.x, borderColor: C.x, borderWidth: 1.5 },
+      { label: "Prestige (part des revues de tête)", data: [], backgroundColor: C.y, borderColor: C.y, borderWidth: 1.5 } ]},
+    options: { maintainAspectRatio: false, indexAxis: "y", layout: { padding: { left: 12, right: 56 } },
+      datasets: { bar: { barPercentage: .85, categoryPercentage: .8 } },
+      scales: { x: { beginAtZero: true, grid: { color: grille }, title: { display: true, text: "Part (%)" },
+                     ticks: { callback: (v) => nf(v >= 1 || v === 0 ? 0 : 1).format(v) + " %" } },
+                y: { grid: { display: false }, ticks: { autoSkip: false, font: { weight: 700 } } } },
+      plugins: { legend: { position: "top", align: "start" },
+        tooltip: { callbacks: {
+          title: (it) => { const d = D.disciplines[it[0].dataIndex]; return `${d[0]} — ${d[1]}`; },
+          label: (c) => ` ${pct(c.raw / 100)}  ${c.dataset.label}`,
+          afterBody: (it) => { const r = profilDetail[it[0].dataIndex]; if (!r) return [];
+            const m = it[0].datasetIndex === 0 ? "x" : "y";
+            return [calcPart(m, r), `Articles de l'entité : ${ent(r.n)}` + (r.n < 30 ? " (effectif faible)" : "")]; } } } } },
+    plugins: [bandeDomaine, valeursBarres] });
+
+  // Matrice niveau × dynamique (une seule, indicateur au choix).
+  // Plugin : lignes de référence, libellés des quadrants, puis étiquettes des points
+  // placées sans chevauchement (à droite, à gauche, au-dessus ou au-dessous de la
+  // bulle ; un point sans place libre n'est pas étiqueté mais reste au survol et
+  // dans le tableau des quadrants). L'entité sélectionnée est toujours étiquetée.
+  const QUADS = { hd: "Atouts en progression", bd: "Atouts en recul", hg: "Rattrapage", bg: "Fragilités qui s'accentuent" };
+  const chevauche = (p, q) => p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1;
+  const quadrants = { id: "quadrants", beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: a, scales: { x, y } } = chart, o = chart.options.plugins.quadrants;
+      const px = x.getPixelForValue(o.xref), py = y.getPixelForValue(0);
+      ctx.save(); ctx.strokeStyle = "#3a3a3a"; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      if (px >= a.left && px <= a.right) { ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.stroke(); }
+      if (py >= a.top && py <= a.bottom) { ctx.beginPath(); ctx.moveTo(a.left, py); ctx.lineTo(a.right, py); ctx.stroke(); }
+      ctx.setLineDash([]); ctx.font = "italic 700 13px Marianne, arial";
+      chart.$occupe = [];
+      const coin = (txt, droite, haut) => {
+        const w = ctx.measureText(txt).width, x0 = droite ? a.right - 8 - w : a.left + 8, y0 = haut ? a.top + 18 : a.bottom - 10;
+        ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillRect(x0 - 4, y0 - 14, w + 8, 19);
+        ctx.fillStyle = "#6a6a6a"; ctx.fillText(txt, x0, y0);
+        chart.$occupe.push({ x0: x0 - 4, x1: x0 + w + 4, y0: y0 - 14, y1: y0 + 5 }); };
+      coin(QUADS.hd, true, true); coin(QUADS.bd, true, false); coin(QUADS.hg, false, true); coin(QUADS.bg, false, false);
+      ctx.restore(); },
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea: a } = chart, ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
+      const bulles = meta.data.map((p, j) => ({ j, x: p.x, y: p.y, r: ds.data[j].r }));
+      const occupe = [...(chart.$occupe || [])];
+      const ordre = [...bulles].sort((p, q) => (ds.data[q.j].focus - ds.data[p.j].focus) || (ds.data[q.j].n - ds.data[p.j].n));
+      ctx.save(); ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+      for (const b of ordre) {
+        const d = ds.data[b.j]; ctx.font = (d.focus ? "700 13px" : "12px") + " Marianne, arial";
+        const w = ctx.measureText(d.lab).width, h = 14, m = 3;
+        const cands = [[b.x + b.r + m, b.y], [b.x - b.r - m - w, b.y], [b.x - w / 2, b.y - b.r - m - h / 2],
+                       [b.x - w / 2, b.y + b.r + m + h / 2]];
+        let ok = null;
+        for (const [tx, ty] of cands) {
+          const rect = { x0: tx - 1, x1: tx + w + 1, y0: ty - h / 2, y1: ty + h / 2 };
+          if (rect.x0 < a.left || rect.x1 > a.right || rect.y0 < a.top || rect.y1 > a.bottom) continue;
+          if (occupe.some(o => chevauche(o, rect))) continue;
+          if (bulles.some(o => o.j !== b.j && chevauche({ x0: o.x - o.r * .8, x1: o.x + o.r * .8, y0: o.y - o.r * .8, y1: o.y + o.r * .8 }, rect))) continue;
+          ok = { tx, ty, rect }; break;
+        }
+        if (!ok && d.focus) { const tx = Math.min(b.x + b.r + m, a.right - w); ok = { tx, ty: b.y, rect: { x0: tx, x1: tx + w, y0: b.y - 7, y1: b.y + 7 } }; }
+        if (!ok) continue;
+        occupe.push(ok.rect);
+        ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineWidth = 3; ctx.strokeText(d.lab, ok.tx, ok.ty);
+        ctx.fillStyle = d.focus ? "#000091" : "#161616"; ctx.fillText(d.lab, ok.tx, ok.ty);
+      }
+      ctx.restore(); } };
+  // Graduations lisibles en échelle logarithmique : 1, 2, 5 × 10^k
+  // (toutes les graduations 1..9 × 10^k si la plage couvre moins d'un facteur 8)
+  const tickLog = function (v) { if (v <= 0) return ""; const k = Math.floor(Math.log10(v) + 1e-9), m = Math.round(v / 10 ** k * 100) / 100;
+    const dense = this.max / this.min < 8;
+    return (dense ? Number.isInteger(m) : [1, 2, 5].includes(m)) ? nf(k < 0 ? -k : 0).format(v) + " %" : ""; };
+  const mat = new Chart(el("c-mat"), {
+    type: "bubble", data: { datasets: [{ data: [], borderWidth: 1.5, hoverBorderWidth: 3 }] },
+    options: { maintainAspectRatio: false, layout: { padding: 4 },
+      scales: { x: { type: "logarithmic", grid: { color: grille }, title: { display: true, text: "", font: { weight: 700 } },
+                     ticks: { autoSkip: false, maxRotation: 0, includeBounds: false } },
+                y: { grid: { color: grille }, title: { display: true, text: "", font: { weight: 700 } } } },
+      plugins: { legend: { display: false }, quadrants: { xref: 1 },
+        tooltip: { callbacks: { title: (it) => it[0].raw.nom, label: () => "", afterBody: (it) => it[0].raw.calc } } } },
+    plugins: [quadrants] });
+
+  // =====================================================================
+  // 6. Graphique des rangs (SVG) : rubans classés par valeur chaque année,
+  //    épaisseur proportionnelle à la valeur
+  // =====================================================================
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function svg(tag, attrs, parent) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n;
+  }
+  function placerEtiquettes(items, top, bottom, pas) {   // évite les chevauchements
+    items.sort((a, b) => a.y - b.y);
+    for (let i = 0; i < items.length; i++) items[i].ly = Math.max(items[i].y, i ? items[i - 1].ly + pas : top);
+    const deb = items.length ? items[items.length - 1].ly - bottom : 0;
+    if (deb > 0) for (let i = items.length - 1; i >= 0; i--)
+      items[i].ly = Math.min(items[i].ly, i < items.length - 1 ? items[i + 1].ly - pas : bottom);
+  }
+  function dessinerRangs(liste, annees, val, focus, m) {
+    const root = el("bump"); root.replaceChildren();
+    const W = el("bump-wrap").clientWidth, n = liste.length;
+    const H = Math.max(480, n * 26 + 60), L = 230, R = 230, T = 34, B = 10, gap = 3, hMin = 4;
+    root.setAttribute("viewBox", `0 0 ${W} ${H}`); root.setAttribute("width", W); root.setAttribute("height", H);
+    if (!n || !annees.length) return;
+    const pasX = annees.length > 1 ? (W - L - R) / (annees.length - 1) : 0, fw = Math.min(28, pasX * 0.18);
+    const X = (j) => L + j * pasX;
+    // positions par année
+    const pos = annees.map((a) => {
+      const vals = liste.map(i => ({ i, v: val(i, a).v || 0 })).sort((p, q) => q.v - p.v);
+      return vals; });
+    const maxSomme = Math.max(...pos.map(c => c.reduce((s, p) => s + p.v, 0)));
+    // épaisseur = épaisseur minimale (lisibilité des petites parts) + part × échelle
+    const echelle = (H - T - B - gap * (n - 1) - hMin * n) / (maxSomme || 1);
+    const geo = new Map(liste.map(i => [i, []]));
+    pos.forEach((col, j) => { let y = T; col.forEach((p, r) => {
+      const h = hMin + p.v * echelle; geo.get(p.i)[j] = { y0: y, y1: y + h, rang: r + 1, v: p.v }; y += h + gap; }); });
+    // années
+    annees.forEach((a, j) => svg("text", { x: X(j), y: 18, "text-anchor": "middle" }, root).textContent =
+      a + (m === "x" && provisoires.has(a) ? "*" : ""));
+    // rubans
+    const chemins = [], gris = (i) => couleurRegion(regionDe(i));
+    for (const i of liste) {
+      const g = geo.get(i); let haut = `M${X(0) - fw},${g[0].y0} L${X(0) + fw},${g[0].y0}`, bas = "";
+      for (let j = 1; j < g.length; j++) {
+        const xa = X(j - 1) + fw, xb = X(j) - fw, xm = (xa + xb) / 2;
+        haut += ` C${xm},${g[j - 1].y0} ${xm},${g[j].y0} ${xb},${g[j].y0} L${X(j) + fw},${g[j].y0}`; }
+      bas = ` L${X(g.length - 1) + fw},${g[g.length - 1].y1} L${X(g.length - 1) - fw},${g[g.length - 1].y1}`;
+      for (let j = g.length - 1; j >= 1; j--) {
+        const xa = X(j - 1) + fw, xb = X(j) - fw, xm = (xa + xb) / 2;
+        bas += ` C${xm},${g[j].y1} ${xm},${g[j - 1].y1} ${xa},${g[j - 1].y1} L${X(j - 1) - fw},${g[j - 1].y1}`; }
+      const p = svg("path", { d: haut + bas + " Z", class: "ruban",
+        fill: i === focus ? C.focus : gris(i), "fill-opacity": i === focus ? 1 : 0.8, stroke: "#fff", "stroke-width": 1 }, root);
+      p.dataset.i = i; chemins.push(p);
+    }
+    chemins.filter(c => +c.dataset.i === focus).forEach(c => root.appendChild(c));   // entité au premier plan
+    // étiquettes gauche / droite
+    const etiq = (j, cote) => {
+      const items = liste.map(i => { const g = geo.get(i)[j]; return { i, y: (g.y0 + g.y1) / 2 + 4, v: g.v }; });
+      placerEtiquettes(items, T + 8, H - B, 13);
+      items.forEach(it => {
+        const t = svg("text", { x: cote === "g" ? X(j) - fw - 8 : X(j) + fw + 8, y: it.ly,
+          "text-anchor": cote === "g" ? "end" : "start", class: it.i === focus ? "focus" : "" }, root);
+        t.textContent = cote === "g" ? `${nomEnt(it.i)} ${pct(it.v)}` : `${pct(it.v)} ${nomEnt(it.i)}`;
+        if (Math.abs(it.ly - it.y) > 3) svg("line", { x1: cote === "g" ? X(j) - fw - 6 : X(j) + fw + 6, y1: it.ly - 4,
+          x2: cote === "g" ? X(j) - fw : X(j) + fw, y2: it.y - 4, stroke: "#929292", "stroke-width": 1 }, root);
+      }); };
+    etiq(0, "g"); etiq(annees.length - 1, "d");
+    // survol : met en évidence le ruban et affiche le calcul de l'année la plus proche
+    const tip = el("bump-tip");
+    const survol = (ev) => {
+      const i = +ev.target.dataset.i; const bb = root.getBoundingClientRect();
+      const xs = (ev.clientX - bb.left) * (W / bb.width);
+      const j = Math.max(0, Math.min(annees.length - 1, Math.round((xs - L) / (pasX || 1))));
+      chemins.forEach(c => c.style.opacity = (+c.dataset.i === i || +c.dataset.i === focus) ? 1 : 0.25);
+      if (i !== focus) ev.target.setAttribute("fill-opacity", 1);
+      const r = val(i, annees[j]), g = geo.get(i)[j];
+      tip.replaceChildren();
+      const ligne = (txt, gras) => { const d = document.createElement("div"); if (gras) { const b = document.createElement("b"); b.textContent = txt; d.appendChild(b); } else d.textContent = txt; tip.appendChild(d); };
+      ligne(`${pct(r.v)} · ${g.rang}ᵉ sur ${liste.length}`, true);
+      ligne(`${nomEnt(i)} — ${annees[j]}${m === "x" && provisoires.has(annees[j]) ? " (provisoire)" : ""}`);
+      ligne(calcPart(m, r.r, nomEnt(i)));
+      tip.hidden = false;
+      const wb = el("bump-wrap").getBoundingClientRect();
+      tip.style.left = Math.min(ev.clientX - wb.left + 14, wb.width - 370) + "px";
+      tip.style.top = (ev.clientY - wb.top + 14) + "px";
+    };
+    chemins.forEach(c => {
+      c.addEventListener("pointermove", survol);
+      c.addEventListener("pointerleave", (ev) => { tip.hidden = true; chemins.forEach(k => k.style.opacity = 1);
+        if (+ev.target.dataset.i !== focus) ev.target.setAttribute("fill-opacity", 0.8); });
+    });
+    return geo;
+  }
+
+  // =====================================================================
+  // 7. Rendu des vues
+  // =====================================================================
+  const ligneLib = (S) => `${S.y0}–${S.y1} · ${S.d === null ? "toutes disciplines" : D.disciplines[S.d].join(" — ")} · ` +
+    (S.w ? "monde : revues indexées SJR" : "monde : toutes les revues OpenAlex");
+  let lignesCSV = [];
+
+  function rendreSynthese(S) {
+    const r = ratios(totaux(eIdx, S.w, S.y0, S.y1, S.d), S.multi);
+    el("kpi-x").textContent = pct(r.x); el("kpi-y").textContent = pct(r.y); el("kpi-s").textContent = pct(r.s);
+    el("kpi-nx").textContent = `${dec(r.top)} éq.-articles dans le top 10 %`;
+    el("kpi-ny").textContent = `${ent(r.tj)} articles en revues de tête`;
+    el("kpi-n").textContent = `${ent(r.n)} articles`;
+    el("calc-x").textContent = `${calcPart("x", r)}.`;
+    el("calc-y").textContent = `${calcPart("y", r)}` + (MULTI.length ? (S.multi ? " (revues multidisciplinaires incluses)." : " (sans les revues multidisciplinaires).") : ".");
+    // Décomposition du prestige
+    el("t-multi-ent").textContent = eIdx === iFR ? "France" : nomEnt(eIdx);
+    const tbm = el("t-multi").querySelector("tbody"); tbm.replaceChildren();
+    [[`les ${NTJ} revues de tête de leur discipline`, r.tjD, r.TJD, "oui, toujours"],
+     [`les revues multidisciplinaires (${MULTI.length})`, r.tjM, r.TJM, S.multi ? "oui (option activée)" : "non (option désactivée)"],
+     ["Total compté dans le prestige", r.tj, r.TJ, ""]].forEach(([lib, a, b, c], j) => {
+      const tr = document.createElement("tr"); if (j === 1 && !S.multi) tr.className = "faible"; if (j === 2) tr.style.fontWeight = "700";
+      [lib, ent(a), ent(b), c].forEach((v, k) => { const td = document.createElement(k ? "td" : "th"); if (!k) td.scope = "row";
+        td.textContent = v; if (k === 1 || k === 2) td.className = "num"; tr.appendChild(td); });
+      tbm.appendChild(tr); });
+    el("multi-res").innerHTML = `Prestige <b>sans</b> les revues multidisciplinaires = ${ent(r.tjD)} ÷ ${ent(r.TJD)} = <b>${pct(r.yD)}</b> ; ` +
+      `<b>avec</b> = (${ent(r.tjD)} + ${ent(r.tjM)}) ÷ (${ent(r.TJD)} + ${ent(r.TJM)}) = <b>${pct(r.yA)}</b>. ` +
+      `Valeur affichée : <b>${S.multi ? "avec" : "sans"}</b>. Les revues multidisciplinaires pèsent ` +
+      `${pct(r.TJD + r.TJM ? r.TJM / (r.TJD + r.TJM) : null)} des articles mondiaux en revues de tête de la sélection.`;
+    el("calc-s").textContent = `${calcPart("s", r)}.`;
+    // Encadré Waltman & Schreiber : chiffres de la sélection
+    const qui = eIdx === iFR ? "la France" : nomEnt(eIdx);
+    el("ws-live").innerHTML = "";
+    const b = document.createElement("span"); b.className = "ws-live";
+    b.textContent = `Pour la sélection : le top 10 % mondial compte ${dec(r.TOP)} équivalent-articles ` +
+      `(${pct(r.N ? r.TOP / r.N : null)} des ${ent(r.N)} articles mondiaux) ; ${qui} en détient ${dec(r.top)}, soit ${pct(r.x)}.`;
+    el("ws-live").appendChild(b);
+    if (r.N && r.TOP / r.N < 0.0995) el("ws-live").appendChild(document.createTextNode(
+      " Un peu moins de 10 % : dans certaines disciplines, plus de 90 % des articles ne sont jamais cités, et un article non cité n'entre pas dans le top."));
+
+    const ans = meta.annees.filter(a => a >= S.y0 && a <= S.y1);
+    evolDetail = ans.map(a => ratios(totaux(eIdx, S.w, a, a, S.d), S.multi));
+    evol.data.labels = ans.map(String);
+    ["x", "y", "s"].forEach((k, j) => evol.data.datasets[j].data = evolDetail.map(v => v[k]));
+    evol.update();
+
+    // Profil disciplinaire (parts par discipline) + légende des domaines
+    const parDisc = D.disciplines.map((d, i) => ({ i, ...ratios(totaux(eIdx, S.w, S.y0, S.y1, i), S.multi) }));
+    profilDetail = parDisc;
+    profil.data.datasets.forEach((ds, j) => {
+      const k = j === 0 ? "x" : "y", c = j === 0 ? C.x : C.y;
+      ds.data = parDisc.map(v => v.n > 0 && v[k] != null ? v[k] * 100 : null);
+      ds.backgroundColor = parDisc.map(v => v.n < 30 ? "rgba(255,255,255,0)" : c);
+      ds.borderDash = undefined; });
+    profil.update();
+    legendeDomaines(el("leg-domaines"));
+
+    const tb = el("t-detail").querySelector("tbody"); tb.replaceChildren();
+    lignesCSV = [["code", "discipline", "domaine", "articles", "articles_monde", "top_entite_eq_articles", "top_monde_eq_articles",
+                  "influence", "revues_tete_entite", "revues_tete_monde", "prestige", "poids"]];
+    for (const v of [...parDisc, { i: -1, ...r }]) {
+      const tr = document.createElement("tr"); if (v.n < 30) tr.className = "faible";
+      const c0 = document.createElement(v.i < 0 ? "th" : "td");
+      if (v.i >= 0) { const p = document.createElement("span"); p.className = "pastille";
+        p.style.background = couleurDomaine(domaineDe(v.i)); c0.appendChild(p); }
+      c0.appendChild(document.createTextNode(v.i < 0 ? "Total" : `${D.disciplines[v.i][0]} — ${D.disciplines[v.i][1]}`));
+      tr.appendChild(c0);
+      [ent(v.n), `${dec(v.top)} / ${dec(v.TOP)}`, pct(v.x), `${ent(v.tj)} / ${ent(v.TJ)}`, pct(v.y), pct(v.s)].forEach(c => {
+        const td = document.createElement("td"); td.textContent = c; td.className = "num"; tr.appendChild(td); });
+      if (v.i < 0) tr.style.fontWeight = "700";
+      tb.appendChild(tr);
+      lignesCSV.push([v.i < 0 ? "ALL" : D.disciplines[v.i][0], v.i < 0 ? "Total" : D.disciplines[v.i][1],
+        v.i < 0 ? "" : domaineDe(v.i), v.n, v.N, v.top, v.TOP, v.x, v.tj, v.TJ, v.y, v.s]);
+    }
+  }
+  function legendeDomaines(box) {
+    box.replaceChildren();
+    for (const dom of DOMAINES) { const sp = document.createElement("span"), ic = document.createElement("i");
+      ic.style.background = couleurDomaine(dom); sp.append(ic, document.createTextNode(DOM_NOMS[dom] || dom)); box.appendChild(sp); }
+  }
+
+  // Périodes de la matrice : k premières et k dernières années du filtre
+  function periodes(S, consolidees) {
+    let ans = meta.annees.filter(a => a >= S.y0 && a <= S.y1);
+    if (consolidees) { const c = ans.filter(a => !provisoires.has(a)); if (c.length >= 2) ans = c; }
+    const k = Math.max(1, Math.min(3, Math.floor(ans.length / 2)));
+    return { p1: [ans[0], ans[k - 1]], p2: [ans[ans.length - k], ans[ans.length - 1]] };
+  }
+  const per = (p) => p[0] === p[1] ? `${p[0]}` : `${p[0]}–${p[1]}`;
+  const mediane = (a) => { const s = [...a].sort((p, q) => p - q); const n = s.length;
+    return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : 0; };
+  const fmtDyn = (v, rel) => v == null || !isFinite(v) ? "–" :
+    (v > 0 ? "+" : v < 0 ? "−" : "±") + nf(Math.abs(v) >= 10 ? 0 : 1).format(Math.abs(v)) + (rel ? " %" : " pt");
+  const tronque = (s, k) => s.length > k ? s.slice(0, k - 1) + "…" : s;
+
+  function rendrePosition(S) {
+    const m = S.pind, rel = S.dyn === "rel", log = S.ech === "log";
+    const P = periodes(S, m === "x"), PY = periodes(S, false);
+    const prov = m === "x" && [...provisoires].some(a => a >= P.p2[0] && a <= P.p2[1]);
+    const titreInd = m === "x" ? "Influence — part du top 10 % mondial des articles les plus cités"
+                               : "Prestige — part des articles parus dans les revues de tête";
+    // Points : disciplines de l'entité, pays, ou établissements comparables
+    let ens = null, pts, alerte = "";
+    if (S.pts === "disc") {
+      pts = D.disciplines.map((d, i) => ({ eI: eIdx, dI: i, nom: `${d[0]} — ${d[1]}`, lab: d[0], coul: couleurDomaine(domaineDe(i)) }));
+    } else {
+      ens = ensembleCompare({ ...S, mode: S.pts === "pays" ? "pays" : (S.mode === "pays" ? "taille" : S.mode) });
+      alerte = ens.alerte || "";
+      pts = ens.liste.map(i => ({ eI: i, dI: S.d, nom: nomEnt(i), lab: tronque(nomEnt(i), S.pts === "pays" ? 16 : 24),
+        coul: i === ens.focus ? C.focus : couleurRegion(regionDe(i)), focus: i === ens.focus }));
+    }
+    const ref = ratios(totaux(eIdx, S.w, P.p2[0], P.p2[1], S.d), S.multi);
+
+    // Calcul des points
+    const data = [], exclus = [];
+    for (const pt of pts) {
+      const r1 = ratios(totaux(pt.eI, S.w, P.p1[0], P.p1[1], pt.dI), S.multi);
+      const r2 = ratios(totaux(pt.eI, S.w, P.p2[0], P.p2[1], pt.dI), S.multi);
+      const v1 = r1[m], v2 = r2[m];
+      const dyn = v1 == null || v2 == null ? null : rel ? (v1 > 0 ? (v2 / v1 - 1) * 100 : null) : (v2 - v1) * 100;
+      if (!r2.n || v2 == null || dyn == null || (log && v2 <= 0)) { if (r2.n || r1.n) exclus.push(pt.lab); continue; }
+      const calc = [
+        `Part ${per(P.p2)} : ${calcPart(m, r2)}`,
+        `Part ${per(P.p1)} : ${calcPart(m, r1)}`,
+        rel ? `Évolution relative = ${pct(v2)} ÷ ${pct(v1)} − 1 = ${fmtDyn(dyn, true)}`
+            : `Écart = ${pct(v2)} − ${pct(v1)} = ${fmtDyn(dyn, false)}`,
+        `Articles ${per(P.p2)} : ${ent(r2.n)}` + (r2.n < 30 ? " — moins de 30 : position peu fiable" : "") ];
+      data.push({ x: v2 * 100, y: dyn, yv: dyn, nom: pt.nom, lab: pt.lab, calc, n: r2.n, coul: pt.coul,
+                  focus: pt.focus ? 1 : 0, v1, v2 });
+    }
+    const xref = S.pts === "disc" ? (ref[m] || 0) * 100 : mediane(data.map(p => p.x));
+
+    // Échelles : calées sur les points fiables (>= 30 articles) ; les autres sont
+    // ramenés au bord du graphique (valeur exacte au survol et dans le tableau)
+    const fiables = data.filter(p => p.n >= 30); const base = fiables.length ? fiables : data;
+    const ys = [0, ...base.map(p => p.y)], my = (Math.max(...ys) - Math.min(...ys)) * 0.08 || 1;
+    const ymin = Math.min(...ys) - my, ymax = Math.max(...ys) + my;
+    const xs = [xref, ...base.map(p => p.x)].filter(v => !log || v > 0);
+    let xmin, xmax;
+    if (log) { xmin = Math.min(...xs) / 1.35; xmax = Math.max(...xs) * 1.35; }
+    else { const mx = (Math.max(...xs) - Math.min(...xs)) * 0.06 || 0.1; xmin = Math.max(0, Math.min(...xs) - mx); xmax = Math.max(...xs) + mx; }
+    const nMax = Math.max(1, ...data.map(p => p.n));
+    for (const p of data) {
+      p.r = 4 + 13 * Math.sqrt(p.n / nMax);
+      p.y = Math.max(ymin, Math.min(ymax, p.y)); p.x = Math.max(xmin, Math.min(xmax, p.x));
+    }
+    data.sort((a, b) => a.focus - b.focus || b.n - a.n);   // petites bulles et entité sélectionnée au premier plan
+    const ds = mat.data.datasets[0]; ds.data = data;
+    ds.backgroundColor = data.map(p => p.n < 30 ? "rgba(255,255,255,.6)" : p.coul + (p.focus ? "" : "C0"));
+    ds.borderColor = data.map(p => p.focus ? "#000091" : p.coul);
+    ds.borderWidth = data.map(p => p.focus ? 3 : 1.5);
+    mat.options.plugins.quadrants.xref = xref;
+    mat.options.scales.x.type = log ? "logarithmic" : "linear";
+    Object.assign(mat.options.scales.x, { min: xmin, max: xmax });
+    mat.options.scales.x.ticks.callback = log ? tickLog : (v) => nf(v < 1 && v > 0 ? 1 : 0).format(v) + " %";
+    Object.assign(mat.options.scales.y, { min: ymin, max: ymax });
+    mat.options.scales.y.ticks = { includeBounds: false, callback: (v) => fmtDyn(v, rel) };
+    mat.options.scales.x.title.text = `Niveau : part ${per(P.p2)}` + (log ? " (échelle logarithmique)" : "") +
+      (S.pts === "disc" ? " — ligne verticale : part de l'entité toutes disciplines" : " — ligne verticale : médiane");
+    mat.options.scales.y.title.text = rel ? `Dynamique : évolution relative de la part depuis ${per(P.p1)}`
+                                          : `Dynamique : écart de part depuis ${per(P.p1)} (points de %)`;
+    mat.update();
+
+    // Titre, légende, explications
+    el("p-titre").textContent = titreInd;
+    const leg = el("p-legende"); leg.replaceChildren();
+    if (S.pts === "disc") legendeDomaines(leg);
+    else { const item = (coul, txt) => { const sp = document.createElement("span"), ic = document.createElement("i");
+        ic.style.background = coul; sp.append(ic, document.createTextNode(txt)); leg.appendChild(sp); };
+      if (ens.liste.length) item(C.focus, nomEnt(ens.focus) + " (sélection)");
+      const pres = new Set(ens.liste.filter(i => i !== ens.focus).map(regionDe));
+      for (const [r, lib] of REGIONS) if (pres.has(r)) item(couleurRegion(r), lib); }
+
+    el("p-formule").replaceChildren();
+    const ajout = (html) => { const p = document.createElement("p"); p.innerHTML = html; el("p-formule").appendChild(p); };
+    ajout(`<b>Périodes</b> : <b>${per(P.p1)}</b> (départ) → <b>${per(P.p2)}</b> (arrivée)` +
+      (m === "x" && P.p2[1] < PY.p2[1] ? " — influence : années consolidées seulement, la fenêtre de citation des années suivantes n'est pas close" : "") +
+      ". Chaque période cumule ses années : effectifs additionnés, puis ratio.");
+    ajout(`<b>Axe horizontal — niveau</b> = ` + (m === "x"
+      ? "articles dans le top 10 % mondial (éq.-articles) ÷ ensemble du top 10 % mondial, sur la période d'arrivée."
+      : "articles parus dans les revues de tête ÷ ensemble des articles mondiaux de ces revues, sur la période d'arrivée.") +
+      (log ? " Échelle logarithmique : un même écart horizontal correspond à un même rapport (de 1 % à 2 % comme de 10 % à 20 %), ce qui évite que les plus gros écrasent les autres." : ""));
+    ajout(`<b>Ligne verticale</b> : ` + (S.pts === "disc"
+      ? `part de ${eIdx === iFR ? "la France" : nomEnt(eIdx)} toutes disciplines confondues (${pct(ref[m])}). À droite : les disciplines où elle fait mieux que sa moyenne.`
+      : `médiane des ${data.length} entités affichées (${pct(xref / 100)}). À droite : la moitié la mieux placée.`));
+    ajout(`<b>Axe vertical — dynamique</b> = ` + (rel
+      ? "part d'arrivée ÷ part de départ − 1. Exemple : de 5,0 % à 5,5 %, +10 %. Compare la progression des petits et des gros sur la même échelle."
+      : "part d'arrivée − part de départ, en points de pourcentage. Exemple : de 5,0 % à 5,5 %, +0,5 pt.") +
+      " Au-dessus de 0 : la part progresse." + (prov ? ` <b>Attention :</b> la période ${per(P.p2)} contient des années provisoires.` : ""));
+    el("p-note").textContent = "Taille des bulles : nombre d'articles sur la période d'arrivée. Bulles blanches : moins de 30 articles, " +
+      "position peu fiable (ramenées au bord du graphique si elles sortent du cadre). Noms affichés quand la place le permet ; " +
+      "tous figurent au survol et dans le tableau ci-dessous." +
+      (exclus.length ? ` Non représentés (part nulle ou évolution non calculable) : ${exclus.join(", ")}.` : "") +
+      (alerte ? " " + alerte : "");
+
+    // Tableau des quadrants
+    el("p-quad-intro").textContent = `${titreInd.split(" — ")[0]}, ${per(P.p1)} → ${per(P.p2)}. ` +
+      `Droite / gauche : part au-dessus / au-dessous de la ligne verticale (${pct(xref / 100)}). ` +
+      `Haut / bas : part en progression / en recul. Classement par part décroissante.`;
+    const DEF = { hg: "Part sous la référence, mais en progression.", hd: "Part au-dessus de la référence et en progression.",
+                  bg: "Part sous la référence et en recul.", bd: "Part au-dessus de la référence, mais en recul." };
+    const grille4 = el("p-quadrants"); grille4.replaceChildren();
+    for (const k of ["hg", "hd", "bg", "bd"]) {
+      const occ = data.filter(p => ((p.v2 * 100 >= xref) === (k[1] === "d")) && ((p.yv >= 0) === (k[0] === "h")))
+        .sort((a, b) => b.v2 - a.v2);
+      const box = document.createElement("div"); box.className = "quad";
+      const h = document.createElement("h4"); h.textContent = `${QUADS[k]} (${occ.length})`; box.appendChild(h);
+      const d = document.createElement("p"); d.className = "def"; d.textContent = DEF[k]; box.appendChild(d);
+      if (!occ.length) { const v = document.createElement("p"); v.className = "vide"; v.textContent = "Aucun."; box.appendChild(v); }
+      else {
+        const t = document.createElement("table"), th = document.createElement("tr");
+        [["", ""], [`Part ${per(P.p2)}`, "num"], [rel ? "Évolution" : "Écart", "num"], ["Articles", "num"]].forEach(([txt, c]) => {
+          const x = document.createElement("td"); x.textContent = txt; x.className = c; x.style.fontWeight = 700; th.appendChild(x); });
+        t.appendChild(th);
+        for (const p of occ) {
+          const tr = document.createElement("tr"); if (p.focus) tr.className = "focus"; if (p.n < 30) tr.classList.add("faible");
+          const c0 = document.createElement("td"), pa = document.createElement("span"); pa.className = "pastille";
+          pa.style.background = p.coul; c0.append(pa, document.createTextNode(p.nom)); tr.appendChild(c0);
+          [pct(p.v2), fmtDyn(p.yv, rel), ent(p.n)].forEach(v => { const c = document.createElement("td"); c.className = "num";
+            c.textContent = v; tr.appendChild(c); });
+          t.appendChild(tr); }
+        box.appendChild(t);
+      }
+      grille4.appendChild(box);
+    }
+  }
+
+  function rendreComparaison(S) {
+    el("c-perim-box").hidden = S.mode === "pays";
+    el("c-critere-box").hidden = S.mode !== "taille";
+    el("c-choix-box").hidden = S.mode !== "choix";
+    const ens = ensembleCompare(S); const m = S.ind;
+    el("c-alerte").textContent = ens.alerte || "";
+    // Formule
+    el("c-formule").replaceChildren();
+    const ajout = (html) => { const p = document.createElement("p"); p.innerHTML = html; el("c-formule").appendChild(p); };
+    const def = { x: "<b>Part du top 10 % mondial</b> = articles de l'entité figurant parmi les 10 % les plus cités au monde " +
+                     "(même année, même discipline) ÷ ensemble des articles mondiaux de ce top 10 %.",
+                  y: "<b>Part des revues de tête</b> = articles de l'entité parus dans les revues de tête de leur discipline ÷ " +
+                     "ensemble des articles mondiaux parus dans ces revues.",
+                  s: "<b>Poids</b> = articles de l'entité ÷ ensemble des articles mondiaux." }[m];
+    ajout(def);
+    ajout("Comptage entier : un article co-signé compte entièrement pour chaque pays (ou établissement) présent ; " +
+          "les parts se recouvrent et leur somme dépasse 100 %. Rubans classés chaque année par valeur décroissante ; " +
+          "épaisseur proportionnelle à la part (plus une épaisseur minimale pour rester visible). * : année provisoire pour l'influence.");
+    if (S.mode !== "pays") ajout("Établissements : un article compte pour un établissement s'il y est affilié directement ou via une structure rattachée (ROR, lignée OpenAlex).");
+    if (S.mode === "taille" || (S.mode === "choix" && !q.get("cmp"))) ajout(
+      "<b>Établissements comparables</b> (les 19 plus proches) — " +
+      ({ taille: "taille : écart du nombre d'articles sur la période, en échelle logarithmique (un établissement deux fois plus gros est aussi « loin » qu'un deux fois plus petit).",
+         profil: "profil disciplinaire : similarité cosinus entre les répartitions des articles entre les 28 panels ERC sur la période (100 % = même répartition).",
+         mixte: "taille et profil : classement selon la somme des deux rangs, taille (écart logarithmique du nombre d'articles) et profil (similarité cosinus de la répartition entre panels ERC)." }[S.crit]));
+    // Chips (mode choix)
+    const chips = el("c-chips"); chips.replaceChildren();
+    if (S.mode === "choix") for (const i of choix) {
+      const b = document.createElement("button"); b.className = "fr-tag fr-tag--sm fr-tag--dismiss";
+      b.setAttribute("aria-label", `Retirer ${nomEnt(i)}`); b.textContent = nomEnt(i);
+      b.addEventListener("click", () => { choix = choix.filter(k => k !== i); rendre(); }); chips.appendChild(b); }
+    // Légende des couleurs (régions présentes + entité sélectionnée)
+    const leg = el("c-legende"); leg.replaceChildren();
+    const presentes = new Set(ens.liste.filter(i => i !== ens.focus).map(regionDe));
+    const item = (coul, txt) => { const sp = document.createElement("span"); const ic = document.createElement("i");
+      ic.style.background = coul; sp.append(ic, document.createTextNode(txt)); leg.appendChild(sp); };
+    if (ens.liste.length) item(C.focus, nomEnt(ens.focus) + " (sélection)");
+    for (const [r, lib] of REGIONS) if (presentes.has(r)) item(couleurRegion(r), lib);
+    if (!ens.liste.length) { el("bump").replaceChildren(); el("c-resume").textContent = ""; remplirRangs([], [], null);
+      el("t-disc-rangs").querySelector("tbody").replaceChildren(); return; }
+
+    const annees = meta.annees.filter(a => a >= S.y0 && a <= S.y1);
+    const cache = new Map();
+    const val = (i, a) => { const k = i + ":" + a; if (!cache.has(k)) {
+      const r = ratios(totaux(i, S.w, a, a, S.d), S.multi); cache.set(k, { v: r[m], r }); } return cache.get(k); };
+    const geo = dessinerRangs(ens.liste, annees, val, ens.focus, m);
+    // Résumé des rangs (première et dernière année)
+    const a0 = annees[0], a1 = annees[annees.length - 1];
+    const rang = (liste, a) => { const tri = liste.map(i => ({ i, v: val(i, a).v || 0 })).sort((p, q) => q.v - p.v);
+      return tri.findIndex(p => p.i === ens.focus) + 1; };
+    const fleche = (r0, r1) => r1 > r0 ? ` <span class="fleche-baisse" aria-label="en baisse">▼</span>`
+      : r1 < r0 ? ` <span class="fleche-hausse" aria-label="en hausse">▲</span>` : " (stable)";
+    const r0 = rang(ens.liste, a0), r1 = rang(ens.liste, a1);
+    let txt = `<b>${nomEnt(ens.focus)} : ${r0}<sup>e</sup> en ${a0} → ${r1}<sup>e</sup> en ${a1}` +
+      `${m === "x" && provisoires.has(a1) ? " (provisoire)" : ""} sur ${ens.liste.length} ${ens.nature === "pays" ? "pays" : "établissements"}</b>${fleche(r0, r1)}`;
+    if (ens.nature === "pays") {
+      const ue = ens.liste.filter(i => UE.has(ENT[i][0]));
+      if (ue.includes(ens.focus)) { const u0 = rang(ue, a0), u1 = rang(ue, a1);
+        txt += ` · parmi les pays de l'Union européenne : ${u0}<sup>e</sup> → ${u1}<sup>e</sup> sur ${ue.length}${fleche(u0, u1)}`; }
+    }
+    el("c-resume").innerHTML = txt;
+    remplirRangs(ens.liste, annees, val, S);
+    rangsParDiscipline(S, ens, m);
+  }
+  // Rang de l'entité dans chaque discipline, période de départ -> période d'arrivée
+  function rangsParDiscipline(S, ens, m) {
+    const P = periodes(S, m === "x");
+    el("c-disc-formule").replaceChildren();
+    const p = document.createElement("p");
+    p.innerHTML = `Pour chaque discipline, ${LIB[m].nom.toLowerCase()} de chaque entité comparée, cumulée sur la période ` +
+      `de départ <b>${per(P.p1)}</b> puis d'arrivée <b>${per(P.p2)}</b> (effectifs additionnés, puis ratio), et rang de ` +
+      `<b>${nomEnt(ens.focus)}</b> parmi les ${ens.liste.length} entités comparées.` +
+      (m === "x" ? " Influence : années consolidées seulement." : "");
+    el("c-disc-formule").appendChild(p);
+    const th = el("t-disc-rangs").querySelector("thead"), tb = el("t-disc-rangs").querySelector("tbody");
+    th.replaceChildren(); tb.replaceChildren();
+    const h = document.createElement("tr");
+    ["Discipline", `Rang ${per(P.p1)}`, `Rang ${per(P.p2)}`, "Évolution", `${LIB[m].nom} ${per(P.p2)}`,
+     `Articles ${per(P.p2)}`].forEach((t, j) => { const c = document.createElement("th"); c.scope = "col"; c.textContent = t;
+      if (j) c.className = "num"; h.appendChild(c); });
+    th.appendChild(h);
+    const rangDans = (d, p) => { const vals = ens.liste.map(i => ({ i, r: ratios(totaux(i, S.w, p[0], p[1], d), S.multi) }))
+      .sort((a, b) => (b.r[m] || 0) - (a.r[m] || 0));
+      const k = vals.findIndex(v => v.i === ens.focus); return { rang: k + 1, r: vals[k].r }; };
+    D.disciplines.forEach(([code, nom], d) => {
+      const a = rangDans(d, P.p1), b = rangDans(d, P.p2);
+      const tr = document.createElement("tr"); if (b.r.n < 30) tr.className = "faible";
+      const c0 = document.createElement("th"); c0.scope = "row"; c0.textContent = `${code} — ${nom}`; tr.appendChild(c0);
+      const delta = a.rang - b.rang;
+      [`${a.rang}ᵉ`, `${b.rang}ᵉ`, null, pct(b.r[m]), ent(b.r.n)].forEach((t, j) => {
+        const c = document.createElement("td"); c.className = "num";
+        if (j === 2) { const sp = document.createElement("span");
+          sp.className = delta > 0 ? "fleche-hausse" : delta < 0 ? "fleche-baisse" : "";
+          sp.textContent = delta > 0 ? `▲ +${delta}` : delta < 0 ? `▼ ${delta}` : "=";
+          sp.setAttribute("aria-label", delta > 0 ? `gagne ${delta} rang(s)` : delta < 0 ? `perd ${-delta} rang(s)` : "stable");
+          c.appendChild(sp); }
+        else c.textContent = t;
+        tr.appendChild(c); });
+      tb.appendChild(tr); });
+  }
+  function remplirRangs(liste, annees, val, S) {
+    const th = el("t-rangs").querySelector("thead"), tb = el("t-rangs").querySelector("tbody");
+    th.replaceChildren(); tb.replaceChildren(); if (!liste.length) return;
+    const etab = !estPays(liste[0]), P = etab ? profils(S) : null, p0 = etab ? P.get(liste[0]) : null;
+    const tr = document.createElement("tr");
+    ["Entité", ...(etab ? ["Pays", "Articles (période)", "Profil proche à"] : []), ...annees.map(String)].forEach((t, j) => { const c = document.createElement("th"); c.scope = "col";
+      c.textContent = t; if (j) c.className = "num"; tr.appendChild(c); }); th.appendChild(tr);
+    const rangs = annees.map(a => new Map(liste.map(i => [i, val(i, a).v || 0]).sort((p, q) => q[1] - p[1]).map(([i], r) => [i, r + 1])));
+    for (const i of [...liste].sort((p, q) => rangs[rangs.length - 1].get(p) - rangs[rangs.length - 1].get(q))) {
+      const r = document.createElement("tr"); const c0 = document.createElement("th"); c0.scope = "row"; c0.textContent = nomEnt(i); r.appendChild(c0);
+      if (etab) [ENT[i][4] || "", ent(somme(P.get(i))), pct(cosinus(p0, P.get(i)))].forEach(t => {
+        const c = document.createElement("td"); c.className = "num"; c.textContent = t; r.appendChild(c); });
+      annees.forEach((a, j) => { const c = document.createElement("td"); c.className = "num";
+        c.textContent = `${pct(val(i, a).v)} (${rangs[j].get(i)}ᵉ)`; r.appendChild(c); });
+      tb.appendChild(r); }
+  }
+
+  function rendre() {
+    const S = etat();
+    el("titre-selection").textContent = eIdx === iFR ? "France" : nomEnt(eIdx);
+    el("sous-titre-selection").textContent = ligneLib(S);
+    for (const v of ["synthese", "position", "compar"]) el("vue-" + v).hidden = v !== S.vue;
+    if (S.vue === "synthese") rendreSynthese(S);
+    if (S.vue === "position") rendrePosition(S);
+    if (S.vue === "compar") rendreComparaison(S);
+    majURL(S);
+  }
+
+  // =====================================================================
+  // 8. Événements
+  // =====================================================================
+  el("b-csv").addEventListener("click", () => {
+    const esc = (c) => (c == null ? "" : typeof c === "number" ? String(c).replace(".", ",") : `"${String(c).replace(/"/g, '""')}"`);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + lignesCSV.map(l => l.map(esc).join(";")).join("\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = `bibliometrie_${ENT[eIdx][0]}_${fDeb.value}-${fFin.value}.csv`; a.click(); });
+  combobox(fEnt, () => [iFR, ...selecteur], (i) => { eIdx = i; choix = []; fEnt.value = i === iFR ? "France" : libelle(i); fEnt.blur(); rendre(); });
+  fEnt.addEventListener("blur", () => setTimeout(() => { fEnt.value = eIdx === iFR ? "France" : libelle(eIdx); }, 120));
+  document.querySelector('a[href="#multi-detail"]').addEventListener("click", () => {
+    if (etat().vue !== "synthese") { el("v-synthese").checked = true; rendre(); } });
+  const cAjout = el("c-ajout");
+  combobox(cAjout, () => etabTous.filter(i => !choix.includes(i) && i !== eIdx), (i) => { choix.push(i); cAjout.value = ""; rendre(); });
+  el("c-mode").addEventListener("change", () => { if (el("c-mode").value === "choix" && !choix.length && eIdx !== iFR)
+    choix = proches(etat()); rendre(); });
+  [fDeb, fFin, fMonde, fDisc, fMulti, el("c-perim"), el("c-critere"), el("p-points"), el("p-dyn"), el("p-echelle")].forEach(x => x.addEventListener("change", rendre));
+  document.querySelectorAll("input[name=vue], input[name=c-ind], input[name=p-ind]").forEach(x => x.addEventListener("change", rendre));
+  let t; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => { if (etat().vue === "compar") rendre(); }, 150); });
+
+  // Méthode et sources
+  for (const txt of meta.methode) { const li = document.createElement("li"); li.textContent = txt; el("methode").appendChild(li); }
+  el("pied-sources").textContent = meta.sources;
+  el("chargement").hidden = true; el("biblio").hidden = false;
+  rendre();
+})();
+</script>
+</body>
+</html>
