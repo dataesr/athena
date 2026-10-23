@@ -35,7 +35,7 @@ def run_task_compute():
 @main_blueprint.route("/tasks/<task_id>", methods=["GET"])
 def get_status(task_id):
     with Connection(redis.from_url(current_app.config["REDIS_URL"])):
-        q = Queue("sandbox")
+        q = Queue("athena")      # même file que /compute (était "sandbox" : tâche jamais trouvée)
         task = q.fetch_job(task_id)
     if task:
         response_object = {

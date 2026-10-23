@@ -80,6 +80,27 @@ def _sql_extract(url: str, annee_min: int, types: tuple) -> str:
     On ne cite que des sous-champs précis pour que DuckDB ne lise que ces
     colonnes 'feuilles' du Parquet."""
     types_sql = ", ".join(f"'{t}'" for t in types)
+    # Lecture d'un fichier Parquet OpenAlex (un fichier = quelques centaines de
+    # milliers d'articles), en une seule passe :
+    #   - id, primary_topic.id, primary_location.source.id sont des URL
+    #     (https://openalex.org/W123) : _short() garde la fin (W123) ;
+    #   - `countries` : un article a une liste d'auteurs (authorships) ; chaque
+    #     auteur a ses pays (a.countries) et ses institutions, qui ont chacune un
+    #     pays (i.country_code). list_transform construit, par auteur, la liste
+    #     « ses pays + pays de ses institutions » ; flatten met bout à bout les
+    #     listes de tous les auteurs ; list_distinct dédoublonne ; list_filter
+    #     retire les NULL. Exemple :
+    #       auteur 1 : countries [FR], institutions [CNRS (FR)]  -> [FR, FR]
+    #       auteur 2 : countries [],   institutions [MIT (US)]   -> [US]
+    #       flatten -> [FR, FR, US] ; list_distinct -> [FR, US]
+    #   - `inst_ids` : même principe avec les identifiants des institutions ;
+    #     la liste est ensuite « dépliée » (unnest) en une ligne par
+    #     (article, institution) dans work_inst/.
+    #   - WHERE : années, types, et on écarte les articles rétractés, le
+    #     « paratexte » (sommaires, éditoriaux de couverture...) et les articles
+    #     sans topic (impossibles à classer dans une discipline).
+    # On ne cite que des sous-champs précis : DuckDB ne lit que ces colonnes du
+    # Parquet distant (environ 4 % du volume du fichier).
     return f"""
     CREATE OR REPLACE TEMP TABLE t AS
     SELECT
@@ -144,6 +165,9 @@ def extract_one(s3_url: str, out_works: Path, out_inst: Path,
             n = con.execute("SELECT count(*) FROM t").fetchone()[0]
             # écriture atomique : .tmp puis renommage
             tmp_w, tmp_i = f_works.with_suffix(".tmp"), f_inst.with_suffix(".tmp")
+            # Deux sorties : works/ (une ligne par article, sans la liste d'institutions)
+            # et work_inst/ (une ligne par article x institution : unnest « déplie »
+            # la liste, W1 [I1, I2] -> (W1, I1), (W1, I2))
             con.execute(f"COPY (SELECT * EXCLUDE (inst_ids) FROM t) "
                         f"TO '{tmp_w}' (FORMAT parquet, COMPRESSION zstd)")
             con.execute(f"COPY (SELECT work_id, unnest(inst_ids) AS inst_id FROM t) "
@@ -189,17 +213,35 @@ def extract_works(annee_min: int = 2015,
     connect(install=True).close()  # installe httpfs une fois, avant les threads
 
     manifest_path = Path(manifest_path) if manifest_path else data_dir / "works_manifest.json"
+    deja = list(out_works.glob("*.parquet"))
+    if (refresh_manifest or not manifest_path.exists()) and deja:
+        # Garde-fou : ne jamais compléter une extraction existante avec la liste de
+        # fichiers d'un AUTRE snapshot (les deux se mélangeraient, avec des doublons)
+        raise RuntimeError(
+            f"{data_dir} contient déjà {len(deja)} fichiers extraits"
+            + ("" if manifest_path.exists() else " mais pas de works_manifest.json")
+            + " : pour un nouveau snapshot, utiliser extract_snapshot() (nouveau dossier) ; "
+              "pour reprendre une extraction interrompue, relancer sans refresh_manifest.")
     if refresh_manifest or not manifest_path.exists():
         manifest = fetch_manifest(manifest_path)
         if verbose:
             print(f"Manifest téléchargé : snapshot du {manifest.get('date')}, "
                   f"{len(manifest['files'])} fichiers -> {manifest_path}")
-    files = json.loads(manifest_path.read_text())["files"]
+    manifest = json.loads(manifest_path.read_text())
+    files = manifest["files"]
     if test:
-        files = [max(files, key=lambda f: f["meta"]["record_count"])]
+        files = [max(files, key=lambda f: f["meta"].get("record_count") or f["meta"].get("content_length", 0))]
     elif limit:
         files = files[:limit]
     urls = [f["url"] for f in files]
+
+    if verbose:   # état avant de commencer : ce qui est déjà là, ce qui reste à lire sur S3
+        noms = [_out_name(u) for u in urls]
+        complets = sum((out_works / n).exists() and (out_inst / n).exists() for n in noms)
+        partiels = sum((out_works / n).exists() != (out_inst / n).exists() for n in noms)
+        print(f"Dossier {data_dir} — snapshot {manifest.get('source', 'public')} du {manifest.get('date')} : "
+              f"{len(urls)} fichiers, {complets} déjà extraits, {len(urls) - complets} à lire sur S3"
+              + (f" (dont {partiels} extraits à moitié, interrompus en cours d'écriture)" if partiels else ""))
 
     t_start = time.time()
     res = {"fichiers": len(urls), "extraits": 0, "deja_faits": 0, "lignes": 0, "erreurs": []}
@@ -293,8 +335,9 @@ def list_snapshots(data_root: str = DATA_ROOT):
             "institutions": (d / "institutions.parquet").exists(),
             "disciplines": (d / "disciplines").exists(),
             "top10": (d / "top10").exists(),
-            "revues_tete": (d / "top_journals").exists(),
-            "indicateurs": (d / "indicators").exists(),
+            "revues_tete": (d / "revues_tete").exists(),
+            "indicateurs": (d / "indicateurs").exists(),
+            "publication": (d / "publication").exists(),
         })
     return pd.DataFrame(rows)
 

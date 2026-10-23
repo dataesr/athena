@@ -3,7 +3,18 @@ config.py
 =========
 Paramètres de la méthode, regroupés en un seul endroit.
 
-Chaque fonction des étapes 3 à 6 prend ces valeurs comme valeurs par défaut :
+Règle de nommage des données
+----------------------------
+  - Étapes 1 et 2 (extraction) : noms d'OpenAlex, en anglais (work_id, year,
+    topic_id, inst_id, ror...), pour rester calqués sur la source.
+  - À partir de l'étape 3 : noms français explicites, identiques dans tous les
+    fichiers, la base Mongo et le front (voir CONTRAT_DONNEES.md) :
+      classement, perimetre, annee_publication, discipline_code, entite_id,
+      nb_articles, nb_articles_top10_cites, nb_articles_revues_tete_disciplinaires,
+      nb_articles_revues_tete_multidisciplinaires, influence_provisoire...
+    Préfixe nb_ = un nombre d'articles ; part_ = un ratio entre 0 et 1.
+
+Chaque fonction des étapes 3 à 7 prend ces valeurs comme valeurs par défaut :
   - pour changer un choix partout : modifier ce fichier ;
   - pour un essai ponctuel : passer l'argument à l'appel,
     ex. compute_top10(work_types=("article", "review")).
@@ -37,9 +48,9 @@ TOPICS_PATH = "topics/openalex_topics_erc_panels.json"
 SJR_PATH = "scimago/scimagojr_2025.csv"
 
 # --- Classement (étape 3) -------------------------------------------------------
-# Nom du regroupement : écrit dans <DATA_DIR>/disciplines/<nom>.parquet.
-# Plusieurs regroupements peuvent coexister (erc, erc_alt, ost, ...).
-DISCIPLINES_NAME = "erc"
+# Nom du classement topic -> discipline : écrit dans <DATA_DIR>/disciplines/<classement>.parquet.
+# Plusieurs classements peuvent coexister (erc, erc_alt, ost, ...).
+CLASSEMENT = "erc"
 
 # --- Périmètre des indicateurs (étapes 4 à 6) -----------------------------------
 # Ne sert PAS au classement : il définit quels articles composent « le monde ».
@@ -47,11 +58,11 @@ WORK_TYPES = ("article",)          # ("article", "review") pour inclure les revi
 SOURCE_TYPES = ("journal",)        # None = toutes les sources
 ANNEE_MIN = 2015
 ANNEE_MAX = 2025                   # 2026 incomplète ; quelques dates aberrantes (2027+)
-# « Monde » de référence :
-#   "all" : tous les articles de revues d'OpenAlex
-#   "sjr" : seulement les revues indexées dans SJR (comparable à Scopus) ;
-#           nécessite l'étape 5 (top_journals/sjr_sources.parquet)
-WORLD = "all"
+# Périmètre de référence (« le monde » au dénominateur des parts) :
+#   "toutes_revues_openalex" : tous les articles de revues d'OpenAlex
+#   "revues_sjr"             : seulement les revues indexées dans SJR (comparable
+#                              à Scopus) ; nécessite l'étape 5 (revues_tete/sources_sjr.parquet)
+PERIMETRE = "toutes_revues_openalex"
 
 # --- Influence : top 10 % des plus cités (étape 4) -------------------------------
 CITATION_WINDOW = 3     # citations de l'année de publication + N années suivantes ;
@@ -99,14 +110,14 @@ MULTIDISC_SJR_IDS = None          # liste imposée d'identifiants SJR (colonne S
 PAYS_FR = ("FR", "GP", "MQ", "GF", "RE", "YT", "PM", "BL", "MF", "WF", "PF", "NC")
 
 # --- Indicateurs (étape 6) -------------------------------------------------------
-INDICATOR_WORLDS = ("all", "sjr")  # mondes calculés (chacun exige son fichier top10)
+PERIMETRES = ("toutes_revues_openalex", "revues_sjr")   # périmètres calculés aux étapes 4 et 6
 ETAB_COUNTRIES = PAYS_FR           # établissements proposés : institutions de ces pays
                                    # (ROR de l'institution ou de l'une de ses tutelles)
-ETAB_MIN_ARTICLES = 100            # articles minimum sur la période (monde "all") pour
+ETAB_MIN_ARTICLES = 100            # articles minimum sur la période (premier périmètre) pour
                                    # qu'un établissement figure dans les résultats
 # Comparaison internationale
 PAYS_COMPARAISON = None            # liste de codes ISO à comparer à la France ; None = automatique :
-PAYS_COMPARAISON_N = 25            # les N pays qui publient le plus (monde "all", toute la période)
+PAYS_COMPARAISON_N = 25            # les N pays qui publient le plus (premier périmètre, toute la période)
 ETAB_INTERNATIONAL_RORS = None     # établissements étrangers à inclure (liste de ROR) ; None = automatique :
 ETAB_INTERNATIONAL_N = 300         # les N plus gros établissements étrangers (0 = aucun)
 ETAB_INTERNATIONAL_TYPES = ("education", "facility", "government", "healthcare", "nonprofit")
@@ -128,13 +139,53 @@ ETAB_EXCLUDE = [
     "0172v8z89",                  # Gouvernement de la République française
 ]
 
-# --- Dashboard (étape 7) ----------------------------------------------------------
-# Établissements proposés dans le sélecteur du dashboard : fichier CSV (une ligne
-# par établissement, colonnes ror ; nom et alias facultatives). None = tous les
-# établissements français des indicateurs. Les autres établissements restent dans
-# les données (comparaisons). Pour créer un fichier de départ à élaguer :
-#   export_dashboard.write_etab_selection()
+# Copublications (étape 6b, copublications.py) : pour chaque pays et établissement,
+# ses partenaires (pays et établissements) avec le nombre d'articles cosignés.
+COPUB_PARTENAIRES_N = 50           # partenaires gardés par entité et par type de partenaire
+                                   # (les plus fréquents sur toute la période) ; None = tous
+COPUB_MAX_ENTITES_PAR_ARTICLE = None   # ex. 50 : ignore les articles à très nombreuses
+                                       # affiliations (grandes collaborations) pour les paires
+                                       # établissement x établissement ; None = tous
+
+# --- Publication (étape 7, publish.py) -------------------------------------------
+# Fichiers : <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz (+ .parquet)
+# Base : MongoDB de l'application tableaux (https://github.com/dataesr/tableaux).
+MONGO_URI = os.getenv("MONGO_URI")                       # ne jamais écrire l'URI en dur ici
+MONGO_DB = os.getenv("MONGO_DB_NAME", "tableaux-staging")
+TABLEAUX_BOARD_ID = "bibliometrie"   # identifiant du tableau dans la collection « boards »
+
+# --- Référentiel des établissements (étape 0, referentiel.py) ----------------------
+# Sert au périmètre du sélecteur et aux noms / sigles / catégories affichés ; ne change
+# aucun calcul. Jointure avec OpenAlex par le ROR.
+REFERENTIEL_SOURCE = "paysage"     # "paysage" ou "scanr"
+PAYSAGE_DUMP_URL = "https://scanr-data.s3.gra.io.cloud.ovh.net/production/paysage_dump.jsonl.gz"
+SCANR_ORGANIZATIONS_URL = "https://scanr-data.s3.gra.io.cloud.ovh.net/production/organizations-v2.jsonl.gz"
+REFERENTIEL_DIR = f"{DATA_ROOT}/referentiel"   # commun à tous les snapshots OpenAlex
+# Catégories (Paysage, libellé usualNameFr) des établissements proposés dans le sélecteur
+REFERENTIEL_CATEGORIES = [
+    "Grand établissement relevant d'un autre département ministériel", "Grand établissement",
+    "Communauté d'universités et établissements", "Établissement public expérimental",
+    "Université", "Organisme de recherche",
+    "Institut national polytechnique", "Institut ou école extérieur aux universités",
+    "École normale supérieure", "Établissement d'enseignement supérieur privé d'intérêt général",
+    "École d'ingénieurs", "École de commerce et de management",
+    "École nationale supérieure d'ingénieurs", "Institut d'étude politique",
+    "Centre de lutte contre le cancer", "Institut hospitalo-universitaire", "Centre hospitalier",
+    "Établissement privé d'enseignement universitaire",
+    "Établissement d'enseignement supérieur privé rattachés à un EPSCP",
+]
+
+# --- Sélecteur d'établissements (entites.py) ------------------------------------------
+# Établissements proposés = périmètre du référentiel (ci-dessus) qui ont des articles
+# à l'étape 6, corrigé par un fichier CSV FACULTATIF (une ligne par établissement) :
+#   ror ; nom (nom affiché, prioritaire) ; alias (termes de recherche séparés par |) ;
+#   exclure (1 = retirer du sélecteur)
+# Une ligne sans exclure AJOUTE l'établissement au sélecteur. Sans référentiel, le
+# fichier seul définit le sélecteur ; sans les deux, tous les établissements français.
+# Les autres établissements restent dans les données (comparaisons, copublications).
 DASHBOARD_ETABS_PATH = "config/etablissements_dashboard.csv"
+DASHBOARD_ORDRE_SELECTEUR = "taille"   # ordre quand la recherche est vide :
+                                       # "taille" (plus gros d'abord) ou "fichier" (ordre du CSV)
 
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)

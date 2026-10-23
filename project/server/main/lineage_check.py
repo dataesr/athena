@@ -71,6 +71,13 @@ def suspicious_ancestors(data_dir: str = DATA_DIR, pays=PAYS_FR, min_articles: i
     data_dir = Path(data_dir)
     con = connect(data_dir)
     _prepare(con, data_dir)
+    # Pour chaque ancêtre A : somme des articles de ses descendants (n_descendants,
+    # sans dédoublonnage), nombre de descendants, et son plus gros descendant
+    # (arg_max(id, nb) = l'id de la ligne au nb maximal).
+    # Signal d'alerte : le plus gros descendant publie plus que A en direct et
+    # apporte l'essentiel de son volume (part_plus_gros proche de 1).
+    # Exemple vu dans OpenAlex : Université Paris Lumières (peu d'articles en direct)
+    # « hérite » de Université Paris Cité (plusieurs centaines de milliers) -> suspect.
     df = con.execute(f"""
         WITH e AS (                       -- arêtes descendant -> ancêtre (hors soi-même)
             SELECT l.inst_id AS desc_id, l.anc_inst_id AS anc_id
@@ -162,6 +169,14 @@ def apply_lineage_cuts(con, data_dir, cuts=LINEAGE_CUTS, table: str = "lin_ok") 
         SELECT * FROM (VALUES {rows or "(NULL, NULL)"}) t(c_ror, a_ror)
         WHERE c_ror IS NOT NULL
     """)
+    # Liens à retirer. Pour chaque coupure (C, A) :
+    #   x  : toute institution X qui a C dans sa lignée (C lui-même et ses descendants) ;
+    #   aa : A et toutes les tutelles de A ;
+    #   -> on retire les lignes (X, tutelle de A).
+    # Exemple : coupure (Paris Cité, Paris Lumières), lignée erronée de Paris Cité
+    #   = [Paris Lumières, Paris 8, Nanterre]. Un laboratoire L de Paris Cité perd
+    #   (L, Paris Lumières), (L, Paris 8), (L, Nanterre) mais garde (L, Paris Cité).
+    #   X ne se retire jamais lui-même (x.inst_id <> aa.anc_inst_id).
     con.execute("""
         CREATE OR REPLACE TEMP TABLE _retires AS
         SELECT DISTINCT x.inst_id, aa.anc_inst_id, k.c_ror, k.a_ror

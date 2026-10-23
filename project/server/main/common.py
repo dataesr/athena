@@ -1,8 +1,8 @@
 """
 common.py
 =========
-Outils partagés par les étapes 4 à 6 : connexion DuckDB et définition du
-périmètre « articles du monde ».
+Outils partagés par les étapes 3 à 7 : connexion DuckDB, périmètre de
+référence, noms des pays.
 """
 
 from pathlib import Path
@@ -32,28 +32,32 @@ def _sql_in(values) -> str:
     return ", ".join("'" + str(v).replace("'", "''") + "'" for v in values)
 
 
-def sjr_sources_path(data_dir: str) -> Path:
-    return Path(data_dir) / "top_journals" / "sjr_sources.parquet"
+# Valeurs possibles du périmètre de référence (voir config.PERIMETRE)
+PERIMETRES_VALIDES = ("toutes_revues_openalex", "revues_sjr")
+# Identifiant de l'entité « monde » dans les effectifs (dénominateur des parts)
+MONDE_ID = "MONDE"
 
 
-def world_sources(world: str, data_dir: str):
-    """Fichier des sources autorisées pour un « monde », ou None (pas de filtre)."""
-    if world in (None, "all"):
+def sources_sjr_path(data_dir: str) -> Path:
+    return Path(data_dir) / "revues_tete" / "sources_sjr.parquet"
+
+
+def perimetre_sources(perimetre: str, data_dir: str):
+    """Fichier des sources autorisées pour un périmètre, ou None (pas de filtre)."""
+    if perimetre not in PERIMETRES_VALIDES:
+        raise ValueError(f"périmètre inconnu : {perimetre!r} (attendu : {PERIMETRES_VALIDES})")
+    if perimetre == "toutes_revues_openalex":
         return None
-    if world == "sjr":
-        p = sjr_sources_path(data_dir)
-        if not p.exists():
-            raise FileNotFoundError(f"{p} absent : lancer d'abord l'étape 5 (compute_top_journals)")
-        return str(p)
-    raise ValueError(f"monde inconnu : {world!r} (attendu : 'all' ou 'sjr')")
+    p = sources_sjr_path(data_dir)
+    if not p.exists():
+        raise FileNotFoundError(f"{p} absent : lancer d'abord l'étape 5 (compute_top_journals)")
+    return str(p)
 
 
-def output_name(disciplines: str, world: str, out_name: str = None) -> str:
-    """Nom par défaut des sorties : <disciplines> pour le monde 'all',
-    <disciplines>_<monde> sinon."""
-    if out_name:
-        return out_name
-    return disciplines if world in (None, "all") else f"{disciplines}_{world}"
+def nom_fichier(classement: str, perimetre: str = None) -> str:
+    """Nom des sorties : <classement>_<perimetre> (ex. erc_revues_sjr), ou
+    <classement> pour une sortie qui ne dépend pas du périmètre."""
+    return f"{classement}_{perimetre}" if perimetre else classement
 
 
 def perimeter_where(work_types=None, source_types=None, annee_min=None,
@@ -98,6 +102,10 @@ PAYS_NOMS = {
     "PE": "Pérou", "EC": "Équateur", "KE": "Kenya", "ET": "Éthiopie", "GH": "Ghana",
     "PH": "Philippines", "KZ": "Kazakhstan", "JO": "Jordanie", "LB": "Liban",
 }
+# Grands domaines (lettres en tête des codes de discipline ERC)
+DOMAINES_NOMS = {"LS": "Sciences de la vie", "PE": "Sciences physiques et ingénierie",
+                 "SH": "Sciences humaines et sociales"}
+
 # Pays de l'Union européenne (rang « parmi les pays européens »)
 PAYS_UE = ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE",
            "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"]

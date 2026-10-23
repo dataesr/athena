@@ -73,6 +73,13 @@ def _short(expr: str) -> str:
 def extract_sources(con, data_dir: str = DATA_DIR, verbose: bool = True):
     """Table des revues avec ISSN normalisés -> <data_dir>/sources.parquet.
     Renvoie le décompte par type de source (DataFrame)."""
+    # issn_norm : tous les ISSN de la revue (issn + issn_l), normalisés pour
+    # l'appariement avec SJR, qui les écrit sans tiret :
+    #   issn ['1476-4687', '0028-0836'], issn_l '0028-0836'
+    #   list_concat           -> ['1476-4687', '0028-0836', '0028-0836']
+    #   list_transform        -> ['14764687', '00280836', '00280836'] (sans tiret, majuscules : X final)
+    #   list_filter           -> garde les chaînes de 8 caractères (écarte NULL et valeurs mal formées)
+    #   list_distinct         -> ['14764687', '00280836']
     con.execute(f"""
         CREATE OR REPLACE TABLE sources AS
         SELECT
@@ -118,6 +125,16 @@ def extract_institutions(con, data_dir: str = DATA_DIR, verbose: bool = True) ->
     """)
     con.execute(f"COPY institutions TO '{data_dir}/institutions.parquet' (FORMAT parquet, COMPRESSION zstd)")
 
+    # Lignée « dépliée » : une ligne par (institution, ancêtre), l'institution
+    # étant son propre ancêtre. OpenAlex donne déjà, pour chaque institution, la
+    # liste COMPLÈTE de ses tutelles (directes et indirectes) dans `lineage`.
+    # Exemple : UMR 7590 (I3), lineage = [I2 Sorbonne Université, I1 CNRS]
+    #   list_concat([I3], [I2, I1]) = [I3, I2, I1] ; unnest -> 3 lignes :
+    #     (I3, I3, ror UMR), (I3, I2, ror Sorbonne), (I3, I1, ror CNRS)
+    # Le filtre établissement de l'étape 6 lit cette table à l'envers : « tous
+    # les articles des institutions dont l'ancêtre a le ROR X » = les articles de X
+    # et de toutes ses structures rattachées.
+    # LEFT JOIN : on récupère le ROR de l'ancêtre (NULL s'il n'en a pas).
     con.execute("""
         CREATE OR REPLACE TABLE inst_lineage AS
         WITH pairs AS (

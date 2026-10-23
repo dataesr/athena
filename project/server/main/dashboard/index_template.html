@@ -10,9 +10,9 @@
 <style>
   /* Couleurs (palette illustrative DSFR ; influence/prestige validées daltonisme) */
   :root {
-    --serie-x: #417DC4;      /* Influence : cumulus */
-    --serie-y: #CE614A;      /* Prestige  : tuile   */
-    --serie-s: #666666;      /* Poids (référence)   */
+    --serie-influence: #417DC4;   /* cumulus */
+    --serie-prestige: #CE614A;    /* tuile   */
+    --serie-poids: #666666;       /* référence */
     --focus-entite: #000091; /* entité sélectionnée : bleu France */
     --hausse: #18753C; --baisse: #CE0500;
     /* Régions (palette illustrative DSFR, validée daltonisme ; libellés toujours présents) */
@@ -156,11 +156,11 @@
       <div id="biblio" hidden>
         <div class="fr-grid-row fr-grid-row--gutters fr-mb-2w filtres">
           <div class="fr-col-12 fr-col-md-5">
-            <div class="fr-select-group"><label class="fr-label" for="f-monde">Monde de référence
-              <span class="fr-hint-text">Ensemble d'articles qui sert de dénominateur</span></label>
-              <select class="fr-select" id="f-monde">
-                <option value="1">Revues indexées SJR (≈ Scopus)</option>
-                <option value="0">Toutes les revues OpenAlex</option>
+            <div class="fr-select-group"><label class="fr-label" for="f-perimetre">Périmètre de référence
+              <span class="fr-hint-text">Ensemble d'articles qui sert de dénominateur (« le monde »)</span></label>
+              <select class="fr-select" id="f-perimetre">
+                <option value="revues_sjr">Revues indexées SJR (≈ Scopus)</option>
+                <option value="toutes_revues_openalex">Toutes les revues OpenAlex</option>
               </select></div>
           </div>
           <div class="fr-col-12 fr-col-md-7">
@@ -192,30 +192,30 @@
         <section class="vue" id="vue-synthese">
           <div class="fr-grid-row fr-grid-row--gutters fr-mb-4w">
             <div class="fr-col-12 fr-col-md-4">
-              <div class="kpi" style="--kpi-color: var(--serie-x)">
+              <div class="kpi" style="--kpi-color: var(--serie-influence)">
                 <p class="kpi__label">Influence — être cité</p>
-                <p class="kpi__value" id="kpi-x">–</p>
+                <p class="kpi__value" id="kpi-influence">–</p>
                 <p class="kpi__sub">du top 10 % mondial des articles les plus cités de leur discipline</p>
-                <span class="kpi__effectif" id="kpi-nx"></span>
-                <p class="calc" id="calc-x"></p>
+                <span class="kpi__effectif" id="kpi-nb-influence"></span>
+                <p class="calc" id="calc-influence"></p>
               </div>
             </div>
             <div class="fr-col-12 fr-col-md-4">
-              <div class="kpi" style="--kpi-color: var(--serie-y)">
+              <div class="kpi" style="--kpi-color: var(--serie-prestige)">
                 <p class="kpi__label">Prestige — publier dans les revues de tête</p>
-                <p class="kpi__value" id="kpi-y">–</p>
+                <p class="kpi__value" id="kpi-prestige">–</p>
                 <p class="kpi__sub">des articles parus dans les revues de tête de leur discipline</p>
-                <span class="kpi__effectif" id="kpi-ny"></span>
-                <p class="calc" id="calc-y"></p>
+                <span class="kpi__effectif" id="kpi-nb-prestige"></span>
+                <p class="calc" id="calc-prestige"></p>
               </div>
             </div>
             <div class="fr-col-12 fr-col-md-4">
-              <div class="kpi" style="--kpi-color: var(--serie-s)">
+              <div class="kpi" style="--kpi-color: var(--serie-poids)">
                 <p class="kpi__label">Poids — production</p>
-                <p class="kpi__value" id="kpi-s">–</p>
+                <p class="kpi__value" id="kpi-poids">–</p>
                 <p class="kpi__sub">de l'ensemble des articles du monde</p>
-                <span class="kpi__effectif" id="kpi-n"></span>
-                <p class="calc" id="calc-s"></p>
+                <span class="kpi__effectif" id="kpi-nb-poids"></span>
+                <p class="calc" id="calc-poids"></p>
               </div>
             </div>
           </div>
@@ -303,10 +303,10 @@
           <fieldset class="fr-segmented fr-mb-2w">
             <legend class="fr-segmented__legend fr-sr-only">Indicateur</legend>
             <div class="fr-segmented__elements">
-              <div class="fr-segmented__element"><input value="x" checked type="radio" id="p-ind-x" name="p-ind">
-                <label class="fr-label" for="p-ind-x">Influence · top 10 %</label></div>
-              <div class="fr-segmented__element"><input value="y" type="radio" id="p-ind-y" name="p-ind">
-                <label class="fr-label" for="p-ind-y">Prestige · revues de tête</label></div>
+              <div class="fr-segmented__element"><input value="influence" checked type="radio" id="p-ind-influence" name="p-ind">
+                <label class="fr-label" for="p-ind-influence">Influence · top 10 %</label></div>
+              <div class="fr-segmented__element"><input value="prestige" type="radio" id="p-ind-prestige" name="p-ind">
+                <label class="fr-label" for="p-ind-prestige">Prestige · revues de tête</label></div>
             </div>
           </fieldset>
           <div class="fr-grid-row fr-grid-row--gutters filtres fr-mb-2w">
@@ -388,12 +388,12 @@
           <fieldset class="fr-segmented fr-segmented--sm fr-mb-2w">
             <legend class="fr-segmented__legend fr-sr-only">Indicateur comparé</legend>
             <div class="fr-segmented__elements">
-              <div class="fr-segmented__element"><input value="x" checked type="radio" id="c-ind-x" name="c-ind">
-                <label class="fr-label" for="c-ind-x">Influence · top 10 %</label></div>
-              <div class="fr-segmented__element"><input value="y" type="radio" id="c-ind-y" name="c-ind">
-                <label class="fr-label" for="c-ind-y">Prestige · revues de tête</label></div>
-              <div class="fr-segmented__element"><input value="s" type="radio" id="c-ind-s" name="c-ind">
-                <label class="fr-label" for="c-ind-s">Poids · production</label></div>
+              <div class="fr-segmented__element"><input value="influence" checked type="radio" id="c-ind-influence" name="c-ind">
+                <label class="fr-label" for="c-ind-influence">Influence · top 10 %</label></div>
+              <div class="fr-segmented__element"><input value="prestige" type="radio" id="c-ind-prestige" name="c-ind">
+                <label class="fr-label" for="c-ind-prestige">Prestige · revues de tête</label></div>
+              <div class="fr-segmented__element"><input value="poids" type="radio" id="c-ind-poids" name="c-ind">
+                <label class="fr-label" for="c-ind-poids">Poids · production</label></div>
             </div>
           </fieldset>
           <div class="formule" id="c-formule"></div>
@@ -471,12 +471,15 @@
   try { D = await decode("data-bibliometrie"); }
   catch (e) { document.getElementById("chargement").textContent =
       "Impossible de lire les données (navigateur trop ancien ?) : " + e.message; return; }
-  const M = D.monde, E = D.ent, meta = D.meta, ENT = D.entites;   // ENT[i] = [id, nom, type, articles, pays]
+  // EF : effectifs des entités, EM : effectifs du monde (dénominateurs), en colonnes ;
+  // perimetre, entite et discipline sont des index dans meta.perimetres, ENT et D.disciplines.
+  // ENT[i] = { entite_id, nom, entite_type, nb_articles, pays_code, alias, selecteur, ordre_selecteur }
+  const EF = D.effectifs, EM = D.effectifs_monde, meta = D.meta, ENT = D.entites;
   const parEntite = new Map();
-  for (let i = 0; i < E.e.length; i++) {
-    const k = E.e[i]; if (!parEntite.has(k)) parEntite.set(k, []); parEntite.get(k).push(i);
+  for (let i = 0; i < EF.entite.length; i++) {
+    const k = EF.entite[i]; if (!parEntite.has(k)) parEntite.set(k, []); parEntite.get(k).push(i);
   }
-  const estPays = (i) => ENT[i][2] === "pays";
+  const estPays = (i) => ENT[i].entite_type === "pays";
   const UE = new Set(meta.pays_ue || []);
 
   // =====================================================================
@@ -490,42 +493,51 @@
   const ent = (v) => new Intl.NumberFormat("fr-FR").format(Math.round(v));
   const dec = (v) => v == null ? "–" : (Math.abs(v - Math.round(v)) < 1e-9 ? ent(v) : nf(1).format(v));
   const signe = (v, f) => v == null || !isFinite(v) ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "±") + f(Math.abs(v));
-  const nomEnt = (i) => ENT[i][1];
+  const nomEnt = (i) => ENT[i].nom;
 
   // =====================================================================
   // 3. Calculs : on SOMME les effectifs (articles, top, revues de tête) sur les
   //    années et disciplines retenues, PUIS on divise. Jamais de moyenne de %.
   // =====================================================================
-  function totaux(eIdx, w, y0, y1, dFilter) {
-    const t = { n: 0, top: 0, tj: 0, tjd: 0, N: 0, TOP: 0, TJ: 0, TJD: 0 };
-    for (const i of (parEntite.get(eIdx) || [])) {
-      if (E.w[i] !== w || E.y[i] < y0 || E.y[i] > y1 || (dFilter !== null && E.d[i] !== dFilter)) continue;
-      t.n += E.n[i]; t.top += E.top[i]; t.tj += E.tj[i]; t.tjd += E.tjd[i];
-    }
-    for (let i = 0; i < M.w.length; i++) {
-      if (M.w[i] !== w || M.y[i] < y0 || M.y[i] > y1 || (dFilter !== null && M.d[i] !== dFilter)) continue;
-      t.N += M.n[i]; t.TOP += M.top[i]; t.TJ += M.tj[i]; t.TJD += M.tjd[i];
-    }
+  const CHAMPS = ["nb_articles", "nb_articles_top10_cites", "nb_articles_revues_tete_disciplinaires",
+                  "nb_articles_revues_tete_multidisciplinaires"];
+  // Effectifs additionnés d'une entité et du monde, pour un périmètre (index), une
+  // plage d'années et une discipline (index, ou null = toutes)
+  function totaux(eIdx, perimetre, y0, y1, dFilter) {
+    const t = {};
+    for (const c of CHAMPS) { t[c] = 0; t[c + "_monde"] = 0; }
+    const garder = (T, i) => T.perimetre[i] === perimetre && T.annee_publication[i] >= y0 &&
+      T.annee_publication[i] <= y1 && (dFilter === null || T.discipline[i] === dFilter);
+    for (const i of (parEntite.get(eIdx) || [])) if (garder(EF, i)) for (const c of CHAMPS) t[c] += EF[c][i];
+    for (let i = 0; i < EM.perimetre.length; i++) if (garder(EM, i)) for (const c of CHAMPS) t[c + "_monde"] += EM[c][i];
     return t;
   }
+  // Ratios : effectif de l'entité ÷ effectif du monde. Revues de tête : disciplinaires,
+  // plus les multidisciplinaires si l'option est cochée (multi).
   function ratios(t, multi) {
-    const tj = multi ? t.tj : t.tjd, TJ = multi ? t.TJ : t.TJD;
-    const s = t.N ? t.n / t.N : null, x = t.TOP ? t.top / t.TOP : null, y = TJ ? tj / TJ : null;
-    return { n: t.n, N: t.N, top: t.top, TOP: t.TOP, tj, TJ, s, x, y,
-             // détail du prestige : revues de la discipline (D) / revues multidisciplinaires (M)
-             tjD: t.tjd, TJD: t.TJD, tjM: t.tj - t.tjd, TJM: t.TJ - t.TJD,
-             yD: t.TJD ? t.tjd / t.TJD : null, yA: t.TJ ? t.tj / t.TJ : null };
+    const div = (a, b) => b ? a / b : null;
+    const rt = t.nb_articles_revues_tete_disciplinaires + (multi ? t.nb_articles_revues_tete_multidisciplinaires : 0);
+    const rt_monde = t.nb_articles_revues_tete_disciplinaires_monde +
+                     (multi ? t.nb_articles_revues_tete_multidisciplinaires_monde : 0);
+    return { ...t,
+      nb_articles_revues_tete: rt, nb_articles_revues_tete_monde: rt_monde,
+      poids: div(t.nb_articles, t.nb_articles_monde),
+      influence: div(t.nb_articles_top10_cites, t.nb_articles_top10_cites_monde),
+      prestige: div(rt, rt_monde),
+      prestige_sans_multi: div(t.nb_articles_revues_tete_disciplinaires, t.nb_articles_revues_tete_disciplinaires_monde),
+      prestige_avec_multi: div(t.nb_articles_revues_tete_disciplinaires + t.nb_articles_revues_tete_multidisciplinaires,
+                               t.nb_articles_revues_tete_disciplinaires_monde + t.nb_articles_revues_tete_multidisciplinaires_monde) };
   }
   // Libellés des numérateurs / dénominateurs, pour afficher les calculs
   const LIB = {
-    x: { nom: "Influence", num: "articles dans le top 10 % (éq.)", den: "articles du top 10 % mondial (éq.)",
-         k: ["top", "TOP"] },
-    y: { nom: "Prestige", num: "articles en revues de tête", den: "articles mondiaux en revues de tête",
-         k: ["tj", "TJ"] },
-    s: { nom: "Poids", num: "articles", den: "articles mondiaux", k: ["n", "N"] },
+    influence: { nom: "Influence", num: "articles dans le top 10 % (éq.)", den: "articles du top 10 % mondial (éq.)",
+                 champs: ["nb_articles_top10_cites", "nb_articles_top10_cites_monde"] },
+    prestige:  { nom: "Prestige", num: "articles en revues de tête", den: "articles mondiaux en revues de tête",
+                 champs: ["nb_articles_revues_tete", "nb_articles_revues_tete_monde"] },
+    poids:     { nom: "Poids", num: "articles", den: "articles mondiaux", champs: ["nb_articles", "nb_articles_monde"] },
   };
   function calcPart(m, r, qui) {
-    const [a, b] = LIB[m].k;
+    const [a, b] = LIB[m].champs;
     return `${LIB[m].nom} = ${LIB[m].num} ${qui ? "de " + qui + " " : ""}(${dec(r[a])}) ÷ ${LIB[m].den} (${dec(r[b])}) = ${pct(r[m])}`;
   }
   // Grands domaines : préfixe alphabétique du code (ERC : LS, PE, SH)
@@ -538,27 +550,26 @@
   // 4. Filtres et état
   // =====================================================================
   const el = (id) => document.getElementById(id);
-  const fEnt = el("f-entite"), fDeb = el("f-debut"), fFin = el("f-fin"), fMonde = el("f-monde"),
+  const fEnt = el("f-entite"), fDeb = el("f-debut"), fFin = el("f-fin"), fPerimetre = el("f-perimetre"),
         fDisc = el("f-discipline"), fMulti = el("f-multi");
-  const libelle = (i) => i === 0 ? "France" : `${ENT[i][1]} (${ENT[i][0]})`;
-  const iFR = ENT.findIndex(e => e[0] === "FR");
+  const libelle = (i) => ENT[i].entite_id === "FR" ? "France" : `${ENT[i].nom} (${ENT[i].entite_id})`;
+  const iFR = ENT.findIndex(e => e.entite_id === "FR");
   const etabFR = [], etabTous = [], paysIdx = [];
-  ENT.forEach((e, i) => { if (e[2] === "pays") paysIdx.push(i);
-    else { etabTous.push(i); if (e[4] === "FR") etabFR.push(i); } });
-  const parRor = new Map(ENT.map((x, i) => [x[0], i]));
-  // Établissements proposés dans le sélecteur principal : liste du fichier de
-  // configuration (meta.selecteur, dans son ordre) ou, à défaut, tous les français
-  const selecteur = meta.selecteur ? meta.selecteur.map(r => parRor.get(r)).filter(i => i !== undefined && ENT[i][4] === "FR") : etabFR;
+  ENT.forEach((e, i) => { if (e.entite_type === "pays") paysIdx.push(i);
+    else { etabTous.push(i); if (e.pays_code === "FR") etabFR.push(i); } });
+  const parRor = new Map(ENT.map((e, i) => [e.entite_id, i]));
+  // Établissements du sélecteur principal (fichier de configuration, voir entites.py), dans leur ordre
+  const selecteur = ENT.map((e, i) => i).filter(i => ENT[i].selecteur && i !== iFR)
+    .sort((a, b) => ENT[a].ordre_selecteur - ENT[b].ordre_selecteur);
 
   // Recherche : insensible à la casse et aux accents ; porte sur le nom, le ROR et
   // les alias (sigles OpenAlex, sigle calculé, alias du fichier de configuration).
   // Tous les mots tapés doivent être trouvés, dans n'importe quel ordre.
   const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’'`]/g, " ");
-  const ALIAS = meta.alias || {};
-  const aliasDe = (i) => i === iFR ? ["FR", "France entière"] : (ALIAS[ENT[i][0]] || "").split("|").filter(Boolean);
+  const aliasDe = (i) => i === iFR ? ["FR", "France entière"] : (ENT[i].alias || []);
   const cles = new Map();
   const cleDe = (i) => { if (!cles.has(i)) { const al = aliasDe(i);
-    cles.set(i, { nom: norm(ENT[i][1]), al: al.map(norm), tout: norm([ENT[i][1], ENT[i][0], ...al].join(" ")) }); }
+    cles.set(i, { nom: norm(ENT[i].nom), al: al.map(norm), tout: norm([ENT[i].nom, ENT[i].entite_id, ...al].join(" ")) }); }
     return cles.get(i); };
   function chercher(liste, txt, max = 40) {
     const mots = norm(txt).split(/\s+/).filter(Boolean);
@@ -567,11 +578,11 @@
     for (const i of liste) {
       const k = cleDe(i); if (!mots.every(m => k.tout.includes(m))) continue;
       const q = mots.join(" ");
-      const score = k.al.includes(q) ? 0 : ENT[i][0].toLowerCase() === q ? 0 : k.nom === q ? 1 :
+      const score = k.al.includes(q) ? 0 : ENT[i].entite_id.toLowerCase() === q ? 0 : k.nom === q ? 1 :
                     k.al.some(a => a.startsWith(q)) ? 2 : k.nom.startsWith(q) ? 3 : 4;
       res.push({ i, score });
     }
-    return res.sort((a, b) => a.score - b.score || ENT[b.i][3] - ENT[a.i][3]).slice(0, max).map(r => r.i);
+    return res.sort((a, b) => a.score - b.score || ENT[b.i].nb_articles - ENT[a.i].nb_articles).slice(0, max).map(r => r.i);
   }
   // Liste de suggestions accessible (rôle combobox) : flèches, Entrée, Échap, souris
   function combobox(input, liste, choisir) {
@@ -584,10 +595,10 @@
       if (!res.length) { const li = document.createElement("li"); li.className = "combo__vide"; li.textContent = "Aucun établissement trouvé"; lb.appendChild(li); }
       res.forEach((i, j) => {
         const li = document.createElement("li"); li.id = `${lb.id}-${j}`; li.setAttribute("role", "option");
-        li.appendChild(document.createTextNode(i === iFR ? "France" : ENT[i][1]));
+        li.appendChild(document.createTextNode(i === iFR ? "France" : ENT[i].nom));
         const sm = document.createElement("small"), al = aliasDe(i).slice(0, 3).join(", ");
-        sm.textContent = i === iFR ? "pays" : [al, ENT[i][4] && ENT[i][4] !== "FR" ? ENT[i][4] : "", `ROR ${ENT[i][0]}`,
-          `${ent(ENT[i][3])} articles`].filter(Boolean).join(" · ");
+        sm.textContent = i === iFR ? "pays" : [al, ENT[i].pays_code && ENT[i].pays_code !== "FR" ? ENT[i].pays_code : "", `ROR ${ENT[i].entite_id}`,
+          `${ent(ENT[i].nb_articles)} articles`].filter(Boolean).join(" · ");
         li.appendChild(sm);
         li.addEventListener("mousedown", (ev) => { ev.preventDefault(); valider(i); });
         lb.appendChild(li); });
@@ -607,7 +618,7 @@
   { const o = document.createElement("option"); o.value = ""; o.textContent = "Toutes disciplines"; fDisc.appendChild(o); }
   D.disciplines.forEach(([code, nom], i) => {
     const o = document.createElement("option"); o.value = i; o.textContent = `${code} — ${nom}`; fDisc.appendChild(o); });
-  const NTJ = meta.n_revues_tete || 10, MULTI = meta.multidisciplinaires || [];
+  const NTJ = meta.nb_revues_tete || 10, MULTI = meta.revues_multidisciplinaires || [];
   el("l-multi").textContent = MULTI.length
     ? `Revues de tête d'une discipline = ses ${NTJ} revues les mieux classées (SJR) + ${MULTI.length} revues multidisciplinaires : ${MULTI.join(", ")}. Ne change que le prestige.`
     : "Aucune revue multidisciplinaire retenue (option désactivée à l'étape 5).";
@@ -623,7 +634,9 @@
   fEnt.value = eIdx === iFR ? "France" : libelle(eIdx);
   fDeb.value = q.get("de") || meta.annees[0];
   fFin.value = q.get("a") || meta.annees[meta.annees.length - 1];
-  fMonde.value = q.get("monde") || "1";
+  fPerimetre.value = meta.perimetres.includes(q.get("perimetre")) ? q.get("perimetre")
+                   : (meta.perimetres.includes("revues_sjr") ? "revues_sjr" : meta.perimetres[0]);
+  [...fPerimetre.options].forEach(o => { if (!meta.perimetres.includes(o.value)) o.remove(); });
   fDisc.value = q.get("disc") ?? "";
   fMulti.checked = q.get("multi") !== "0";
   const vueInit = q.get("vue") || "synthese";
@@ -631,16 +644,16 @@
   el("c-mode").value = q.get("mode") || "pays";
   el("c-perim").value = q.get("perim") || "tous";
   el("c-critere").value = q.get("crit") || "mixte";
-  const indInit = q.get("ind") || "x";
+  const indInit = ["influence", "prestige", "poids"].includes(q.get("ind")) ? q.get("ind") : "influence";
   document.querySelector(`input[name=c-ind][value=${indInit}]`).checked = true;
   el("p-points").value = ["disc", "pays", "etab"].includes(q.get("pts")) ? q.get("pts") : "disc";
   el("p-dyn").value = q.get("dyn") === "pts" ? "pts" : "rel";
   el("p-echelle").value = q.get("ech") === "lin" ? "lin" : "log";
-  document.querySelector(`input[name=p-ind][value=${q.get("pind") === "y" ? "y" : "x"}]`).checked = true;
+  document.querySelector(`input[name=p-ind][value=${q.get("pind") === "prestige" ? "prestige" : "influence"}]`).checked = true;
 
   const etat = () => {
     const y0 = Math.min(+fDeb.value, +fFin.value), y1 = Math.max(+fDeb.value, +fFin.value);
-    return { w: +fMonde.value, y0, y1, d: fDisc.value === "" ? null : +fDisc.value, multi: fMulti.checked,
+    return { perimetre: meta.perimetres.indexOf(fPerimetre.value), y0, y1, d: fDisc.value === "" ? null : +fDisc.value, multi: fMulti.checked,
              vue: document.querySelector("input[name=vue]:checked").value,
              ind: document.querySelector("input[name=c-ind]:checked").value,
              mode: el("c-mode").value, perim: el("c-perim").value, crit: el("c-critere").value,
@@ -648,10 +661,10 @@
              pind: document.querySelector("input[name=p-ind]:checked").value };
   };
   function majURL(S) {
-    const p = new URLSearchParams({ ror: ENT[eIdx][0], de: S.y0, a: S.y1, monde: S.w, disc: fDisc.value,
+    const p = new URLSearchParams({ ror: ENT[eIdx].entite_id, de: S.y0, a: S.y1, perimetre: fPerimetre.value, disc: fDisc.value,
       multi: S.multi ? "1" : "0", vue: S.vue, ind: S.ind, mode: S.mode, perim: S.perim, crit: S.crit,
       pts: S.pts, pind: S.pind, dyn: S.dyn, ech: S.ech });
-    if (choix.length) p.set("cmp", choix.map(i => ENT[i][0]).join(","));
+    if (choix.length) p.set("cmp", choix.map(i => ENT[i].entite_id).join(","));
     history.replaceState(null, "", "?" + p.toString());
   }
 
@@ -669,12 +682,12 @@
   // Profils disciplinaires : articles de chaque établissement par discipline sur la période
   const cacheProfils = new Map();
   function profils(S) {
-    const cle = `${S.w}|${S.y0}|${S.y1}`;
+    const cle = `${S.perimetre}|${S.y0}|${S.y1}`;
     if (!cacheProfils.has(cle)) {
       const P = new Map(etabTous.map(i => [i, new Float64Array(D.disciplines.length)]));
-      for (let r = 0; r < E.e.length; r++) {
-        if (E.w[r] !== S.w || E.y[r] < S.y0 || E.y[r] > S.y1) continue;
-        const v = P.get(E.e[r]); if (v) v[E.d[r]] += E.n[r];
+      for (let r = 0; r < EF.entite.length; r++) {
+        if (EF.perimetre[r] !== S.perimetre || EF.annee_publication[r] < S.y0 || EF.annee_publication[r] > S.y1) continue;
+        const v = P.get(EF.entite[r]); if (v) v[EF.discipline[r]] += EF.nb_articles[r];
       }
       cacheProfils.set(cle, P);
     }
@@ -691,7 +704,7 @@
   function proches(S, k = 19) {
     const P = profils(S), p0 = P.get(eIdx), n0 = Math.log(Math.max(1, somme(p0)));
     const cands = etabTous.filter(i => i !== eIdx && somme(P.get(i)) > 0 &&
-      (S.perim === "tous" || (S.perim === "fr") === (ENT[i][4] === "FR")))
+      (S.perim === "tous" || (S.perim === "fr") === (ENT[i].pays_code === "FR")))
       .map(i => ({ i, dt: Math.abs(Math.log(Math.max(1, somme(P.get(i)))) - n0), dp: 1 - cosinus(p0, P.get(i)) }));
     const rangPar = (cle) => { const m = new Map(); [...cands].sort((a, b) => a[cle] - b[cle]).forEach((c, r) => m.set(c.i, r)); return m; };
     const rt = rangPar("dt"), rp = rangPar("dp");
@@ -702,7 +715,7 @@
   const REG = meta.regions || {};
   const REGIONS = [["france", "France"], ["europe", "Europe (hors France)"], ["ameriques", "Amériques"],
                    ["asie", "Asie et Océanie"], ["autres", "Afrique, Moyen-Orient et autres"]];
-  const regionDe = (i) => { const p = ENT[i][4] || ENT[i][0]; return p === "FR" ? "france" : (REG[p] || "autres"); };
+  const regionDe = (i) => { const p = ENT[i].pays_code || ENT[i].entite_id; return p === "FR" ? "france" : (REG[p] || "autres"); };
   const couleurRegion = (r) => css.getPropertyValue("--reg-" + r).trim();
 
   // =====================================================================
@@ -712,10 +725,10 @@
   Chart.defaults.color = "#3a3a3a";
   Chart.defaults.locale = "fr-FR";
   const css = getComputedStyle(document.documentElement);
-  const C = { x: css.getPropertyValue("--serie-x").trim(), y: css.getPropertyValue("--serie-y").trim(),
-              s: css.getPropertyValue("--serie-s").trim(), focus: css.getPropertyValue("--focus-entite").trim() };
+  const C = { influence: css.getPropertyValue("--serie-influence").trim(), prestige: css.getPropertyValue("--serie-prestige").trim(),
+              poids: css.getPropertyValue("--serie-poids").trim(), focus: css.getPropertyValue("--focus-entite").trim() };
   const grille = "#e5e5e5";
-  const provisoires = new Set(meta.annees_provisoires || []);
+  const provisoires = new Set(meta.annees_influence_provisoire || []);
 
   const finDeLigne = { id: "finDeLigne", afterDatasetsDraw(chart) {
     const { ctx } = chart;
@@ -727,10 +740,10 @@
   const evol = new Chart(el("c-evol"), {
     type: "line",
     data: { labels: [], datasets: [
-      { label: "Influence", data: [], borderColor: C.x, backgroundColor: C.x, borderWidth: 2, pointRadius: 4,
+      { label: "Influence", data: [], borderColor: C.influence, backgroundColor: C.influence, borderWidth: 2, pointRadius: 4,
         segment: { borderDash: (c) => provisoires.has(+evol.data.labels[c.p1DataIndex]) ? [6, 4] : undefined } },
-      { label: "Prestige", data: [], borderColor: C.y, backgroundColor: C.y, borderWidth: 2, pointRadius: 4 },
-      { label: "Poids", data: [], borderColor: C.s, backgroundColor: C.s, borderWidth: 2, pointRadius: 4 } ]},
+      { label: "Prestige", data: [], borderColor: C.prestige, backgroundColor: C.prestige, borderWidth: 2, pointRadius: 4 },
+      { label: "Poids", data: [], borderColor: C.poids, backgroundColor: C.poids, borderWidth: 2, pointRadius: 4 } ]},
     options: { maintainAspectRatio: false, layout: { padding: { right: 80 } },
       interaction: { mode: "index", intersect: false },
       scales: { y: { beginAtZero: true, grid: { color: grille },
@@ -740,7 +753,7 @@
         tooltip: { callbacks: {
           title: (it) => it[0].label + (provisoires.has(+it[0].label) ? " (influence provisoire)" : ""),
           label: (c) => ` ${pct(c.raw)}  ${c.dataset.label}`,
-          afterLabel: (c) => { const r = evolDetail[c.dataIndex]; const m = ["x", "y", "s"][c.datasetIndex];
+          afterLabel: (c) => { const r = evolDetail[c.dataIndex]; const m = ["influence", "prestige", "poids"][c.datasetIndex];
                                return r ? "   " + calcPart(m, r) : ""; } } } } },
     plugins: [finDeLigne] });
   let evolDetail = [];
@@ -770,8 +783,8 @@
   const profil = new Chart(el("c-profil"), {
     type: "bar",
     data: { labels: D.disciplines.map(d => d[0]), datasets: [
-      { label: "Influence (part du top 10 % mondial)", data: [], backgroundColor: C.x, borderColor: C.x, borderWidth: 1.5 },
-      { label: "Prestige (part des revues de tête)", data: [], backgroundColor: C.y, borderColor: C.y, borderWidth: 1.5 } ]},
+      { label: "Influence (part du top 10 % mondial)", data: [], backgroundColor: C.influence, borderColor: C.influence, borderWidth: 1.5 },
+      { label: "Prestige (part des revues de tête)", data: [], backgroundColor: C.prestige, borderColor: C.prestige, borderWidth: 1.5 } ]},
     options: { maintainAspectRatio: false, indexAxis: "y", layout: { padding: { left: 12, right: 56 } },
       datasets: { bar: { barPercentage: .85, categoryPercentage: .8 } },
       scales: { x: { beginAtZero: true, grid: { color: grille }, title: { display: true, text: "Part (%)" },
@@ -782,8 +795,8 @@
           title: (it) => { const d = D.disciplines[it[0].dataIndex]; return `${d[0]} — ${d[1]}`; },
           label: (c) => ` ${pct(c.raw / 100)}  ${c.dataset.label}`,
           afterBody: (it) => { const r = profilDetail[it[0].dataIndex]; if (!r) return [];
-            const m = it[0].datasetIndex === 0 ? "x" : "y";
-            return [calcPart(m, r), `Articles de l'entité : ${ent(r.n)}` + (r.n < 30 ? " (effectif faible)" : "")]; } } } } },
+            const m = it[0].datasetIndex === 0 ? "influence" : "prestige";
+            return [calcPart(m, r), `Articles de l'entité : ${ent(r.nb_articles)}` + (r.nb_articles < 30 ? " (effectif faible)" : "")]; } } } } },
     plugins: [bandeDomaine, valeursBarres] });
 
   // Matrice niveau × dynamique (une seule, indicateur au choix).
@@ -885,7 +898,7 @@
       const h = hMin + p.v * echelle; geo.get(p.i)[j] = { y0: y, y1: y + h, rang: r + 1, v: p.v }; y += h + gap; }); });
     // années
     annees.forEach((a, j) => svg("text", { x: X(j), y: 18, "text-anchor": "middle" }, root).textContent =
-      a + (m === "x" && provisoires.has(a) ? "*" : ""));
+      a + (m === "influence" && provisoires.has(a) ? "*" : ""));
     // rubans
     const chemins = [], gris = (i) => couleurRegion(regionDe(i));
     for (const i of liste) {
@@ -926,7 +939,7 @@
       tip.replaceChildren();
       const ligne = (txt, gras) => { const d = document.createElement("div"); if (gras) { const b = document.createElement("b"); b.textContent = txt; d.appendChild(b); } else d.textContent = txt; tip.appendChild(d); };
       ligne(`${pct(r.v)} · ${g.rang}ᵉ sur ${liste.length}`, true);
-      ligne(`${nomEnt(i)} — ${annees[j]}${m === "x" && provisoires.has(annees[j]) ? " (provisoire)" : ""}`);
+      ligne(`${nomEnt(i)} — ${annees[j]}${m === "influence" && provisoires.has(annees[j]) ? " (provisoire)" : ""}`);
       ligne(calcPart(m, r.r, nomEnt(i)));
       tip.hidden = false;
       const wb = el("bump-wrap").getBoundingClientRect();
@@ -945,75 +958,86 @@
   // 7. Rendu des vues
   // =====================================================================
   const ligneLib = (S) => `${S.y0}–${S.y1} · ${S.d === null ? "toutes disciplines" : D.disciplines[S.d].join(" — ")} · ` +
-    (S.w ? "monde : revues indexées SJR" : "monde : toutes les revues OpenAlex");
+    (fPerimetre.value === "revues_sjr" ? "monde : revues indexées SJR" : "monde : toutes les revues OpenAlex");
   let lignesCSV = [];
 
   function rendreSynthese(S) {
-    const r = ratios(totaux(eIdx, S.w, S.y0, S.y1, S.d), S.multi);
-    el("kpi-x").textContent = pct(r.x); el("kpi-y").textContent = pct(r.y); el("kpi-s").textContent = pct(r.s);
-    el("kpi-nx").textContent = `${dec(r.top)} éq.-articles dans le top 10 %`;
-    el("kpi-ny").textContent = `${ent(r.tj)} articles en revues de tête`;
-    el("kpi-n").textContent = `${ent(r.n)} articles`;
-    el("calc-x").textContent = `${calcPart("x", r)}.`;
-    el("calc-y").textContent = `${calcPart("y", r)}` + (MULTI.length ? (S.multi ? " (revues multidisciplinaires incluses)." : " (sans les revues multidisciplinaires).") : ".");
+    const r = ratios(totaux(eIdx, S.perimetre, S.y0, S.y1, S.d), S.multi);
+    el("kpi-influence").textContent = pct(r.influence); el("kpi-prestige").textContent = pct(r.prestige);
+    el("kpi-poids").textContent = pct(r.poids);
+    el("kpi-nb-influence").textContent = `${dec(r.nb_articles_top10_cites)} éq.-articles dans le top 10 %`;
+    el("kpi-nb-prestige").textContent = `${ent(r.nb_articles_revues_tete)} articles en revues de tête`;
+    el("kpi-nb-poids").textContent = `${ent(r.nb_articles)} articles`;
+    el("calc-influence").textContent = `${calcPart("influence", r)}.`;
+    el("calc-prestige").textContent = `${calcPart("prestige", r)}` + (MULTI.length ? (S.multi ? " (revues multidisciplinaires incluses)." : " (sans les revues multidisciplinaires).") : ".");
     // Décomposition du prestige
     el("t-multi-ent").textContent = eIdx === iFR ? "France" : nomEnt(eIdx);
     const tbm = el("t-multi").querySelector("tbody"); tbm.replaceChildren();
-    [[`les ${NTJ} revues de tête de leur discipline`, r.tjD, r.TJD, "oui, toujours"],
-     [`les revues multidisciplinaires (${MULTI.length})`, r.tjM, r.TJM, S.multi ? "oui (option activée)" : "non (option désactivée)"],
-     ["Total compté dans le prestige", r.tj, r.TJ, ""]].forEach(([lib, a, b, c], j) => {
+    [[`les ${NTJ} revues de tête de leur discipline`, r.nb_articles_revues_tete_disciplinaires,
+       r.nb_articles_revues_tete_disciplinaires_monde, "oui, toujours"],
+     [`les revues multidisciplinaires (${MULTI.length})`, r.nb_articles_revues_tete_multidisciplinaires,
+       r.nb_articles_revues_tete_multidisciplinaires_monde, S.multi ? "oui (option activée)" : "non (option désactivée)"],
+     ["Total compté dans le prestige", r.nb_articles_revues_tete, r.nb_articles_revues_tete_monde, ""]].forEach(([lib, a, b, c], j) => {
       const tr = document.createElement("tr"); if (j === 1 && !S.multi) tr.className = "faible"; if (j === 2) tr.style.fontWeight = "700";
       [lib, ent(a), ent(b), c].forEach((v, k) => { const td = document.createElement(k ? "td" : "th"); if (!k) td.scope = "row";
         td.textContent = v; if (k === 1 || k === 2) td.className = "num"; tr.appendChild(td); });
       tbm.appendChild(tr); });
-    el("multi-res").innerHTML = `Prestige <b>sans</b> les revues multidisciplinaires = ${ent(r.tjD)} ÷ ${ent(r.TJD)} = <b>${pct(r.yD)}</b> ; ` +
-      `<b>avec</b> = (${ent(r.tjD)} + ${ent(r.tjM)}) ÷ (${ent(r.TJD)} + ${ent(r.TJM)}) = <b>${pct(r.yA)}</b>. ` +
+    const rd = r.nb_articles_revues_tete_disciplinaires, rdm = r.nb_articles_revues_tete_disciplinaires_monde,
+          rm = r.nb_articles_revues_tete_multidisciplinaires, rmm = r.nb_articles_revues_tete_multidisciplinaires_monde;
+    el("multi-res").innerHTML = `Prestige <b>sans</b> les revues multidisciplinaires = ${ent(rd)} ÷ ${ent(rdm)} = <b>${pct(r.prestige_sans_multi)}</b> ; ` +
+      `<b>avec</b> = (${ent(rd)} + ${ent(rm)}) ÷ (${ent(rdm)} + ${ent(rmm)}) = <b>${pct(r.prestige_avec_multi)}</b>. ` +
       `Valeur affichée : <b>${S.multi ? "avec" : "sans"}</b>. Les revues multidisciplinaires pèsent ` +
-      `${pct(r.TJD + r.TJM ? r.TJM / (r.TJD + r.TJM) : null)} des articles mondiaux en revues de tête de la sélection.`;
-    el("calc-s").textContent = `${calcPart("s", r)}.`;
+      `${pct(rdm + rmm ? rmm / (rdm + rmm) : null)} des articles mondiaux en revues de tête de la sélection.`;
+    el("calc-poids").textContent = `${calcPart("poids", r)}.`;
     // Encadré Waltman & Schreiber : chiffres de la sélection
     const qui = eIdx === iFR ? "la France" : nomEnt(eIdx);
     el("ws-live").innerHTML = "";
     const b = document.createElement("span"); b.className = "ws-live";
-    b.textContent = `Pour la sélection : le top 10 % mondial compte ${dec(r.TOP)} équivalent-articles ` +
-      `(${pct(r.N ? r.TOP / r.N : null)} des ${ent(r.N)} articles mondiaux) ; ${qui} en détient ${dec(r.top)}, soit ${pct(r.x)}.`;
+    const top_m = r.nb_articles_top10_cites_monde, n_m = r.nb_articles_monde;
+    b.textContent = `Pour la sélection : le top 10 % mondial compte ${dec(top_m)} équivalent-articles ` +
+      `(${pct(n_m ? top_m / n_m : null)} des ${ent(n_m)} articles mondiaux) ; ${qui} en détient ` +
+      `${dec(r.nb_articles_top10_cites)}, soit ${pct(r.influence)}.`;
     el("ws-live").appendChild(b);
-    if (r.N && r.TOP / r.N < 0.0995) el("ws-live").appendChild(document.createTextNode(
+    if (n_m && top_m / n_m < 0.0995) el("ws-live").appendChild(document.createTextNode(
       " Un peu moins de 10 % : dans certaines disciplines, plus de 90 % des articles ne sont jamais cités, et un article non cité n'entre pas dans le top."));
 
     const ans = meta.annees.filter(a => a >= S.y0 && a <= S.y1);
-    evolDetail = ans.map(a => ratios(totaux(eIdx, S.w, a, a, S.d), S.multi));
+    evolDetail = ans.map(a => ratios(totaux(eIdx, S.perimetre, a, a, S.d), S.multi));
     evol.data.labels = ans.map(String);
-    ["x", "y", "s"].forEach((k, j) => evol.data.datasets[j].data = evolDetail.map(v => v[k]));
+    ["influence", "prestige", "poids"].forEach((k, j) => evol.data.datasets[j].data = evolDetail.map(v => v[k]));
     evol.update();
 
     // Profil disciplinaire (parts par discipline) + légende des domaines
-    const parDisc = D.disciplines.map((d, i) => ({ i, ...ratios(totaux(eIdx, S.w, S.y0, S.y1, i), S.multi) }));
+    const parDisc = D.disciplines.map((d, i) => ({ i, ...ratios(totaux(eIdx, S.perimetre, S.y0, S.y1, i), S.multi) }));
     profilDetail = parDisc;
     profil.data.datasets.forEach((ds, j) => {
-      const k = j === 0 ? "x" : "y", c = j === 0 ? C.x : C.y;
-      ds.data = parDisc.map(v => v.n > 0 && v[k] != null ? v[k] * 100 : null);
-      ds.backgroundColor = parDisc.map(v => v.n < 30 ? "rgba(255,255,255,0)" : c);
+      const k = j === 0 ? "influence" : "prestige", c = j === 0 ? C.influence : C.prestige;
+      ds.data = parDisc.map(v => v.nb_articles > 0 && v[k] != null ? v[k] * 100 : null);
+      ds.backgroundColor = parDisc.map(v => v.nb_articles < 30 ? "rgba(255,255,255,0)" : c);
       ds.borderDash = undefined; });
     profil.update();
     legendeDomaines(el("leg-domaines"));
 
     const tb = el("t-detail").querySelector("tbody"); tb.replaceChildren();
-    lignesCSV = [["code", "discipline", "domaine", "articles", "articles_monde", "top_entite_eq_articles", "top_monde_eq_articles",
-                  "influence", "revues_tete_entite", "revues_tete_monde", "prestige", "poids"]];
+    lignesCSV = [["discipline_code", "discipline_nom", "domaine_code", "nb_articles", "nb_articles_monde",
+                  "nb_articles_top10_cites", "nb_articles_top10_cites_monde", "influence",
+                  "nb_articles_revues_tete", "nb_articles_revues_tete_monde", "prestige", "poids"]];
     for (const v of [...parDisc, { i: -1, ...r }]) {
-      const tr = document.createElement("tr"); if (v.n < 30) tr.className = "faible";
+      const tr = document.createElement("tr"); if (v.nb_articles < 30) tr.className = "faible";
       const c0 = document.createElement(v.i < 0 ? "th" : "td");
       if (v.i >= 0) { const p = document.createElement("span"); p.className = "pastille";
         p.style.background = couleurDomaine(domaineDe(v.i)); c0.appendChild(p); }
       c0.appendChild(document.createTextNode(v.i < 0 ? "Total" : `${D.disciplines[v.i][0]} — ${D.disciplines[v.i][1]}`));
       tr.appendChild(c0);
-      [ent(v.n), `${dec(v.top)} / ${dec(v.TOP)}`, pct(v.x), `${ent(v.tj)} / ${ent(v.TJ)}`, pct(v.y), pct(v.s)].forEach(c => {
+      [ent(v.nb_articles), `${dec(v.nb_articles_top10_cites)} / ${dec(v.nb_articles_top10_cites_monde)}`, pct(v.influence),
+       `${ent(v.nb_articles_revues_tete)} / ${ent(v.nb_articles_revues_tete_monde)}`, pct(v.prestige), pct(v.poids)].forEach(c => {
         const td = document.createElement("td"); td.textContent = c; td.className = "num"; tr.appendChild(td); });
       if (v.i < 0) tr.style.fontWeight = "700";
       tb.appendChild(tr);
-      lignesCSV.push([v.i < 0 ? "ALL" : D.disciplines[v.i][0], v.i < 0 ? "Total" : D.disciplines[v.i][1],
-        v.i < 0 ? "" : domaineDe(v.i), v.n, v.N, v.top, v.TOP, v.x, v.tj, v.TJ, v.y, v.s]);
+      lignesCSV.push([v.i < 0 ? "TOUTES" : D.disciplines[v.i][0], v.i < 0 ? "Toutes disciplines" : D.disciplines[v.i][1],
+        v.i < 0 ? "" : domaineDe(v.i), v.nb_articles, v.nb_articles_monde, v.nb_articles_top10_cites,
+        v.nb_articles_top10_cites_monde, v.influence, v.nb_articles_revues_tete, v.nb_articles_revues_tete_monde,
+        v.prestige, v.poids]);
     }
   }
   function legendeDomaines(box) {
@@ -1038,9 +1062,9 @@
 
   function rendrePosition(S) {
     const m = S.pind, rel = S.dyn === "rel", log = S.ech === "log";
-    const P = periodes(S, m === "x"), PY = periodes(S, false);
-    const prov = m === "x" && [...provisoires].some(a => a >= P.p2[0] && a <= P.p2[1]);
-    const titreInd = m === "x" ? "Influence — part du top 10 % mondial des articles les plus cités"
+    const P = periodes(S, m === "influence"), PY = periodes(S, false);
+    const prov = m === "influence" && [...provisoires].some(a => a >= P.p2[0] && a <= P.p2[1]);
+    const titreInd = m === "influence" ? "Influence — part du top 10 % mondial des articles les plus cités"
                                : "Prestige — part des articles parus dans les revues de tête";
     // Points : disciplines de l'entité, pays, ou établissements comparables
     let ens = null, pts, alerte = "";
@@ -1052,23 +1076,23 @@
       pts = ens.liste.map(i => ({ eI: i, dI: S.d, nom: nomEnt(i), lab: tronque(nomEnt(i), S.pts === "pays" ? 16 : 24),
         coul: i === ens.focus ? C.focus : couleurRegion(regionDe(i)), focus: i === ens.focus }));
     }
-    const ref = ratios(totaux(eIdx, S.w, P.p2[0], P.p2[1], S.d), S.multi);
+    const ref = ratios(totaux(eIdx, S.perimetre, P.p2[0], P.p2[1], S.d), S.multi);
 
     // Calcul des points
     const data = [], exclus = [];
     for (const pt of pts) {
-      const r1 = ratios(totaux(pt.eI, S.w, P.p1[0], P.p1[1], pt.dI), S.multi);
-      const r2 = ratios(totaux(pt.eI, S.w, P.p2[0], P.p2[1], pt.dI), S.multi);
+      const r1 = ratios(totaux(pt.eI, S.perimetre, P.p1[0], P.p1[1], pt.dI), S.multi);
+      const r2 = ratios(totaux(pt.eI, S.perimetre, P.p2[0], P.p2[1], pt.dI), S.multi);
       const v1 = r1[m], v2 = r2[m];
       const dyn = v1 == null || v2 == null ? null : rel ? (v1 > 0 ? (v2 / v1 - 1) * 100 : null) : (v2 - v1) * 100;
-      if (!r2.n || v2 == null || dyn == null || (log && v2 <= 0)) { if (r2.n || r1.n) exclus.push(pt.lab); continue; }
+      if (!r2.nb_articles || v2 == null || dyn == null || (log && v2 <= 0)) { if (r2.nb_articles || r1.nb_articles) exclus.push(pt.lab); continue; }
       const calc = [
         `Part ${per(P.p2)} : ${calcPart(m, r2)}`,
         `Part ${per(P.p1)} : ${calcPart(m, r1)}`,
         rel ? `Évolution relative = ${pct(v2)} ÷ ${pct(v1)} − 1 = ${fmtDyn(dyn, true)}`
             : `Écart = ${pct(v2)} − ${pct(v1)} = ${fmtDyn(dyn, false)}`,
-        `Articles ${per(P.p2)} : ${ent(r2.n)}` + (r2.n < 30 ? " — moins de 30 : position peu fiable" : "") ];
-      data.push({ x: v2 * 100, y: dyn, yv: dyn, nom: pt.nom, lab: pt.lab, calc, n: r2.n, coul: pt.coul,
+        `Articles ${per(P.p2)} : ${ent(r2.nb_articles)}` + (r2.nb_articles < 30 ? " — moins de 30 : position peu fiable" : "") ];
+      data.push({ x: v2 * 100, y: dyn, yv: dyn, nom: pt.nom, lab: pt.lab, calc, n: r2.nb_articles, coul: pt.coul,
                   focus: pt.focus ? 1 : 0, v1, v2 });
     }
     const xref = S.pts === "disc" ? (ref[m] || 0) * 100 : mediane(data.map(p => p.x));
@@ -1117,9 +1141,9 @@
     el("p-formule").replaceChildren();
     const ajout = (html) => { const p = document.createElement("p"); p.innerHTML = html; el("p-formule").appendChild(p); };
     ajout(`<b>Périodes</b> : <b>${per(P.p1)}</b> (départ) → <b>${per(P.p2)}</b> (arrivée)` +
-      (m === "x" && P.p2[1] < PY.p2[1] ? " — influence : années consolidées seulement, la fenêtre de citation des années suivantes n'est pas close" : "") +
+      (m === "influence" && P.p2[1] < PY.p2[1] ? " — influence : années consolidées seulement, la fenêtre de citation des années suivantes n'est pas close" : "") +
       ". Chaque période cumule ses années : effectifs additionnés, puis ratio.");
-    ajout(`<b>Axe horizontal — niveau</b> = ` + (m === "x"
+    ajout(`<b>Axe horizontal — niveau</b> = ` + (m === "influence"
       ? "articles dans le top 10 % mondial (éq.-articles) ÷ ensemble du top 10 % mondial, sur la période d'arrivée."
       : "articles parus dans les revues de tête ÷ ensemble des articles mondiaux de ces revues, sur la période d'arrivée.") +
       (log ? " Échelle logarithmique : un même écart horizontal correspond à un même rapport (de 1 % à 2 % comme de 10 % à 20 %), ce qui évite que les plus gros écrasent les autres." : ""));
@@ -1177,11 +1201,11 @@
     // Formule
     el("c-formule").replaceChildren();
     const ajout = (html) => { const p = document.createElement("p"); p.innerHTML = html; el("c-formule").appendChild(p); };
-    const def = { x: "<b>Part du top 10 % mondial</b> = articles de l'entité figurant parmi les 10 % les plus cités au monde " +
+    const def = { influence: "<b>Part du top 10 % mondial</b> = articles de l'entité figurant parmi les 10 % les plus cités au monde " +
                      "(même année, même discipline) ÷ ensemble des articles mondiaux de ce top 10 %.",
-                  y: "<b>Part des revues de tête</b> = articles de l'entité parus dans les revues de tête de leur discipline ÷ " +
+                  prestige: "<b>Part des revues de tête</b> = articles de l'entité parus dans les revues de tête de leur discipline ÷ " +
                      "ensemble des articles mondiaux parus dans ces revues.",
-                  s: "<b>Poids</b> = articles de l'entité ÷ ensemble des articles mondiaux." }[m];
+                  poids: "<b>Poids</b> = articles de l'entité ÷ ensemble des articles mondiaux." }[m];
     ajout(def);
     ajout("Comptage entier : un article co-signé compte entièrement pour chaque pays (ou établissement) présent ; " +
           "les parts se recouvrent et leur somme dépasse 100 %. Rubans classés chaque année par valeur décroissante ; " +
@@ -1211,7 +1235,7 @@
     const annees = meta.annees.filter(a => a >= S.y0 && a <= S.y1);
     const cache = new Map();
     const val = (i, a) => { const k = i + ":" + a; if (!cache.has(k)) {
-      const r = ratios(totaux(i, S.w, a, a, S.d), S.multi); cache.set(k, { v: r[m], r }); } return cache.get(k); };
+      const r = ratios(totaux(i, S.perimetre, a, a, S.d), S.multi); cache.set(k, { v: r[m], r }); } return cache.get(k); };
     const geo = dessinerRangs(ens.liste, annees, val, ens.focus, m);
     // Résumé des rangs (première et dernière année)
     const a0 = annees[0], a1 = annees[annees.length - 1];
@@ -1221,9 +1245,9 @@
       : r1 < r0 ? ` <span class="fleche-hausse" aria-label="en hausse">▲</span>` : " (stable)";
     const r0 = rang(ens.liste, a0), r1 = rang(ens.liste, a1);
     let txt = `<b>${nomEnt(ens.focus)} : ${r0}<sup>e</sup> en ${a0} → ${r1}<sup>e</sup> en ${a1}` +
-      `${m === "x" && provisoires.has(a1) ? " (provisoire)" : ""} sur ${ens.liste.length} ${ens.nature === "pays" ? "pays" : "établissements"}</b>${fleche(r0, r1)}`;
+      `${m === "influence" && provisoires.has(a1) ? " (provisoire)" : ""} sur ${ens.liste.length} ${ens.nature === "pays" ? "pays" : "établissements"}</b>${fleche(r0, r1)}`;
     if (ens.nature === "pays") {
-      const ue = ens.liste.filter(i => UE.has(ENT[i][0]));
+      const ue = ens.liste.filter(i => UE.has(ENT[i].entite_id));
       if (ue.includes(ens.focus)) { const u0 = rang(ue, a0), u1 = rang(ue, a1);
         txt += ` · parmi les pays de l'Union européenne : ${u0}<sup>e</sup> → ${u1}<sup>e</sup> sur ${ue.length}${fleche(u0, u1)}`; }
     }
@@ -1233,13 +1257,13 @@
   }
   // Rang de l'entité dans chaque discipline, période de départ -> période d'arrivée
   function rangsParDiscipline(S, ens, m) {
-    const P = periodes(S, m === "x");
+    const P = periodes(S, m === "influence");
     el("c-disc-formule").replaceChildren();
     const p = document.createElement("p");
     p.innerHTML = `Pour chaque discipline, ${LIB[m].nom.toLowerCase()} de chaque entité comparée, cumulée sur la période ` +
       `de départ <b>${per(P.p1)}</b> puis d'arrivée <b>${per(P.p2)}</b> (effectifs additionnés, puis ratio), et rang de ` +
       `<b>${nomEnt(ens.focus)}</b> parmi les ${ens.liste.length} entités comparées.` +
-      (m === "x" ? " Influence : années consolidées seulement." : "");
+      (m === "influence" ? " Influence : années consolidées seulement." : "");
     el("c-disc-formule").appendChild(p);
     const th = el("t-disc-rangs").querySelector("thead"), tb = el("t-disc-rangs").querySelector("tbody");
     th.replaceChildren(); tb.replaceChildren();
@@ -1248,15 +1272,15 @@
      `Articles ${per(P.p2)}`].forEach((t, j) => { const c = document.createElement("th"); c.scope = "col"; c.textContent = t;
       if (j) c.className = "num"; h.appendChild(c); });
     th.appendChild(h);
-    const rangDans = (d, p) => { const vals = ens.liste.map(i => ({ i, r: ratios(totaux(i, S.w, p[0], p[1], d), S.multi) }))
+    const rangDans = (d, p) => { const vals = ens.liste.map(i => ({ i, r: ratios(totaux(i, S.perimetre, p[0], p[1], d), S.multi) }))
       .sort((a, b) => (b.r[m] || 0) - (a.r[m] || 0));
       const k = vals.findIndex(v => v.i === ens.focus); return { rang: k + 1, r: vals[k].r }; };
     D.disciplines.forEach(([code, nom], d) => {
       const a = rangDans(d, P.p1), b = rangDans(d, P.p2);
-      const tr = document.createElement("tr"); if (b.r.n < 30) tr.className = "faible";
+      const tr = document.createElement("tr"); if (b.r.nb_articles < 30) tr.className = "faible";
       const c0 = document.createElement("th"); c0.scope = "row"; c0.textContent = `${code} — ${nom}`; tr.appendChild(c0);
       const delta = a.rang - b.rang;
-      [`${a.rang}ᵉ`, `${b.rang}ᵉ`, null, pct(b.r[m]), ent(b.r.n)].forEach((t, j) => {
+      [`${a.rang}ᵉ`, `${b.rang}ᵉ`, null, pct(b.r[m]), ent(b.r.nb_articles)].forEach((t, j) => {
         const c = document.createElement("td"); c.className = "num";
         if (j === 2) { const sp = document.createElement("span");
           sp.className = delta > 0 ? "fleche-hausse" : delta < 0 ? "fleche-baisse" : "";
@@ -1277,7 +1301,7 @@
     const rangs = annees.map(a => new Map(liste.map(i => [i, val(i, a).v || 0]).sort((p, q) => q[1] - p[1]).map(([i], r) => [i, r + 1])));
     for (const i of [...liste].sort((p, q) => rangs[rangs.length - 1].get(p) - rangs[rangs.length - 1].get(q))) {
       const r = document.createElement("tr"); const c0 = document.createElement("th"); c0.scope = "row"; c0.textContent = nomEnt(i); r.appendChild(c0);
-      if (etab) [ENT[i][4] || "", ent(somme(P.get(i))), pct(cosinus(p0, P.get(i)))].forEach(t => {
+      if (etab) [ENT[i].pays_code || "", ent(somme(P.get(i))), pct(cosinus(p0, P.get(i)))].forEach(t => {
         const c = document.createElement("td"); c.className = "num"; c.textContent = t; r.appendChild(c); });
       annees.forEach((a, j) => { const c = document.createElement("td"); c.className = "num";
         c.textContent = `${pct(val(i, a).v)} (${rangs[j].get(i)}ᵉ)`; r.appendChild(c); });
@@ -1302,7 +1326,7 @@
     const esc = (c) => (c == null ? "" : typeof c === "number" ? String(c).replace(".", ",") : `"${String(c).replace(/"/g, '""')}"`);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["﻿" + lignesCSV.map(l => l.map(esc).join(";")).join("\n")], { type: "text/csv;charset=utf-8" }));
-    a.download = `bibliometrie_${ENT[eIdx][0]}_${fDeb.value}-${fFin.value}.csv`; a.click(); });
+    a.download = `bibliometrie_${ENT[eIdx].entite_id}_${fDeb.value}-${fFin.value}.csv`; a.click(); });
   combobox(fEnt, () => [iFR, ...selecteur], (i) => { eIdx = i; choix = []; fEnt.value = i === iFR ? "France" : libelle(i); fEnt.blur(); rendre(); });
   fEnt.addEventListener("blur", () => setTimeout(() => { fEnt.value = eIdx === iFR ? "France" : libelle(eIdx); }, 120));
   document.querySelector('a[href="#multi-detail"]').addEventListener("click", () => {
@@ -1311,7 +1335,7 @@
   combobox(cAjout, () => etabTous.filter(i => !choix.includes(i) && i !== eIdx), (i) => { choix.push(i); cAjout.value = ""; rendre(); });
   el("c-mode").addEventListener("change", () => { if (el("c-mode").value === "choix" && !choix.length && eIdx !== iFR)
     choix = proches(etat()); rendre(); });
-  [fDeb, fFin, fMonde, fDisc, fMulti, el("c-perim"), el("c-critere"), el("p-points"), el("p-dyn"), el("p-echelle")].forEach(x => x.addEventListener("change", rendre));
+  [fDeb, fFin, fPerimetre, fDisc, fMulti, el("c-perim"), el("c-critere"), el("p-points"), el("p-dyn"), el("p-echelle")].forEach(x => x.addEventListener("change", rendre));
   document.querySelectorAll("input[name=vue], input[name=c-ind], input[name=p-ind]").forEach(x => x.addEventListener("change", rendre));
   let t; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => { if (etat().vue === "compar") rendre(); }, 150); });
 
