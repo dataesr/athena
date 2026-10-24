@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: dataesr/sandbox
+  IMAGE_NAME: dataesr/athena
 
 jobs:
   build-and-push-ghcr:
