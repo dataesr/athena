@@ -152,7 +152,7 @@ COPUB_MAX_ENTITES_PAR_ARTICLE = None   # ex. 50 : ignore les articles à très n
 # Base : MongoDB de l'application tableaux (https://github.com/dataesr/tableaux).
 MONGO_URI = os.getenv("MONGO_URI")                       # ne jamais écrire l'URI en dur ici
 MONGO_DB = os.getenv("MONGO_DB_NAME", "tableaux-staging")
-TABLEAUX_BOARD_ID = "bibliometrie"   # identifiant du tableau dans la collection « boards »
+TABLEAUX_BOARD_ID = "suivi-recherche"   # identifiant du tableau dans la collection « boards »
 
 # --- Référentiel des établissements (étape 0, referentiel.py) ----------------------
 # Sert au périmètre du sélecteur et aux noms / sigles / catégories affichés ; ne change
