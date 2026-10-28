@@ -3,13 +3,13 @@ from pymongo import MongoClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pymongo.errors import BulkWriteError
 
-from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, MONGO_DB, MONGO_URI,
-                     REFERENTIEL_DIR, REFERENTIEL_SOURCE, SJR_PATH, TABLEAUX_BOARD_ID)
+from .config import (MONGO_DB, MONGO_URI)
 
 debug = False
 
-PROJECTS_URL = "https://scanr-data.s3.gra.io.cloud.ovh.net/production/projects_denormalized.jsonl.gz"
+MONGO_COLLECTION_NAME = "biblio_projects"
 PAYSAGE_URL = "https://scanr-data.s3.gra.io.cloud.ovh.net/production/paysage_dump.jsonl.gz"
+PROJECTS_URL = "https://scanr-data.s3.gra.io.cloud.ovh.net/production/projects_denormalized.jsonl.gz"
 
 
 def get_ror(df_paysage, row, field: str = None):
@@ -88,5 +88,5 @@ def generate_projects():
   df_projects = df_projects.apply(lambda x: get_ror(df_paysage, x, "participants_id_search"), axis=1)
   client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
   db = client[MONGO_DB]
-  collection = db["biblio_projects_test"]
+  collection = db[MONGO_COLLECTION_NAME]
   insert_dataframe_parallel(df_projects, collection, chunk_size=5000, max_workers=8)
