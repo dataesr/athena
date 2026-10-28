@@ -1,14 +1,16 @@
-from project.server.main.openalex_s3 import diagnose_daily
-from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
-from project.server.main.logger import get_logger
-from project.server.main.referentiel import build_referentiel
+from project.server.main.copublications import compute_copublications
 from project.server.main.disciplines import build_disciplines
+from project.server.main.export_dashboard import build_dashboard
+from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
+from project.server.main.indicators import compute_indicators
+from project.server.main.logger import get_logger
+from project.server.main.openalex_s3 import diagnose_daily
+from project.server.main.projects import generate_projects
+from project.server.main.publish import publish, publish_mongo
+from project.server.main.referentiel import build_referentiel
 from project.server.main.top_journals import compute_top_journals, top_journals_from_review
 from project.server.main.top10_citations import compute_top10
-from project.server.main.indicators import compute_indicators
-from project.server.main.copublications import compute_copublications
-from project.server.main.publish import publish, publish_mongo
-from project.server.main.export_dashboard import build_dashboard
+
 logger = get_logger(__name__)
 
 
@@ -147,3 +149,6 @@ def create_task_compute(args: dict) -> None:
 # ---------------------------------------------------------------------------
 #from project.server.main.lineage_check import suspicious_ancestors
 #suspicious_ancestors()
+
+def create_task_projects(args: dict) -> None:
+    generate_projects()

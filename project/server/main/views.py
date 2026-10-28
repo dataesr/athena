@@ -4,7 +4,7 @@ import redis
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 from rq import Connection, Queue
-from project.server.main.tasks import create_task_compute
+from project.server.main.tasks import create_task_compute, create_task_projects
 from project.server.main.logger import get_logger
 
 default_timeout = 4320000
@@ -31,6 +31,17 @@ def run_task_compute():
         task = q.enqueue(create_task_compute, args)
     response_object = {"status": "success", "data": {"task_id": task.get_id()}}
     return jsonify(response_object), 202
+
+
+@main_blueprint.route("/projects", methods=["POST"])
+def run_task_projects():
+    args = request.get_json(force=True)
+    with Connection(redis.from_url(current_app.config["REDIS_URL"])):
+        q = Queue(name="athena", default_timeout=default_timeout)
+        task = q.enqueue(create_task_projects, args)
+    response_object = {"status": "success", "data": {"task_id": task.get_id()}}
+    return jsonify(response_object), 202
+
 
 @main_blueprint.route("/tasks/<task_id>", methods=["GET"])
 def get_status(task_id):
