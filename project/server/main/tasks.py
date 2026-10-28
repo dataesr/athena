@@ -150,5 +150,5 @@ def create_task_compute(args: dict) -> None:
 #from project.server.main.lineage_check import suspicious_ancestors
 #suspicious_ancestors()
 
-def create_task_projects(args: dict) -> None:
+def create_task_projects() -> None:
     generate_projects()

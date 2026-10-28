@@ -35,10 +35,9 @@ def run_task_compute():
 
 @main_blueprint.route("/projects", methods=["POST"])
 def run_task_projects():
-    args = request.get_json(force=True)
     with Connection(redis.from_url(current_app.config["REDIS_URL"])):
         q = Queue(name="athena", default_timeout=default_timeout)
-        task = q.enqueue(create_task_projects, args)
+        task = q.enqueue(create_task_projects)
     response_object = {"status": "success", "data": {"task_id": task.get_id()}}
     return jsonify(response_object), 202
 
