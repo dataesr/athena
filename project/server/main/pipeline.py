@@ -13,14 +13,16 @@ Les étapes (chacune dépend des précédentes)
   "disciplines"           build_disciplines             topic -> discipline
   "top_journals"          compute_top_journals          revues de tête + appariement SJR
   "top10"                 compute_top10 (par périmètre) top 10 % des plus cités
+  "erc"                   compute_erc                   candidatures et lauréats ERC (open data ESR)
   "indicators"            compute_indicators            effectifs par entité/année/discipline
   "copublications"        compute_copublications        partenaires de chaque entité
-  "erc"                   compute_erc                   candidatures et lauréats ERC (open data ESR)
   "publish"               publish                       fichiers pour tableaux (publication/)
   (publish_mongo() n'est jamais lancé automatiquement : chargement en base à la main)
 
   "top_journals" passe AVANT "top10" : le périmètre "revues_sjr" a besoin de
   revues_tete/sources_sjr.parquet.
+  "erc" passe AVANT "indicators" : l'étape 6 calcule aussi les articles des pays de
+  la comparaison ERC (intensité de candidature).
 
 Que relancer quand on change quelque chose ?
 --------------------------------------------
@@ -35,7 +37,9 @@ Que relancer quand on change quelque chose ?
   pays, établissements, seuils étab.  -> run(start="indicators")
   fichier de corrections, alias       -> run(steps=["publish"])
   mise à jour de Paysage / scanR      -> run(steps=["referentiel", "erc", "publish"])
-  mise à jour des données ERC         -> run(steps=["erc", "publish"])
+  mise à jour des données ERC         -> run(steps=["erc", "publish"]) ; si erc_meta.pays_compares
+                                         change : run(steps=["erc", "indicators", "copublications",
+                                         "publish"]) (publish() le signale)
 
 Chaque étape est aussi disponible seule : step_disciplines(), step_top10(perimetre="revues_sjr"), ...
 Les fonctions d'origine des modules restent utilisables directement.
@@ -69,8 +73,8 @@ from .referentiel import build_referentiel
 from .top10_citations import compute_top10
 from .top_journals import compute_top_journals, top_journals_from_review
 
-STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "indicators",
-         "copublications", "erc", "publish"]
+STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc",
+         "indicators", "copublications", "publish"]
 
 
 # --- Étapes individuelles ------------------------------------------------------

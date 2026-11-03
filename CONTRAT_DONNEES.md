@@ -27,7 +27,10 @@ MongoDB et dans le code du front.
 
 Dans Mongo, chaque collection est chargée sous le nom `<collection>_<horodatage>`
 (convention de tableaux) et la version est ajoutée au document du tableau dans
-`boards` (`id: "bibliometrie"`, entrée `data[].id = <collection>`).
+`boards` (`id: "suivi-recherche"`, `TABLEAUX_BOARD_ID` dans `config.py` ; entrée
+`data[].id = <collection>`). `publish_mongo()` ajoute la version à `data[].versions` sans
+changer la version active : elle s'active dans l'administration du tableau
+(`/admin/suivi-recherche`).
 Fichiers : `<DATA_DIR>/publication/erc/<collection>.jsonl.gz` et `.parquet`,
 plus `manifest.json`.
 
@@ -50,7 +53,8 @@ financements, innovation) : toujours `entite_id`.
 | `type_openalex` | texte | `education`, `facility`, `government`… |
 | `nb_articles` | entier | taille : articles du premier périmètre, toute la période (0 pour une entité présente seulement dans les données ERC) |
 | `nb_candidatures_erc` | entier ou null | candidatures ERC, toutes années (null : aucune) |
-| `pays_compare` | booléen | pays retenu pour la comparaison internationale |
+| `pays_compare` | booléen | pays retenu pour la comparaison internationale **bibliométrique** (`biblio_meta.pays_compares`) |
+| `pays_compare_erc` | booléen | pays retenu pour la comparaison internationale **ERC** (`erc_meta.pays_compares`) |
 | `tutelles` | liste | ROR des tutelles (lignée OpenAlex) |
 | `nb_structures_rattachees` | entier | structures dont les articles comptent pour l'entité |
 | `alias` | liste | termes de recherche : sigles OpenAlex, sigle calculé, alias du fichier de configuration |
@@ -62,6 +66,14 @@ financements, innovation) : toujours `entite_id`.
 
 Une ligne par `perimetre` × `entite_id` × `annee_publication` × `discipline_code`.
 L'entité `MONDE` donne les dénominateurs.
+
+Pays présents (`biblio_meta.pays_effectifs`) : l'**union** des pays de la comparaison
+bibliométrique (`biblio_meta.pays_compares`) et de la comparaison ERC
+(`erc_meta.pays_compares`), pour les deux périmètres, toutes années et toutes disciplines.
+Les pays ERC servent à l'intensité de candidature (§3) ; ils ne deviennent pas des pays de la
+comparaison bibliométrique (`entites.pays_compare` inchangé). Pour cela, `erc.compute_erc()`
+est lancé avant `indicators.compute_indicators()` ; `publish()` signale tout pays de
+`erc_meta.pays_compares` absent des effectifs.
 
 | Champ | Type | Contenu |
 |---|---|---|
@@ -112,7 +124,8 @@ minimales pour entrer dans le top), `nb_articles_au_seuil` (ex aequo au seuil),
 
 `classement`, `snapshot_openalex` (`source`, `date`), `date_calcul`, `perimetres`,
 `annees`, `annees_influence_provisoire`, `nb_revues_tete`, `revues_multidisciplinaires`
-(titres), `pays_compares`, `parametres` (paramètres de chaque étape), `methode`
+(titres), `pays_compares` (comparaison bibliométrique), `pays_effectifs` (pays présents dans
+`biblio_effectifs` : `pays_compares` + pays de la comparaison ERC), `parametres` (paramètres de chaque étape), `methode`
 (textes de la note méthodologique, à afficher tels quels), `sources` (mention des sources).
 
 ### `erc_effectifs` — bourses ERC
@@ -121,12 +134,19 @@ Une ligne par `entite_type` × `entite_id` × `annee_appel` × `discipline_code`
 Source : open data ESR, jeu `fr-esr-erc-persons` (`erc.compute_erc()`). L'entité `MONDE`
 (toutes les candidatures ERC) donne les dénominateurs des parts.
 
+Couverture : appels **Horizon Europe (2021 et après)**, ceux du jeu source. Pour Horizon 2020
+(appels 2014–2020), l'open data ESR ne publie les candidatures évaluées que par pays
+(`fr-esr-erc-projects-synthese`) ; l'établissement d'accueil n'y figure que pour les lauréats
+(`fr-esr-erc-projects-entities`). Sans structure au dépôt, ces années ne sont pas intégrées.
+Les années dont les résultats ne sont pas tous publiés sont listées dans
+`erc_meta.annees_provisoires`.
+
 | Champ | Type | Contenu |
 |---|---|---|
 | `entite_type`, `entite_id` | | `monde`, `pays` (ISO2, outre-mer sous `FR`), `etablissement` (ROR court) |
 | `annee_appel` | entier | année de l'appel ERC |
-| `discipline_code` | texte ou null | panel ERC, mêmes codes que `biblio_disciplines` ; null pour les Proof of Concept |
-| `type_bourse` | texte | `STG`, `COG`, `ADG`, `SYG`, `POC` |
+| `discipline_code` | texte ou null | panel ERC (`panel_code` de la source), mêmes codes que `biblio_disciplines` ; null quand la source n'a pas de panel (voir ci-dessous) |
+| `type_bourse` | texte | code ERC du type de bourse (`destination_code`), voir ci-dessous |
 | `nb_candidatures` | entier | projets déposés (évalués ou financés) |
 | `nb_candidatures_retenues` | entier | dont projets financés |
 
@@ -138,15 +158,53 @@ d'accueil, pas la nationalité du porteur. Comptage entier : une Synergy à plus
 compte pour chacun. Les structures sans ROR (ni directement, ni via Paysage) ne comptent que
 pour leur pays et pour `MONDE` ; elles sont listées dans `erc/erc_non_rattaches.csv`.
 
+Types de bourse (libellés et effectifs dans `erc_meta.types_bourse`) :
+
+| `type_bourse` | Libellé | Panel |
+|---|---|---|
+| `STG` | Starting Grant | oui (quelques candidatures sans panel) |
+| `COG` | Consolidator Grant | oui (quelques candidatures sans panel) |
+| `ADG` | Advanced Grant | oui (quelques candidatures sans panel) |
+| `SYG` | Synergy Grant | non |
+| `POC` | Proof of Concept | non |
+| `PERA` | Public Engagement with Research Award (prix, aucun lauréat dans la source) | non |
+| `SJI` | Science Journalism Initiative | non |
+| `ERC-OTHER` | Autres actions ERC | non |
+
+Tous les types sont gardés dans les données. Le calcul par défaut porte sur
+`erc_meta.types_bourse_defaut` (`STG`, `COG`, `ADG`) : les autres n'ont pas de panel et, pour
+PERA, SJI et ERC-OTHER, ne sont pas des bourses de recherche.
+
+`discipline_code` est null quand le projet n'a pas de panel dans la source : toujours pour
+les types sans panel (`avec_panel: false` dans `erc_meta.types_bourse`), et pour quelques
+STG / COG / ADG (`nb_candidatures_sans_panel`). Ces lignes comptent dans « toutes
+disciplines » mais dans aucun panel : la somme des panels peut donc être un peu inférieure
+au total.
+
 Index : `(entite_id, annee_appel, discipline_code, type_bourse)`, `(entite_type, annee_appel)`.
 
 ### `erc_meta` — un seul document
 
-`source` (`dataset`, `date_extraction`), `date_calcul`, `annees`, `types_bourse`, `panels`,
-`pays_compares` (pays de la comparaison internationale ERC : France puis les pays qui déposent
-le plus ; distincts des pays de la bibliométrie, où figurent les États-Unis ou la Chine),
-`parametres`, `controles` (taux de rattachement à un ROR, valeurs de `stage` et de `role`),
-`methode`, `sources`.
+| Champ | Contenu |
+|---|---|
+| `source` | `dataset`, `date_extraction` |
+| `date_calcul` | date du calcul |
+| `annees` | années d'appel présentes |
+| `annees_provisoires` | années d'appel dont les résultats ne sont pas tous publiés : candidatures et taux de succès vont encore évoluer (à signaler, ou exclure des comparaisons dans le temps) |
+| `annees_provisoires_motifs` | `{ "2025": "aucune candidature ADG ; …" }` : pourquoi chaque année est provisoire |
+| `types_bourse` | liste d'objets `{ code, libelle, avec_panel, principal, nb_candidatures, nb_candidatures_retenues, nb_candidatures_sans_panel }` ; `avec_panel` : au moins la moitié des candidatures du type ont un panel |
+| `types_bourse_defaut` | types du calcul par défaut : `["STG", "COG", "ADG"]` |
+| `panels` | panels présents |
+| `pays_compares` | pays de la comparaison internationale ERC : France puis les 25 pays qui déposent le plus (tous types) ; distincts des pays de la bibliométrie, où figurent les États-Unis ou la Chine |
+| `parametres` | paramètres du calcul |
+| `controles` | taux de rattachement à un ROR, valeurs de `stage` et de `role`, panels inconnus de la bibliométrie |
+| `methode`, `sources` | textes à afficher tels quels (couverture, années provisoires, règles) |
+
+Règle des années provisoires (`ERC_ANNEES_PROVISOIRES` dans `config.py`) : liste imposée si
+elle est renseignée ; sinon, détection automatique sur les candidatures `MONDE` des types
+principaux. Une année est provisoire si l'un de ces types, présent les autres années, n'y a
+aucune candidature ou aucun lauréat, ou si ses candidatures sont inférieures à 75 %
+(`ERC_SEUIL_ANNEE_COMPLETE`) de la médiane des autres années.
 
 ## 3. Indicateurs
 
@@ -159,6 +217,16 @@ le plus ; distincts des pays de la bibliométrie, où figurent les États-Unis o
 | ERC : taux de succès | `taux_succes` | `nb_candidatures_retenues` (entité) | `nb_candidatures` (même entité) |
 | ERC : part des candidatures | `part_candidatures` | `nb_candidatures` (entité) | `nb_candidatures` (`MONDE`) |
 | ERC : part des lauréats | `part_laureats` | `nb_candidatures_retenues` (entité) | `nb_candidatures_retenues` (`MONDE`) |
+| ERC : intensité de candidature | `intensite_candidature` | `part_candidatures` (entité) | `part_articles` (entité) |
+
+Intensité de candidature = `part_candidatures` ÷ `part_articles`, sur le même panel
+(`discipline_code`) et la même période, pour une même entité (pays ou établissement). Les deux
+parts se calculent chacune selon la règle du §4 (`erc_effectifs` pour les candidatures,
+`biblio_effectifs` pour les articles), puis on divise. Au-dessous de 1, l'entité candidate
+moins que son poids dans les publications ne le laisserait attendre (signe possible
+d'auto-censure). Pour « toutes disciplines », restreindre les candidatures aux types avec
+panel (`types_bourse_defaut`), pour comparer les mêmes champs. Les années d'appel et de
+publication sont rapprochées telles quelles : choisir des périodes de même longueur.
 
 ## 4. Règle de calcul (à respecter côté serveur)
 
@@ -195,7 +263,10 @@ Onglet ERC, mêmes filtres que la bibliométrie (établissement, `discipline_cod
   `pays_code = "FR"` ; classer par `nb_candidatures_retenues` ou `taux_succes`. Prévoir un
   seuil minimal de candidatures avant de classer sur un taux (petits effectifs).
 - **France et autres pays** : `$match` sur `entite_id` dans `erc_meta.pays_compares` + `MONDE`,
-  `$group` par `entite_id` ; le taux de `MONDE` sert de référence.
+  `$group` par `entite_id` ; le taux de `MONDE` sert de référence. Les articles de ces pays
+  sont dans `biblio_effectifs` (intensité de candidature).
+- Par défaut, filtrer `type_bourse` sur `erc_meta.types_bourse_defaut`, et signaler les années
+  de `erc_meta.annees_provisoires`.
 
 ```js
 // Taux de succès de Sorbonne Université, panels PE, appels 2021-2025

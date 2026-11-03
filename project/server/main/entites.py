@@ -29,7 +29,8 @@ Une ligne par entité (construire_entites) :
   type_openalex            education, facility, government... (établissements)
   nb_articles              taille (premier périmètre, toute la période)
   nb_candidatures_erc      candidatures ERC, toutes années (null : aucune ou pas de données ERC)
-  pays_compare             pays retenu pour la comparaison internationale
+  pays_compare             pays retenu pour la comparaison internationale (bibliométrie)
+  pays_compare_erc         pays retenu pour la comparaison internationale ERC (erc_meta)
   tutelles                 ROR des tutelles (lignée OpenAlex corrigée)
   nb_structures_rattachees structures dont les articles comptent pour l'entité
   alias                    termes de recherche : alias du fichier, sigle et noms du
@@ -176,9 +177,14 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     # --- Bourses ERC : taille, et établissements sans entité bibliométrique ------------
     f_erc = Path(erc_dir) / "erc_entites.parquet" if erc_dir else None
     ent["nb_candidatures_erc"] = pd.NA
+    pays_erc = set()
     seulement_erc = pd.Series(False, index=ent.index)
     if f_erc is not None and f_erc.exists():
         erc = duckdb.sql(f"SELECT * FROM read_parquet('{f_erc}')").df()
+        f_meta = Path(erc_dir) / "erc_meta.json"
+        if f_meta.exists():
+            import json
+            pays_erc = set(json.loads(f_meta.read_text(encoding="utf-8")).get("pays_compares") or [])
         taille = dict(zip(erc["entite_id"], erc["nb_candidatures"]))
         ent["nb_candidatures_erc"] = ent["entite_id"].map(taille)
         ajout = erc[~erc["entite_id"].isin(set(ent["entite_id"]))]
@@ -195,6 +201,7 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
                 print(f"ERC : {len(ajout):,} entités sans données bibliométriques ajoutées "
                       f"(dont {int((ajout['pays_code'] == 'FR').sum())} établissements français)")
     ent["nb_candidatures_erc"] = ent["nb_candidatures_erc"].astype("Int64")
+    ent["pays_compare_erc"] = (ent["entite_type"] == "pays") & ent["entite_id"].isin(pays_erc)
     etab = ent["entite_type"] == "etablissement"
     fr = etab & (ent["pays_code"] == "FR")
 

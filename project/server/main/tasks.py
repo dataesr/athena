@@ -104,7 +104,21 @@ def create_task_compute(args: dict) -> None:
     compute_top10(perimetre="revues_sjr")
 
 # ---------------------------------------------------------------------------
-# 6. Effectifs : monde, 25 pays, établissements français et 300 étrangers (15 à 45 min)
+# 5 bis. Bourses ERC (une à deux minutes) : AVANT l'étape 6, qui calcule aussi
+#    les articles des pays de la comparaison ERC (intensité de candidature)
+#    Télécharge : le jeu fr-esr-erc-persons de l'open data ESR (ODS_API_KEY en
+#                 variable d'environnement si le jeu n'est pas public)
+#    Lit : /data/referentiel/paysage_ror.parquet (construit au besoin),
+#          inst_lineage.parquet et institutions.parquet (rattachement aux tutelles)
+#    Écrit dans erc/ : erc_persons.parquet (copie brute), erc_effectifs.parquet,
+#          erc_entites.parquet, erc_meta.json, erc_non_rattaches.csv
+#    Affiche : part des candidatures rattachées à un ROR, la France par année.
+# ---------------------------------------------------------------------------
+    compute_erc()
+
+# ---------------------------------------------------------------------------
+# 6. Effectifs : monde, 25 pays (+ pays de la comparaison ERC), établissements
+#    français et 300 étrangers (15 à 45 min)
 #    Lit : top10/, works/ (pays, revue), work_inst/, institutions.parquet,
 #          inst_lineage.parquet, revues_tete/
 #    Écrit dans indicateurs/ :
@@ -122,18 +136,6 @@ def create_task_compute(args: dict) -> None:
 #    Écrit : indicateurs/erc_copublications.parquet (entité x partenaire x année x discipline)
 # ---------------------------------------------------------------------------
     compute_copublications()
-
-# ---------------------------------------------------------------------------
-# 6 ter. Bourses ERC (une à deux minutes)
-#    Télécharge : le jeu fr-esr-erc-persons de l'open data ESR (ODS_API_KEY en
-#                 variable d'environnement si le jeu n'est pas public)
-#    Lit : /data/referentiel/paysage_ror.parquet (construit au besoin),
-#          inst_lineage.parquet et institutions.parquet (rattachement aux tutelles)
-#    Écrit dans erc/ : erc_persons.parquet (copie brute), erc_effectifs.parquet,
-#          erc_entites.parquet, erc_meta.json, erc_non_rattaches.csv
-#    Affiche : part des candidatures rattachées à un ROR, la France par année.
-# ---------------------------------------------------------------------------
-    compute_erc()
 
 # ---------------------------------------------------------------------------
 # 7. Publication pour l'application tableaux (une à deux minutes)

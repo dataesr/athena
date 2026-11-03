@@ -205,6 +205,20 @@ ERC_RATTACHEMENT_LIGNEE = True     # une candidature compte aussi pour les tutel
                                    # l'établissement d'accueil (lignée OpenAlex, comme les articles)
 ERC_PAYS_COMPARAISON = None        # codes ISO à comparer ; None = automatique :
 ERC_PAYS_COMPARAISON_N = 25        # les N pays qui déposent le plus de candidatures
+                                   # (tous types de bourse). L'étape 6 calcule aussi les
+                                   # effectifs bibliométriques de ces pays : lancer compute_erc()
+                                   # AVANT compute_indicators() (voir pipeline.py).
+# Types de bourse de référence (calcul par défaut du tableau, pays comparés, années provisoires).
+# Les autres types restent dans les données (SYG, POC, PERA, SJI, ERC-OTHER).
+ERC_TYPES_PRINCIPAUX = ("STG", "COG", "ADG")
+# Années d'appel provisoires (résultats pas encore tous publiés) :
+#   liste imposée, ex. [2025] ; None = détection automatique : une année est provisoire si
+#   - l'un des ERC_TYPES_PRINCIPAUX, présent les autres années, n'y a aucune candidature
+#     ou aucun lauréat, ou si
+#   - ses candidatures (types principaux, MONDE) sont inférieures à ERC_SEUIL_ANNEE_COMPLETE
+#     fois la médiane des autres années.
+ERC_ANNEES_PROVISOIRES = None
+ERC_SEUIL_ANNEE_COMPLETE = 0.75
 
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)

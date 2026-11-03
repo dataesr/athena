@@ -140,6 +140,8 @@ def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) ->
         "nb_revues_tete": p_rt.get("nb_revues_tete"),
         "revues_multidisciplinaires": p_rt.get("revues_multidisciplinaires_retenues") or [],
         "pays_compares": p_ind.get("pays_compares") or [],
+        # pays dont biblio_effectifs contient les lignes : pays_compares + comparaison ERC
+        "pays_effectifs": p_ind.get("pays_effectifs") or p_ind.get("pays_compares") or [],
         "parametres": {"top10": p_top, "revues_tete": p_rt, "effectifs": p_ind, "copublications": p_cop},
         "methode": methode_textes(p_ind, p_top, p_rt),
         "sources": (f"Sources : OpenAlex (snapshot {snapshot['source']} du {snapshot['date']}), "
@@ -186,6 +188,12 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
     if erc is not None and (erc / "erc_effectifs.parquet").exists():
         tables["erc_effectifs"] = sql(f"SELECT * FROM read_parquet('{erc}/erc_effectifs.parquet')")
         tables["erc_meta"] = _json(erc / "erc_meta.json")
+        # L'intensité de candidature a besoin des articles de chaque pays comparé (ERC)
+        manquants = sorted(set(tables["erc_meta"].get("pays_compares") or [])
+                           - set(meta["pays_effectifs"]))
+        if manquants:
+            print(f"ATTENTION : pays de la comparaison ERC absents de biblio_effectifs : "
+                  f"{', '.join(manquants)} -> relancer compute_indicators() après compute_erc()")
     elif verbose:
         print(f"{erc_dir}/erc_effectifs.parquet absent : erc_effectifs non publiée (lancer compute_erc())")
     return tables

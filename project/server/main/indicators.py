@@ -14,9 +14,14 @@ Entités
   monde          entite_id = "MONDE" : tous les articles du périmètre ; c'est le
                  dénominateur de toutes les parts.
   pays           les PAYS_COMPARAISON_N pays qui publient le plus (ou la liste
-                 PAYS_COMPARAISON), France toujours comprise. Un article compte
-                 pour un pays s'il a au moins un auteur de ce pays (outre-mer
-                 regroupé sous FR, voir PAYS_FR).
+                 PAYS_COMPARAISON), France toujours comprise : c'est la comparaison
+                 bibliométrique (pays_compare dans les entités, params pays_compares).
+                 S'y ajoutent, pour les effectifs seulement, les pays de la
+                 comparaison ERC (erc_meta.json, voir erc.pays_compares_erc) :
+                 l'intensité de candidature ERC (part des candidatures / part des
+                 articles) a besoin de leurs articles. Lancer compute_erc() avant.
+                 Un article compte pour un pays s'il a au moins un auteur de ce pays
+                 (outre-mer regroupé sous FR, voir PAYS_FR).
   etablissement  chaque ROR d'une institution de ETAB_COUNTRIES, plus les
                  établissements étrangers de comparaison. Un article compte pour
                  un ROR si l'une de ses institutions EST ce ROR ou l'a pour
@@ -71,7 +76,7 @@ from pathlib import Path
 import pandas as pd
 
 from .common import MONDE_ID, PAYS_NOMS, connect, nom_fichier, pays_list_sql
-from .config import (ANNEE_MAX, ANNEE_MIN, CLASSEMENT, DATA_DIR, ETAB_COUNTRIES,
+from .config import (ANNEE_MAX, ANNEE_MIN, CLASSEMENT, DATA_DIR, ERC_DIR, ETAB_COUNTRIES,
                      ETAB_EXCLUDE, ETAB_INTERNATIONAL_N, ETAB_INTERNATIONAL_RORS,
                      ETAB_INTERNATIONAL_TYPES, ETAB_MIN_ARTICLES, LINEAGE_CUTS, PAYS_COMPARAISON,
                      PAYS_COMPARAISON_N, PAYS_FR, PERIMETRES)
@@ -242,20 +247,26 @@ def _preparer_articles_etablissements(con, data_dir: Path) -> None:
 
 
 def _retenir_entites(con, pays_comparaison, pays_comparaison_n: int, etab: bool,
-                     etab_min_articles: int) -> None:
-    """Tables pays_retenus et etablissements_retenus, fixées sur le premier
-    périmètre (le plus large). La France est toujours retenue."""
+                     etab_min_articles: int, pays_supplementaires=None) -> None:
+    """Tables pays_compares (comparaison bibliométrique), pays_retenus (pays dont on
+    calcule les effectifs : pays_compares + pays_supplementaires) et
+    etablissements_retenus, fixées sur le premier périmètre (le plus large).
+    La France est toujours retenue."""
     if pays_comparaison:
         liste = sorted({"FR", *[p.upper() for p in pays_comparaison]})
-        con.execute("CREATE TEMP TABLE pays_retenus AS SELECT unnest(?::VARCHAR[]) AS pays_code", [liste])
+        con.execute("CREATE TEMP TABLE pays_compares AS SELECT unnest(?::VARCHAR[]) AS pays_code", [liste])
     else:
         # Les N pays qui ont le plus d'articles sur toute la période (premier périmètre)
         con.execute(f"""
-            CREATE TEMP TABLE pays_retenus AS
+            CREATE TEMP TABLE pays_compares AS
             SELECT pays_code FROM articles_pays
             GROUP BY pays_code ORDER BY count(*) DESC LIMIT {int(pays_comparaison_n)}
         """)
-        con.execute("INSERT INTO pays_retenus SELECT 'FR' WHERE 'FR' NOT IN (SELECT pays_code FROM pays_retenus)")
+        con.execute("INSERT INTO pays_compares SELECT 'FR' WHERE 'FR' NOT IN (SELECT pays_code FROM pays_compares)")
+    supp = sorted({p.upper() for p in (pays_supplementaires or [])})
+    con.execute("""CREATE TEMP TABLE pays_retenus AS
+                   SELECT pays_code FROM pays_compares
+                   UNION SELECT unnest(?::VARCHAR[])""", [supp])
     if etab:
         # Établissements avec au moins etab_min_articles articles sur la période
         con.execute(f"""
@@ -281,6 +292,8 @@ def compute_indicators(classement: str = CLASSEMENT,
                        etab_international_types=ETAB_INTERNATIONAL_TYPES,
                        annee_min: int = ANNEE_MIN,
                        annee_max: int = ANNEE_MAX,
+                       pays_supplementaires=None,
+                       erc_dir: str = ERC_DIR,
                        out_name: str = None,
                        verbose: bool = True) -> dict:
     """Calcule les effectifs (voir l'en-tête du module).
@@ -292,6 +305,9 @@ def compute_indicators(classement: str = CLASSEMENT,
     lineage_cuts      : corrections de la lignée OpenAlex (voir config.LINEAGE_CUTS)
     etab_exclude      : ROR à ne pas présenter comme établissements
     pays_comparaison  : pays retenus (None = les pays_comparaison_n plus gros)
+    pays_supplementaires : pays dont on calcule AUSSI les effectifs, sans les ajouter à la
+                        comparaison bibliométrique ; None = pays de la comparaison ERC
+                        (erc.pays_compares_erc(erc_dir)), [] = aucun
     etab_international_rors / _n / _types : établissements étrangers de comparaison
     out_name          : défaut : nom du classement
 
@@ -310,6 +326,13 @@ def compute_indicators(classement: str = CLASSEMENT,
         if not f.exists():
             raise FileNotFoundError(f"{f} absent : lancer compute_top_journals()")
 
+    if pays_supplementaires is None:
+        from .erc import pays_compares_erc
+        pays_supplementaires = pays_compares_erc(erc_dir)
+        if verbose:
+            print(f"Pays de la comparaison ERC ({len(pays_supplementaires)}) : "
+                  f"{', '.join(pays_supplementaires) or 'aucun (compute_erc() pas encore lancé ?)'}")
+
     etab = bool(etab_countries)
     if etab:
         _preparer_etablissements(con, data_dir, etab_countries, lineage_cuts, etab_exclude,
@@ -326,7 +349,8 @@ def compute_indicators(classement: str = CLASSEMENT,
         if etab:
             _preparer_articles_etablissements(con, data_dir)
         if premier:
-            _retenir_entites(con, pays_comparaison, pays_comparaison_n, etab, etab_min_articles)
+            _retenir_entites(con, pays_comparaison, pays_comparaison_n, etab, etab_min_articles,
+                             pays_supplementaires)
             # nombre d'articles de tous les pays (noms et tailles dans la table des entités)
             con.execute("""
                 CREATE TEMP TABLE taille_pays AS
@@ -413,7 +437,7 @@ def compute_indicators(classement: str = CLASSEMENT,
                []::VARCHAR[] AS tutelles, 0::BIGINT AS nb_structures_rattachees
     """, """
         SELECT tp.pays_code, 'pays', coalesce(np.nom, tp.pays_code), tp.pays_code, NULL,
-               tp.nb_articles, tp.pays_code IN (SELECT pays_code FROM pays_retenus),
+               tp.nb_articles, tp.pays_code IN (SELECT pays_code FROM pays_compares),
                []::VARCHAR[], 0
         FROM taille_pays tp LEFT JOIN noms_pays np USING (pays_code)
     """]
@@ -448,6 +472,9 @@ def compute_indicators(classement: str = CLASSEMENT,
                   lineage_cuts=[list(c) for c in (lineage_cuts or [])],
                   etab_exclude=list(etab_exclude or []), annee_min=annee_min, annee_max=annee_max,
                   pays_compares=[r[0] for r in con.execute(
+                      "SELECT pays_code FROM pays_compares ORDER BY 1").fetchall()],
+                  pays_supplementaires=list(pays_supplementaires or []),
+                  pays_effectifs=[r[0] for r in con.execute(
                       "SELECT pays_code FROM pays_retenus ORDER BY 1").fetchall()])
     (out_dir / f"{out_name}_params.json").write_text(json.dumps(params, indent=1))
 

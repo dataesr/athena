@@ -18,6 +18,15 @@ Source
 
 Règles
 ------
+  Couverture : celle du jeu source, soit les appels Horizon Europe (2021 et après).
+  Pour Horizon 2020 (appels 2014-2020), l'open data ESR ne publie les candidatures
+  évaluées que par pays (fr-esr-erc-projects-synthese) ; la structure d'accueil n'y
+  figure que pour les lauréats (fr-esr-erc-projects-entities). Sans structure au
+  dépôt, ces années ne sont pas intégrées (vérifié le 2026-11-03).
+  Discipline : discipline_code = panel_code, null quand la source n'a pas de panel :
+  toujours pour les Synergy (SYG), Proof of Concept (POC), PERA, SJI et ERC-OTHER,
+  et pour quelques STG / COG / ADG. Ces candidatures ne comptent que pour « toutes
+  disciplines ». erc_meta.types_bourse indique, pour chaque type, s'il a un panel.
   Candidature : un project_id. Lauréat : un projet qui a au moins une ligne
   stage = ERC_STAGE_LAUREAT. Le taux de succès d'une entité est donc
   nb_candidatures_retenues / nb_candidatures, le numérateur étant inclus dans
@@ -49,7 +58,8 @@ Sorties (dans ERC_DIR = <DATA_DIR>/erc/)
   erc_entites.parquet       pays et établissements présents : entite_id, entite_type,
                             nom, pays_code, nb_candidatures, nb_candidatures_retenues
                             (sert à compléter la collection « entites », entites.py)
-  erc_meta.json             paramètres, années, pays comparés, textes de méthode
+  erc_meta.json             paramètres, années (dont provisoires), types de bourse,
+                            pays comparés, contrôles, textes de méthode
   erc_non_rattaches.csv     structures d'accueil sans ROR (à corriger dans Paysage)
 
 Exemple :
@@ -67,15 +77,28 @@ import duckdb
 import pandas as pd
 
 from .common import MONDE_ID, PAYS_NOMS, pays_list_sql
-from .config import (CLASSEMENT, DATA_DIR, ERC_DIR, ERC_ODS_DATASET, ERC_PAYS_COMPARAISON,
-                     ERC_PAYS_COMPARAISON_N, ERC_RATTACHEMENT_LIGNEE, ERC_STAGE_LAUREAT,
-                     ERC_TYPES_BOURSE, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR, REFERENTIEL_DIR)
+from .config import (CLASSEMENT, DATA_DIR, ERC_ANNEES_PROVISOIRES, ERC_DIR, ERC_ODS_DATASET,
+                     ERC_PAYS_COMPARAISON, ERC_PAYS_COMPARAISON_N, ERC_RATTACHEMENT_LIGNEE,
+                     ERC_SEUIL_ANNEE_COMPLETE, ERC_STAGE_LAUREAT, ERC_TYPES_BOURSE,
+                     ERC_TYPES_PRINCIPAUX, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR, REFERENTIEL_DIR)
 from .referentiel import charger_correspondance_paysage
 from .utils_ods import get_ods_data
 
 COLONNES_REQUISES = ["project_id", "stage", "call_year", "panel_code", "destination_code",
                      "entities_id", "entities_name", "country_code"]
 CLES = ["annee_appel", "discipline_code", "type_bourse"]
+
+# Libellés des types de bourse (destination_code). Un type absent reçoit son code.
+LIBELLES_TYPES_BOURSE = {
+    "STG": "Starting Grant",
+    "COG": "Consolidator Grant",
+    "ADG": "Advanced Grant",
+    "SYG": "Synergy Grant",
+    "POC": "Proof of Concept",
+    "PERA": "Prix d'engagement public pour la recherche (Public Engagement with Research Award)",
+    "SJI": "Initiative pour le journalisme scientifique (Science Journalism Initiative)",
+    "ERC-OTHER": "Autres actions ERC",
+}
 
 # ROR court : 0 + 6 caractères (alphabet Crockford, sans i, l, o, u) + 2 chiffres
 ROR_RE = re.compile(r"^0[a-hj-km-np-tv-z0-9]{6}[0-9]{2}$")
@@ -101,6 +124,59 @@ ISO3_ISO2 = {
 
 def erc_path(nom: str, erc_dir: str = ERC_DIR) -> Path:
     return Path(erc_dir) / nom
+
+
+def pays_compares_erc(erc_dir: str = ERC_DIR, pays_comparaison=ERC_PAYS_COMPARAISON) -> list:
+    """Pays de la comparaison ERC : erc_meta.json si compute_erc() a été lancé, sinon la
+    liste imposée ERC_PAYS_COMPARAISON (ou [] si elle est vide). Sert à l'étape 6, qui
+    calcule aussi les effectifs bibliométriques de ces pays."""
+    f = erc_path("erc_meta.json", erc_dir)
+    if f.exists():
+        return list(json.loads(f.read_text(encoding="utf-8")).get("pays_compares") or [])
+    return list(pays_comparaison or [])
+
+
+def annees_provisoires(eff: pd.DataFrame, types_principaux=ERC_TYPES_PRINCIPAUX,
+                       seuil: float = ERC_SEUIL_ANNEE_COMPLETE, imposees=ERC_ANNEES_PROVISOIRES) -> tuple:
+    """(années provisoires, motif par année). Liste imposée si `imposees` n'est pas None ;
+    sinon règle automatique (voir config.ERC_ANNEES_PROVISOIRES), sur les lignes MONDE."""
+    if imposees is not None:
+        return sorted(int(a) for a in imposees), {int(a): "liste imposée (config)" for a in imposees}
+    m = eff[(eff["entite_id"] == MONDE_ID) & eff["type_bourse"].isin(types_principaux)]
+    par = m.groupby(["annee_appel", "type_bourse"])[["nb_candidatures", "nb_candidatures_retenues"]].sum()
+    tot = m.groupby("annee_appel")["nb_candidatures"].sum()
+    motifs = {}
+    for a in tot.index:
+        autres = tot.drop(a)
+        r = []
+        for t in types_principaux:
+            ailleurs = t in set(par.drop(a, level=0, errors="ignore").index.get_level_values(1))
+            c, l = par.loc[(a, t)] if (a, t) in par.index else (0, 0)
+            if ailleurs and c == 0:
+                r.append(f"aucune candidature {t}")
+            elif ailleurs and l == 0:
+                r.append(f"aucun lauréat {t}")
+        if len(autres) and tot[a] < seuil * autres.median():
+            r.append(f"{int(tot[a])} candidatures, moins de {seuil:.0%} de la médiane des autres "
+                     f"années ({int(autres.median())})")
+        if r:
+            motifs[int(a)] = " ; ".join(r)
+    return sorted(motifs), motifs
+
+
+def types_bourse_meta(projets: pd.DataFrame, types_principaux=ERC_TYPES_PRINCIPAUX) -> list:
+    """[{code, libelle, avec_panel, principal, nb_candidatures, nb_candidatures_retenues,
+    nb_candidatures_sans_panel}] ; avec_panel : au moins la moitié des candidatures du type
+    ont un panel (vrai pour STG, COG, ADG ; faux pour SYG, POC...)."""
+    res = []
+    for t, g in projets.groupby("type_bourse"):
+        sans = int(g["discipline_code"].isna().sum())
+        res.append({"code": t, "libelle": LIBELLES_TYPES_BOURSE.get(t, t),
+                    "avec_panel": bool(sans <= len(g) / 2), "principal": t in types_principaux,
+                    "nb_candidatures": int(len(g)), "nb_candidatures_retenues": int(g["laureat"].sum()),
+                    "nb_candidatures_sans_panel": sans})
+    ordre = {t: k for k, t in enumerate(LIBELLES_TYPES_BOURSE)}
+    return sorted(res, key=lambda x: (ordre.get(x["code"], len(ordre)), x["code"]))
 
 
 # --- Lecture -----------------------------------------------------------------------
@@ -236,13 +312,26 @@ def tutelles_ror(rors, data_dir: str = DATA_DIR, lineage_cuts=LINEAGE_CUTS,
 # --- Calcul ----------------------------------------------------------------------------
 
 def _methode(meta: dict) -> list:
+    a = meta["annees"]
+    prov = meta["annees_provisoires"]
+    sans_panel = ", ".join(t["code"] for t in meta["types_bourse"] if not t["avec_panel"])
+    principaux = ", ".join(meta["types_bourse_defaut"])
     return [
         "Source : open data de l'enseignement supérieur et de la recherche, jeu « "
         f"{meta['source']['dataset']} » (candidatures évaluées et projets financés par l'ERC).",
+        (f"Couverture : appels {a[0]} à {a[-1]} (Horizon Europe). " if a else "Couverture : aucune année. ")
+        + "Les appels Horizon 2020 (2014-2020) ne sont pas inclus : l'open data ne publie pas "
+        "l'établissement d'accueil des candidatures non retenues de cette période.",
+        (f"Années provisoires : {', '.join(map(str, prov))} ; tous les résultats de ces appels ne "
+         "sont pas encore publiés, les candidatures et le taux de succès vont évoluer."
+         if prov else "Aucune année provisoire : les résultats de tous les appels couverts sont publiés."),
         "Candidature : un projet déposé à un appel ERC. Lauréat : un projet financé. Taux de succès : "
         "projets financés / candidatures, pour la même entité, la même période et les mêmes panels.",
+        f"Types de bourse : calcul par défaut sur {principaux}. "
         "Discipline : panel ERC du projet (mêmes codes que les disciplines de la bibliométrie). "
-        "Les Proof of Concept n'ont pas de panel : ils ne comptent que pour « toutes disciplines ».",
+        + (f"Les types {sans_panel} n'ont pas de panel, de même que quelques autres candidatures : "
+           if sans_panel else "Les candidatures sans panel ")
+        + "elles ne comptent que pour « toutes disciplines ».",
         "Établissement : structure d'accueil au moment de la candidature, identifiée par son ROR "
         "(directement ou via Paysage)"
         + (" ; une candidature compte aussi pour les tutelles de cette structure, comme les articles"
@@ -250,6 +339,9 @@ def _methode(meta: dict) -> list:
         "Pays : pays de la structure d'accueil, pas la nationalité du porteur.",
         "Comptage entier : un projet compte pour chaque établissement et chaque pays d'accueil "
         "(Synergy). Les effectifs sont additionnés avant le calcul des taux et des parts.",
+        "Intensité de candidature : part de l'entité dans les candidatures ERC divisée par sa part "
+        "dans les articles (même panel, même période) ; au-dessous de 1, l'entité candidate moins "
+        "que son poids dans les publications ne le laisserait attendre.",
     ]
 
 
@@ -258,6 +350,8 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
                 stage_laureat: str = ERC_STAGE_LAUREAT, types_bourse=ERC_TYPES_BOURSE,
                 rattachement_lignee: bool = ERC_RATTACHEMENT_LIGNEE,
                 pays_comparaison=ERC_PAYS_COMPARAISON, pays_comparaison_n: int = ERC_PAYS_COMPARAISON_N,
+                types_principaux=ERC_TYPES_PRINCIPAUX, annees_provisoires_imposees=ERC_ANNEES_PROVISOIRES,
+                seuil_annee_complete: float = ERC_SEUIL_ANNEE_COMPLETE,
                 telecharger: bool = True, verbose: bool = True) -> dict:
     """Calcule les effectifs ERC et écrit les sorties dans erc_dir (voir l'en-tête).
     Renvoie un résumé (nombres de projets, taux de rattachement, fichiers)."""
@@ -352,17 +446,27 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
     nb_acc = accueil.drop_duplicates("project_id").shape[0]
     proj_rattaches = acc_ror["project_id"].nunique()
     annees = sorted(int(a) for a in projets["annee_appel"].dropna().unique())
+    prov, motifs_prov = annees_provisoires(eff, types_principaux, seuil_annee_complete,
+                                           annees_provisoires_imposees)
+    types_meta = types_bourse_meta(projets, types_principaux)
     meta = {
         "source": {"dataset": dataset, "date_extraction": dt.date.today().isoformat()},
         "date_calcul": dt.date.today().isoformat(),
         "annees": annees,
-        "types_bourse": sorted(projets["type_bourse"].dropna().unique().tolist()),
+        "annees_provisoires": prov,
+        "annees_provisoires_motifs": {str(a): m for a, m in motifs_prov.items()},
+        "types_bourse": types_meta,
+        "types_bourse_defaut": [t for t in types_principaux if t in {x["code"] for x in types_meta}],
         "panels": panels,
         "pays_compares": compares,
         "parametres": {"stage_laureat": stage_laureat, "types_bourse": list(types_bourse or []),
                        "rattachement_lignee": bool(rattachement_lignee),
                        "pays_comparaison": list(pays_comparaison or []),
-                       "pays_comparaison_n": pays_comparaison_n},
+                       "pays_comparaison_n": pays_comparaison_n,
+                       "types_principaux": list(types_principaux),
+                       "annees_provisoires_imposees": (None if annees_provisoires_imposees is None
+                                                       else list(annees_provisoires_imposees)),
+                       "seuil_annee_complete": seuil_annee_complete},
         "controles": {
             "nb_lignes": int(len(brut)), "valeurs_stage": stages, "valeurs_role": roles,
             "nb_candidatures": int(len(projets)), "nb_laureats": int(projets["laureat"].sum()),
@@ -392,6 +496,10 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
                   f"candidatures), ex. " + " ; ".join(fr_nr["nom"].head(5).astype(str)))
         if hors_biblio:
             print(f"  panels absents des disciplines de la bibliométrie : {hors_biblio}")
+        print("  types de bourse : " + " ; ".join(
+            f"{t['code']} {t['nb_candidatures']} ({t['nb_candidatures_sans_panel']} sans panel)"
+            for t in types_meta))
+        print(f"  années provisoires : {motifs_prov or 'aucune'}")
         fr = eff[eff["entite_id"] == "FR"].groupby("annee_appel")[
             ["nb_candidatures", "nb_candidatures_retenues"]].sum()
         fr["taux_succes"] = (fr["nb_candidatures_retenues"] / fr["nb_candidatures"]).round(3)
