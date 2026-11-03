@@ -15,6 +15,7 @@ Les étapes (chacune dépend des précédentes)
   "top10"                 compute_top10 (par périmètre) top 10 % des plus cités
   "indicators"            compute_indicators            effectifs par entité/année/discipline
   "copublications"        compute_copublications        partenaires de chaque entité
+  "erc"                   compute_erc                   candidatures et lauréats ERC (open data ESR)
   "publish"               publish                       fichiers pour tableaux (publication/)
   (publish_mongo() n'est jamais lancé automatiquement : chargement en base à la main)
 
@@ -33,7 +34,8 @@ Que relancer quand on change quelque chose ?
   périmètre (types, années)           -> run(start="top_journals")
   pays, établissements, seuils étab.  -> run(start="indicators")
   fichier de corrections, alias       -> run(steps=["publish"])
-  mise à jour de Paysage / scanR      -> run(steps=["referentiel", "publish"])
+  mise à jour de Paysage / scanR      -> run(steps=["referentiel", "erc", "publish"])
+  mise à jour des données ERC         -> run(steps=["erc", "publish"])
 
 Chaque étape est aussi disponible seule : step_disciplines(), step_top10(perimetre="revues_sjr"), ...
 Les fonctions d'origine des modules restent utilisables directement.
@@ -59,6 +61,7 @@ from pathlib import Path
 from .config import CLASSEMENT, DATA_DIR, PERIMETRES, TOPICS_PATH
 from .copublications import compute_copublications
 from .disciplines import build_disciplines
+from .erc import compute_erc
 from .extract_sources_institutions import extract_sources_institutions
 from .indicators import compute_indicators
 from .publish import publish
@@ -67,7 +70,7 @@ from .top10_citations import compute_top10
 from .top_journals import compute_top_journals, top_journals_from_review
 
 STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "indicators",
-         "copublications", "publish"]
+         "copublications", "erc", "publish"]
 
 
 # --- Étapes individuelles ------------------------------------------------------
@@ -122,6 +125,11 @@ def step_copublications(classement: str = CLASSEMENT, perimetres=PERIMETRES,
     return compute_copublications(classement, perimetres=perimetres, data_dir=data_dir, **kw)
 
 
+def step_erc(data_dir: str = DATA_DIR, **kw):
+    """Bourses ERC : candidatures et lauréats par entité, année d'appel et panel."""
+    return compute_erc(data_dir=data_dir, **kw)
+
+
 def step_publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, **kw):
     """Étape 7 : fichiers de publication (le chargement Mongo reste manuel : publish_mongo())."""
     return publish(classement, data_dir=data_dir, **kw)
@@ -173,6 +181,7 @@ def run(steps=None, start: str = None, end: str = None,
         "top10": lambda: step_top10(classement, perimetres, data_dir=data_dir),
         "indicators": lambda: step_indicators(classement, perimetres, data_dir),
         "copublications": lambda: step_copublications(classement, perimetres, data_dir),
+        "erc": lambda: step_erc(data_dir),
         "publish": lambda: step_publish(classement, data_dir),
     }
     if "review" in steps and not reviewed_csv:

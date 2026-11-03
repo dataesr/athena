@@ -36,6 +36,10 @@ Sortie
   <DATA_ROOT>/referentiel/<source>.parquet, une ligne par structure qui a un ROR :
     ror, referentiel_source, referentiel_id, nom, nom_officiel, nom_en, sigle,
     categorie, ville, pays_iso3, actif, structure_de_tete, dans_perimetre, date_extraction
+  <DATA_ROOT>/referentiel/paysage_ror.parquet (source Paysage seulement) : TOUTES les
+    correspondances identifiant Paysage -> ROR, sans dédoublonnage par ROR, françaises
+    et étrangères : referentiel_id, ror, nom, pays_iso3. Sert aux jeux de données qui
+    désignent les structures par leur identifiant Paysage (erc.py).
 
 Exemple :
     from project.server.main.referentiel import build_referentiel
@@ -63,6 +67,10 @@ COLONNES = ["ror", "referentiel_source", "referentiel_id", "nom", "nom_officiel"
 
 def referentiel_path(source: str = REFERENTIEL_SOURCE, ref_dir: str = REFERENTIEL_DIR) -> Path:
     return Path(ref_dir) / f"{source}.parquet"
+
+
+def correspondance_paysage_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
+    return Path(ref_dir) / "paysage_ror.parquet"
 
 
 def _lignes_jsonl_gz(url_ou_fichier: str):
@@ -100,13 +108,60 @@ def est_structure_de_tete(e: dict) -> bool:
     return True
 
 
-def ror_paysage(e: dict):
+def ror_paysage(e: dict, actif_seulement: bool = True):
     """Premier ROR ACTIF de la structure (None sinon). L'ancienne version
-    renvoyait le premier ROR trouvé même s'il était inactif."""
-    for k in e.get("identifiers") or []:
-        if k.get("type") == "ror" and k.get("active") and _texte(k.get("value")):
-            return k["value"].strip().rstrip("/").split("/")[-1]
-    return None
+    renvoyait le premier ROR trouvé même s'il était inactif.
+    actif_seulement=False : à défaut de ROR actif, le premier ROR trouvé."""
+    rors = [(bool(k.get("active")), k["value"].strip().rstrip("/").split("/")[-1])
+            for k in e.get("identifiers") or []
+            if k.get("type") == "ror" and _texte(k.get("value"))]
+    actifs = [r for a, r in rors if a]
+    if actifs:
+        return actifs[0]
+    return None if actif_seulement or not rors else rors[0][1]
+
+
+def _correspondance_paysage(e: dict):
+    """(referentiel_id, ror, nom, pays_iso3) si la structure a un ROR, sinon None."""
+    ror = ror_paysage(e, actif_seulement=False)
+    if not ror or not e.get("id"):
+        return None
+    cn = e.get("currentName") or {}
+    nom = _texte(e.get("displayName")) or _texte(cn.get("usualName")) or _texte(cn.get("officialName"))
+    return (e["id"], ror, nom, _texte((e.get("currentLocalisation") or {}).get("iso3")))
+
+
+def _ecrire_correspondance(lignes: list, ref_dir: str) -> Path:
+    df = pd.DataFrame(lignes, columns=["referentiel_id", "ror", "nom", "pays_iso3"]).drop_duplicates(
+        "referentiel_id")
+    out = correspondance_paysage_path(ref_dir)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with duckdb.connect() as con:
+        con.register("df", df)
+        con.execute(f"COPY df TO '{out}' (FORMAT parquet)")
+    return out
+
+
+def build_correspondance_paysage(url: str = PAYSAGE_DUMP_URL, ref_dir: str = REFERENTIEL_DIR,
+                                 verbose: bool = True) -> str:
+    """Écrit seulement <ref_dir>/paysage_ror.parquet (identifiant Paysage -> ROR).
+    Inutile si build_referentiel() a été lancé avec la source Paysage, qui l'écrit aussi."""
+    lignes = [c for c in map(_correspondance_paysage, _lignes_jsonl_gz(url)) if c]
+    out = _ecrire_correspondance(lignes, ref_dir)
+    if verbose:
+        print(f"Paysage -> ROR : {len(lignes):,} structures avec un ROR -> {out}")
+    return str(out)
+
+
+def charger_correspondance_paysage(ref_dir: str = REFERENTIEL_DIR, construire: bool = True):
+    """Table identifiant Paysage -> ROR (DataFrame) ; la construit si elle manque
+    et construire=True, sinon renvoie None."""
+    p = correspondance_paysage_path(ref_dir)
+    if not p.exists():
+        if not construire:
+            return None
+        build_correspondance_paysage(ref_dir=ref_dir)
+    return duckdb.sql(f"SELECT * FROM read_parquet('{p}')").df()
 
 
 def _ligne_paysage(e: dict, categories: set) -> dict:
@@ -162,12 +217,18 @@ def build_referentiel(source: str = REFERENTIEL_SOURCE, url: str = None,
     url = url or (PAYSAGE_DUMP_URL if source == "paysage" else SCANR_ORGANIZATIONS_URL)
     lire = _ligne_paysage if source == "paysage" else _ligne_scanr
     cats = set(categories or [])
-    lignes, total = [], 0
+    lignes, corresp, total = [], [], 0
     for e in _lignes_jsonl_gz(url):
         total += 1
         ligne = lire(e, cats)
         if ligne["ror"]:
             lignes.append(ligne)
+        if source == "paysage":
+            c = _correspondance_paysage(e)
+            if c:
+                corresp.append(c)
+    if source == "paysage":
+        _ecrire_correspondance(corresp, ref_dir)
     df = pd.DataFrame(lignes, columns=COLONNES)
     # Un même ROR sur plusieurs structures (ancienne et nouvelle, par exemple) :
     # on garde en priorité celle du périmètre, puis une structure active.

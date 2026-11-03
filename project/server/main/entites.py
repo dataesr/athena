@@ -5,13 +5,16 @@ Registre des entités (monde, pays, établissements), commun à tous les onglets
 et à tous les usages : aperçu HTML (export_dashboard.py) et publication
 (publish.py, collection Mongo « entites »).
 
-Trois sources, jointes sur le ROR :
+Sources, jointes sur le ROR :
   - OpenAlex (étape 6, indicateurs/<classement>_entites.parquet) : la liste des
     établissements qui ont des articles, leur taille, leurs tutelles ;
   - le référentiel Paysage ou scanR (étape 0, referentiel.py) : nom d'usage,
     sigle, catégorie, ville, et le périmètre du sélecteur ;
   - le fichier de corrections FACULTATIF (config.DASHBOARD_ETABS_PATH) :
-    ror ; nom ; alias ; exclure.
+    ror ; nom ; alias ; exclure ;
+  - les bourses ERC, si erc.compute_erc() a été lancé (<ERC_DIR>/erc_entites.parquet) :
+    nombre de candidatures, et les établissements qui ont des candidatures ERC mais
+    pas d'entité bibliométrique (ajoutés avec nb_articles = 0, hors sélecteur).
 
 Une ligne par entité (construire_entites) :
   entite_id                ROR court, code ISO du pays, ou MONDE
@@ -25,6 +28,7 @@ Une ligne par entité (construire_entites) :
   pays_code                pays de l'établissement (ou du pays lui-même)
   type_openalex            education, facility, government... (établissements)
   nb_articles              taille (premier périmètre, toute la période)
+  nb_candidatures_erc      candidatures ERC, toutes années (null : aucune ou pas de données ERC)
   pays_compare             pays retenu pour la comparaison internationale
   tutelles                 ROR des tutelles (lignée OpenAlex corrigée)
   nb_structures_rattachees structures dont les articles comptent pour l'entité
@@ -50,7 +54,7 @@ import duckdb
 import pandas as pd
 
 from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DASHBOARD_ORDRE_SELECTEUR, DATA_DIR,
-                     REFERENTIEL_DIR, REFERENTIEL_SOURCE)
+                     ERC_DIR, REFERENTIEL_DIR, REFERENTIEL_SOURCE)
 from .referentiel import charger_referentiel
 
 _MOTS_VIDES = {"de", "du", "des", "la", "le", "les", "l", "d", "et", "en", "pour", "sur", "aux", "au",
@@ -155,17 +159,42 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
                        etabs_path: str = DASHBOARD_ETABS_PATH,
                        referentiel_source: str = REFERENTIEL_SOURCE,
                        referentiel_dir: str = REFERENTIEL_DIR,
-                       ordre: str = DASHBOARD_ORDRE_SELECTEUR, verbose: bool = True) -> pd.DataFrame:
+                       ordre: str = DASHBOARD_ORDRE_SELECTEUR, erc_dir: str = ERC_DIR,
+                       verbose: bool = True) -> pd.DataFrame:
     """Registre complet des entités (voir l'en-tête du module).
     etabs_path         : fichier de corrections (None ou absent : pas de corrections)
     referentiel_source : "paysage" ou "scanr" (None : pas de référentiel)
-    ordre              : "taille" ou "fichier" (ordre du sélecteur quand la recherche est vide)"""
+    ordre              : "taille" ou "fichier" (ordre du sélecteur quand la recherche est vide)
+    erc_dir            : sorties de erc.compute_erc() (None ou absentes : pas de données ERC)"""
     data_dir = Path(data_dir)
     f_ent = data_dir / "indicateurs" / f"{classement}_entites.parquet"
     if not f_ent.exists():
         raise FileNotFoundError(f"{f_ent} absent : lancer compute_indicators()")
     ent = duckdb.sql(f"SELECT * FROM read_parquet('{f_ent}')").df()
     ent["nom_openalex"] = ent["nom"]
+
+    # --- Bourses ERC : taille, et établissements sans entité bibliométrique ------------
+    f_erc = Path(erc_dir) / "erc_entites.parquet" if erc_dir else None
+    ent["nb_candidatures_erc"] = pd.NA
+    seulement_erc = pd.Series(False, index=ent.index)
+    if f_erc is not None and f_erc.exists():
+        erc = duckdb.sql(f"SELECT * FROM read_parquet('{f_erc}')").df()
+        taille = dict(zip(erc["entite_id"], erc["nb_candidatures"]))
+        ent["nb_candidatures_erc"] = ent["entite_id"].map(taille)
+        ajout = erc[~erc["entite_id"].isin(set(ent["entite_id"]))]
+        if len(ajout):
+            ajout = pd.DataFrame({
+                "entite_id": ajout["entite_id"], "entite_type": ajout["entite_type"], "nom": ajout["nom"],
+                "pays_code": ajout["pays_code"], "type_openalex": None, "nb_articles": 0,
+                "pays_compare": False, "tutelles": [[] for _ in range(len(ajout))],
+                "nb_structures_rattachees": 0, "nom_openalex": None,
+                "nb_candidatures_erc": ajout["nb_candidatures"]})
+            ent = pd.concat([ent, ajout], ignore_index=True)
+            seulement_erc = pd.Series([False] * (len(ent) - len(ajout)) + [True] * len(ajout))
+            if verbose:
+                print(f"ERC : {len(ajout):,} entités sans données bibliométriques ajoutées "
+                      f"(dont {int((ajout['pays_code'] == 'FR').sum())} établissements français)")
+    ent["nb_candidatures_erc"] = ent["nb_candidatures_erc"].astype("Int64")
     etab = ent["entite_type"] == "etablissement"
     fr = etab & (ent["pays_code"] == "FR")
 
@@ -228,6 +257,7 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     if sel is not None:
         dedans |= fr & ent["entite_id"].isin(set(sel.loc[~sel["exclure"], "ror"]))
         dedans &= ~ent["entite_id"].isin(set(sel.loc[sel["exclure"], "ror"]))
+    dedans &= ~seulement_erc      # sélecteur inchangé : seulement les entités bibliométriques
     if ordre == "fichier" and sel is not None:
         rang = {r: k for k, r in enumerate(sel["ror"])}
         cle = ent["entite_id"].map(rang).fillna(len(rang)) * 1e12 - ent["nb_articles"]

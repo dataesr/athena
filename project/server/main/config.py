@@ -187,6 +187,25 @@ DASHBOARD_ETABS_PATH = "config/etablissements_dashboard.csv"
 DASHBOARD_ORDRE_SELECTEUR = "taille"   # ordre quand la recherche est vide :
                                        # "taille" (plus gros d'abord) ou "fichier" (ordre du CSV)
 
+# --- Open data ESR (Opendatasoft, utils_ods.py) ------------------------------------
+# Jeux de données de data.enseignementsup-recherche.gouv.fr, téléchargés en CSV.
+ODS_BASE_URL = "https://data.enseignementsup-recherche.gouv.fr"
+ODS_API_KEY = os.getenv("ODS_API_KEY")   # facultative (jeux publics) ; jamais en dur ici
+
+# --- Bourses ERC (erc.py) ---------------------------------------------------------
+# Candidatures et lauréats ERC par entité (établissement, pays, monde), année d'appel,
+# panel (= discipline_code de la bibliométrie) et type de bourse (STG, COG, ADG, SYG, POC).
+# Sorties dans <DATA_DIR>/erc/ : la lignée OpenAlex du snapshot sert au rattachement.
+ERC_ODS_DATASET = "fr-esr-erc-persons"
+ERC_DIR = f"{DATA_DIR}/erc"
+ERC_STAGE_LAUREAT = "successful"   # valeur de « stage » d'un projet financé ; les autres
+                                   # valeurs (evaluated...) sont des candidatures
+ERC_TYPES_BOURSE = None            # ex. ("STG", "COG", "ADG", "SYG") ; None = tous
+ERC_RATTACHEMENT_LIGNEE = True     # une candidature compte aussi pour les tutelles de
+                                   # l'établissement d'accueil (lignée OpenAlex, comme les articles)
+ERC_PAYS_COMPARAISON = None        # codes ISO à comparer ; None = automatique :
+ERC_PAYS_COMPARAISON_N = 25        # les N pays qui déposent le plus de candidatures
+
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)
 DUCKDB_THREADS = None         # None = tous les cœurs

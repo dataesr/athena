@@ -1,5 +1,6 @@
 from project.server.main.copublications import compute_copublications
 from project.server.main.disciplines import build_disciplines
+from project.server.main.erc import compute_erc
 from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
 from project.server.main.indicators import compute_indicators
@@ -123,11 +124,24 @@ def create_task_compute(args: dict) -> None:
     compute_copublications()
 
 # ---------------------------------------------------------------------------
+# 6 ter. Bourses ERC (une à deux minutes)
+#    Télécharge : le jeu fr-esr-erc-persons de l'open data ESR (ODS_API_KEY en
+#                 variable d'environnement si le jeu n'est pas public)
+#    Lit : /data/referentiel/paysage_ror.parquet (construit au besoin),
+#          inst_lineage.parquet et institutions.parquet (rattachement aux tutelles)
+#    Écrit dans erc/ : erc_persons.parquet (copie brute), erc_effectifs.parquet,
+#          erc_entites.parquet, erc_meta.json, erc_non_rattaches.csv
+#    Affiche : part des candidatures rattachées à un ROR, la France par année.
+# ---------------------------------------------------------------------------
+    compute_erc()
+
+# ---------------------------------------------------------------------------
 # 7. Publication pour l'application tableaux (une à deux minutes)
 #    Lit : indicateurs/, revues_tete/, top10/*_seuils, disciplines/, le référentiel,
 #          config/etablissements_dashboard.csv (corrections, facultatif)
 #    Écrit dans publication/erc/ : entites, biblio_disciplines, biblio_effectifs,
-#          biblio_copublications, biblio_revues_tete, biblio_seuils_top10, biblio_meta
+#          biblio_copublications, biblio_revues_tete, biblio_seuils_top10, biblio_meta,
+#          erc_effectifs, erc_meta
 #          (.jsonl.gz pour Mongo, .parquet), et manifest.json
 # ---------------------------------------------------------------------------
     publish()

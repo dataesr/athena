@@ -26,6 +26,7 @@ dans [CONTRAT_DONNEES.md](CONTRAT_DONNEES.md).
 | 5 | `top10_citations.compute_top10()` | top 10 % des articles les plus cités |
 | 6 | `indicators.compute_indicators()` | effectifs par entité, année et discipline |
 | 6b | `copublications.compute_copublications()` | partenaires de chaque pays et établissement |
+| 6c | `erc.compute_erc()` | bourses ERC (open data ESR) : candidatures et lauréats par établissement, pays et panel |
 | 7 | `publish.publish()` / `publish.publish_mongo()` | fichiers de publication, puis chargement dans MongoDB |
 | 8 | `export_dashboard.build_dashboard()` | aperçu HTML autonome |
 
@@ -41,6 +42,7 @@ les enchaîner ou de n'en relancer qu'une partie (voir sa docstring).
 | `OPENALEX_API_KEY` | clé de l'offre payante OpenAlex, échangée contre des identifiants S3 temporaires | extraction des snapshots quotidiens (étapes 1–2) |
 | `MONGO_URI` | connexion à la base MongoDB de tableaux | `publish_mongo()` |
 | `MONGO_DB_NAME` | nom de la base (défaut : `tableaux-staging`) | `publish_mongo()` |
+| `ODS_API_KEY` | clé de l'open data ESR (data.enseignementsup-recherche.gouv.fr) | `erc.compute_erc()` si le jeu n'est pas public |
 
 Les secrets ne sont jamais écrits dans le code ni dans l'image. Dans le
 conteneur, le profil AWS `openalex` (`docker/aws_config`) permet aussi

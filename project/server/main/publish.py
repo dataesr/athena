@@ -17,6 +17,9 @@ CONTRAT_DONNEES.md. Résumé :
   biblio_revues_tete       revues de tête de chaque discipline
   biblio_seuils_top10      seuil de citations du top 10 % par discipline x année
   biblio_meta              un document : snapshot, paramètres, textes de méthode
+  erc_effectifs            candidatures et lauréats ERC par entité x année d'appel x panel
+                           x type de bourse (si erc.compute_erc() a été lancé)
+  erc_meta                 un document : source, années, pays comparés, textes de méthode
 
 1. publish()          écrit <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz
                       (+ .parquet) et manifest.json. Aucune base nécessaire.
@@ -43,12 +46,12 @@ import duckdb
 import pandas as pd
 
 from .common import DOMAINES_NOMS
-from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, MONGO_DB, MONGO_URI,
+from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_DB, MONGO_URI,
                      REFERENTIEL_DIR, REFERENTIEL_SOURCE, SJR_PATH, TABLEAUX_BOARD_ID)
 from .entites import construire_entites
 
 COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copublications",
-               "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta"]
+               "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta", "erc_effectifs", "erc_meta"]
 
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
 INDEX = {
@@ -64,6 +67,9 @@ INDEX = {
     "biblio_seuils_top10": [[("perimetre", 1), ("classement", 1), ("discipline_code", 1),
                              ("annee_publication", 1)]],
     "biblio_meta": [],
+    "erc_effectifs": [[("entite_id", 1), ("annee_appel", 1), ("discipline_code", 1), ("type_bourse", 1)],
+                      [("entite_type", 1), ("annee_appel", 1)]],
+    "erc_meta": [],
 }
 
 
@@ -143,13 +149,14 @@ def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) ->
 
 
 def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
-            referentiel_source: str = REFERENTIEL_SOURCE, referentiel_dir: str = REFERENTIEL_DIR) -> dict:
-    """Chaque collection sous forme de DataFrame (ou de dict pour biblio_meta)."""
+            referentiel_source: str = REFERENTIEL_SOURCE, referentiel_dir: str = REFERENTIEL_DIR,
+            erc_dir: str = ERC_DIR) -> dict:
+    """Chaque collection sous forme de DataFrame (ou de dict pour biblio_meta, erc_meta)."""
     ind, rt, t10 = data_dir / "indicateurs", data_dir / "revues_tete", data_dir / "top10"
     sql = lambda q: duckdb.sql(q).df()
     meta = meta_bibliometrie(classement, data_dir)
     tables = {"entites": construire_entites(classement, data_dir, etabs_path, referentiel_source,
-                                            referentiel_dir, verbose=verbose)}
+                                            referentiel_dir, erc_dir=erc_dir, verbose=verbose)}
 
     disc = sql(f"""SELECT DISTINCT '{classement}' AS classement, discipline_code, discipline_nom, domaine_code
                    FROM read_parquet('{data_dir}/disciplines/{classement}.parquet')
@@ -174,6 +181,13 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
     if seuils:
         tables["biblio_seuils_top10"] = pd.concat(seuils, ignore_index=True)
     tables["biblio_meta"] = meta
+    # Bourses ERC (facultatif : erc.compute_erc())
+    erc = Path(erc_dir) if erc_dir else None
+    if erc is not None and (erc / "erc_effectifs.parquet").exists():
+        tables["erc_effectifs"] = sql(f"SELECT * FROM read_parquet('{erc}/erc_effectifs.parquet')")
+        tables["erc_meta"] = _json(erc / "erc_meta.json")
+    elif verbose:
+        print(f"{erc_dir}/erc_effectifs.parquet absent : erc_effectifs non publiée (lancer compute_erc())")
     return tables
 
 
@@ -187,7 +201,8 @@ def _cle_code(code: str):
 def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
             etabs_path: str = DASHBOARD_ETABS_PATH, out_dir: str = None,
             parquet: bool = True, referentiel_source: str = REFERENTIEL_SOURCE,
-            referentiel_dir: str = REFERENTIEL_DIR, verbose: bool = True) -> dict:
+            referentiel_dir: str = REFERENTIEL_DIR, erc_dir: str = ERC_DIR,
+            verbose: bool = True) -> dict:
     """Écrit chaque collection dans <out_dir> (défaut <data_dir>/publication/<classement>) :
     <collection>.jsonl.gz (un document JSON par ligne, prêt pour Mongo) et, si parquet=True,
     <collection>.parquet ; plus manifest.json (liste, nombre de lignes, colonnes).
@@ -195,12 +210,12 @@ def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     data_dir = Path(data_dir)
     out = Path(out_dir) if out_dir else data_dir / "publication" / classement
     out.mkdir(parents=True, exist_ok=True)
-    tables = _tables(classement, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir)
+    tables = _tables(classement, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir, erc_dir)
     manifeste = {"classement": classement, "genere_le": dt.datetime.now().isoformat(timespec="seconds"),
                  "snapshot_openalex": tables["biblio_meta"]["snapshot_openalex"], "collections": {}}
     for nom, t in tables.items():
         f = out / f"{nom}.jsonl.gz"
-        if isinstance(t, dict):                               # biblio_meta : un seul document
+        if isinstance(t, dict):                               # biblio_meta, erc_meta : un seul document
             with gzip.open(f, "wt", encoding="utf-8") as fh:
                 fh.write(json.dumps(t, ensure_ascii=False) + "\n")
             manifeste["collections"][nom] = {"nb_documents": 1, "fichier": f.name}
