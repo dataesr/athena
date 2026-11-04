@@ -251,8 +251,8 @@ aucune candidature ou aucun lauréat, ou si ses candidatures sont inférieures �
 | Prestige | `part_revues_tete` | `nb_articles_revues_tete_disciplinaires` (+ `…_multidisciplinaires` si l'option est cochée) | idem |
 | Part d'un partenaire | `part_copublications` | `nb_articles_copublies` (entité, partenaire) | `nb_articles` de l'entité |
 | ERC : taux de succès | `taux_succes` | `nb_laureats` (entité) | `nb_candidatures` (même entité) ; en porteurs : `nb_pi_laureats` / `nb_pi_candidats` |
-| ERC : part des candidatures | `part_candidatures` | `nb_candidatures` (entité) | `nb_candidatures` (`MONDE`) |
-| ERC : part des lauréats | `part_laureats` | `nb_laureats` (entité) | `nb_laureats` (`MONDE`) |
+| ERC : part des candidatures | `part_candidatures` | `nb_candidatures` (entité) | `nb_candidatures` (`MONDE`) ; en porteurs : `nb_pi_candidats` / `nb_pi_candidats` (`MONDE`) |
+| ERC : part des lauréats | `part_laureats` | `nb_laureats` (entité) | `nb_laureats` (`MONDE`) ; en porteurs : `nb_pi_laureats` / `nb_pi_laureats` (`MONDE`) |
 | ERC : solde de mobilité des lauréats | `solde_mobilite_laureats` | `nb_laureats_arrivees - nb_laureats_departs` (entité) | — (différence, pas un ratio) |
 | ERC : intensité de candidature | `intensite_candidature` | `part_candidatures` (entité) | `part_articles` (entité) |
 
@@ -264,6 +264,16 @@ peut dépasser 100 %. Ne pas le plafonner. Exemple : France, appels 2023, tous t
 163 lauréats signés en France / 795 candidatures déposées en France (statistiques officielles).
 Solde de mobilité des lauréats = `nb_laureats_arrivees - nb_laureats_departs`, sommés sur la
 même sélection ; positif : l'entité attire plus de lauréats qu'elle n'en voit partir.
+
+ERC : mode de comptage. Les champs de chaque mode sont dans `erc_meta.modes_comptage`
+(`projets` par défaut, `pi`). Taux de succès et parts se calculent avec les champs du mode
+choisi, pour l'entité comme pour `MONDE` : ne jamais mélanger les deux modes dans un ratio.
+Le numérateur du taux est toujours un effectif de lauréats signés dans l'entité
+(`nb_laureats` ou `nb_pi_laureats`), jamais `nb_candidatures_retenues` (déposés dans
+l'entité, signés où que ce soit). Les deux modes ne diffèrent que si les Synergy Grants
+sont sélectionnés (un seul PI par projet pour les autres types) ; ils n'ont pas de panel et
+ne comptent donc que pour « toutes disciplines ». Arrivées, départs et solde de mobilité
+n'existent qu'en projets.
 
 Intensité de candidature = `part_candidatures` ÷ `part_articles`, sur le même panel
 (`discipline_code`) et la même période, pour une même entité (pays ou établissement). Les deux
@@ -325,6 +335,7 @@ db.erc_effectifs_<version>.aggregate([
               nb_laureats_departs: { $sum: "$nb_laureats_departs" } } }
 ])
 // taux_succes = nb_laureats / nb_candidatures (peut dépasser 1)
+// en porteurs : sommer nb_pi_candidats et nb_pi_laureats ; taux = nb_pi_laureats / nb_pi_candidats
 // solde_mobilite_laureats = nb_laureats_arrivees - nb_laureats_departs
 ```
 
