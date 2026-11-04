@@ -147,16 +147,31 @@ Les années dont les résultats ne sont pas tous publiés sont listées dans
 | `annee_appel` | entier | année de l'appel ERC |
 | `discipline_code` | texte ou null | panel ERC (`panel_code` de la source), mêmes codes que `biblio_disciplines` ; null quand la source n'a pas de panel (voir ci-dessous) |
 | `type_bourse` | texte | code ERC du type de bourse (`destination_code`), voir ci-dessous |
-| `nb_candidatures` | entier | projets déposés (évalués ou financés) |
-| `nb_candidatures_retenues` | entier | dont projets financés |
+| `nb_candidatures` | entier | projets déposés dans l'entité (évalués ou financés) |
+| `nb_candidatures_retenues` | entier | dont projets financés, où que le projet soit signé |
+| `nb_laureats` | entier | projets financés **signés** dans l'entité (lignes `stage = successful`) ; pour `MONDE`, chaque projet financé une fois (= `nb_candidatures_retenues`) |
+| `nb_laureats_arrivees` | entier | lauréats signés dans l'entité, déposés dans une autre entité (0 pour `MONDE`) |
+| `nb_laureats_departs` | entier | candidatures retenues déposées dans l'entité, signées dans une autre (0 pour `MONDE`) |
 
-Règles : une candidature est un projet. Elle compte pour la structure d'accueil **au dépôt**
-(un lauréat qui change d'établissement avant la signature reste compté où il a candidaté :
-le numérateur du taux de succès est toujours inclus dans son dénominateur), et pour les
-tutelles OpenAlex de cette structure, comme les articles. Le pays est celui de la structure
-d'accueil, pas la nationalité du porteur. Comptage entier : une Synergy à plusieurs hôtes
-compte pour chacun. Les structures sans ROR (ni directement, ni via Paysage) ne comptent que
-pour leur pays et pour `MONDE` ; elles sont listées dans `erc/erc_non_rattaches.csv`.
+Règle dépôt / signature (celle des statistiques officielles) : le jeu source suit le parcours
+du porteur. Un projet financé dont le porteur a changé d'établissement (ou de pays) entre le
+dépôt et la signature a ses lignes `evaluated` dans la structure de dépôt et sa ligne
+`successful` dans la nouvelle structure. **La candidature est comptée dans la structure de
+dépôt, le lauréat dans la structure de signature.** Si un porteur dépose dans A et signe dans
+B, A compte une candidature, une candidature retenue et un départ ; B compte un lauréat et une
+arrivée, sans la candidature correspondante. Pour chaque ligne :
+`nb_laureats = nb_candidatures_retenues + nb_laureats_arrivees - nb_laureats_departs`
+(vérifié par `compute_erc()`, écarts dans `erc_meta.controles`). Arrivées et départs se
+comptent au niveau de l'entité : un passage d'un institut à un autre de la même université
+n'est ni une arrivée ni un départ pour l'université. Un projet financé sans ligne `evaluated`
+est compté au dépôt dans sa structure de signature (nombre dans `erc_meta.controles`).
+
+Autres règles : une candidature est un projet. Elle compte aussi pour les tutelles OpenAlex de
+sa structure, comme les articles (de même pour un lauréat). Le pays est celui de la structure
+(dépôt pour les candidatures, signature pour les lauréats), pas la nationalité du porteur.
+Comptage entier : une Synergy à plusieurs hôtes compte pour chacun. Les structures sans ROR
+(ni directement, ni via Paysage) ne comptent que pour leur pays et pour `MONDE` ; elles sont
+listées dans `erc/erc_non_rattaches.csv`.
 
 Types de bourse (libellés et effectifs dans `erc_meta.types_bourse`) :
 
@@ -197,7 +212,7 @@ Index : `(entite_id, annee_appel, discipline_code, type_bourse)`, `(entite_type,
 | `panels` | panels présents |
 | `pays_compares` | pays de la comparaison internationale ERC : France puis les 25 pays qui déposent le plus (tous types) ; distincts des pays de la bibliométrie, où figurent les États-Unis ou la Chine |
 | `parametres` | paramètres du calcul |
-| `controles` | taux de rattachement à un ROR, valeurs de `stage` et de `role`, panels inconnus de la bibliométrie |
+| `controles` | taux de rattachement à un ROR, valeurs de `stage` et de `role`, panels inconnus de la bibliométrie ; mobilité : `nb_laureats_changement_etablissement` (lauréats dont la structure de signature diffère de celle de dépôt), `nb_laureats_changement_pays`, `nb_laureats_sans_ligne_evaluated`, `nb_laureats_signature_sans_structure`, `nb_lignes_ecart_controle_laureats` (0 attendu) |
 | `methode`, `sources` | textes à afficher tels quels (couverture, années provisoires, règles) |
 
 Règle des années provisoires (`ERC_ANNEES_PROVISOIRES` dans `config.py`) : liste imposée si
@@ -214,10 +229,20 @@ aucune candidature ou aucun lauréat, ou si ses candidatures sont inférieures �
 | Influence | `part_top10_cites` | `nb_articles_top10_cites` | `nb_articles_top10_cites` |
 | Prestige | `part_revues_tete` | `nb_articles_revues_tete_disciplinaires` (+ `…_multidisciplinaires` si l'option est cochée) | idem |
 | Part d'un partenaire | `part_copublications` | `nb_articles_copublies` (entité, partenaire) | `nb_articles` de l'entité |
-| ERC : taux de succès | `taux_succes` | `nb_candidatures_retenues` (entité) | `nb_candidatures` (même entité) |
+| ERC : taux de succès | `taux_succes` | `nb_laureats` (entité) | `nb_candidatures` (même entité) |
 | ERC : part des candidatures | `part_candidatures` | `nb_candidatures` (entité) | `nb_candidatures` (`MONDE`) |
-| ERC : part des lauréats | `part_laureats` | `nb_candidatures_retenues` (entité) | `nb_candidatures_retenues` (`MONDE`) |
+| ERC : part des lauréats | `part_laureats` | `nb_laureats` (entité) | `nb_laureats` (`MONDE`) |
+| ERC : solde de mobilité des lauréats | `solde_mobilite_laureats` | `nb_laureats_arrivees - nb_laureats_departs` (entité) | — (différence, pas un ratio) |
 | ERC : intensité de candidature | `intensite_candidature` | `part_candidatures` (entité) | `part_articles` (entité) |
+
+ERC : taux de succès = `nb_laureats` ÷ `nb_candidatures`, même entité, mêmes années, mêmes
+panels et types, en additionnant les effectifs avant de diviser. Le numérateur (lauréats
+signés dans l'entité) n'est **pas** un sous-ensemble du dénominateur (candidatures déposées
+dans l'entité) : pour une petite entité qui accueille des lauréats venus d'ailleurs, le taux
+peut dépasser 100 %. Ne pas le plafonner. Exemple : France, appels 2023, tous types :
+163 lauréats signés en France / 795 candidatures déposées en France.
+Solde de mobilité des lauréats = `nb_laureats_arrivees - nb_laureats_departs`, sommés sur la
+même sélection ; positif : l'entité attire plus de lauréats qu'elle n'en voit partir.
 
 Intensité de candidature = `part_candidatures` ÷ `part_articles`, sur le même panel
 (`discipline_code`) et la même période, pour une même entité (pays ou établissement). Les deux
@@ -260,7 +285,7 @@ Onglet ERC, mêmes filtres que la bibliométrie (établissement, `discipline_cod
   par `annee_appel` (évolution) ou `discipline_code` (profil) ; `taux_succes` par groupe.
 - **Comparaison des établissements** : `$match` sur `entite_type: "etablissement"` et les
   filtres, `$group` par `entite_id`, joindre `entites` sur `entite_id` et garder
-  `pays_code = "FR"` ; classer par `nb_candidatures_retenues` ou `taux_succes`. Prévoir un
+  `pays_code = "FR"` ; classer par `nb_laureats` ou `taux_succes`. Prévoir un
   seuil minimal de candidatures avant de classer sur un taux (petits effectifs).
 - **France et autres pays** : `$match` sur `entite_id` dans `erc_meta.pays_compares` + `MONDE`,
   `$group` par `entite_id` ; le taux de `MONDE` sert de référence. Les articles de ces pays
@@ -274,9 +299,12 @@ db.erc_effectifs_<version>.aggregate([
   { $match: { entite_id: "02en5vm52", annee_appel: { $gte: 2021, $lte: 2025 },
               discipline_code: { $regex: "^PE" } } },
   { $group: { _id: null, nb_candidatures: { $sum: "$nb_candidatures" },
-              nb_candidatures_retenues: { $sum: "$nb_candidatures_retenues" } } }
+              nb_laureats: { $sum: "$nb_laureats" },
+              nb_laureats_arrivees: { $sum: "$nb_laureats_arrivees" },
+              nb_laureats_departs: { $sum: "$nb_laureats_departs" } } }
 ])
-// taux_succes = nb_candidatures_retenues / nb_candidatures
+// taux_succes = nb_laureats / nb_candidatures (peut dépasser 1)
+// solde_mobilite_laureats = nb_laureats_arrivees - nb_laureats_departs
 ```
 
 ## 5. Production

@@ -201,6 +201,8 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
                 print(f"ERC : {len(ajout):,} entités sans données bibliométriques ajoutées "
                       f"(dont {int((ajout['pays_code'] == 'FR').sum())} établissements français)")
     ent["nb_candidatures_erc"] = ent["nb_candidatures_erc"].astype("Int64")
+    # entité présente seulement par des lauréats arrivés d'ailleurs : aucune candidature -> null
+    ent.loc[ent["nb_candidatures_erc"] == 0, "nb_candidatures_erc"] = pd.NA
     ent["pays_compare_erc"] = (ent["entite_type"] == "pays") & ent["entite_id"].isin(pays_erc)
     etab = ent["entite_type"] == "etablissement"
     fr = etab & (ent["pays_code"] == "FR")
