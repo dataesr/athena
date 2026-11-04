@@ -40,6 +40,13 @@ Sortie
     correspondances identifiant Paysage -> ROR, sans dédoublonnage par ROR, françaises
     et étrangères : referentiel_id, ror, nom, pays_iso3. Sert aux jeux de données qui
     désignent les structures par leur identifiant Paysage (erc.py).
+  <DATA_ROOT>/referentiel/paysage_successeurs.parquet (source Paysage) : paysage_id,
+    successeur_id (successeur direct : relation « structure-predecesseur » de Paysage,
+    même règle que scanR). successeur_final() remonte la chaîne jusqu'à la structure
+    actuelle (ex. une université fusionnée -> la nouvelle université).
+  <DATA_ROOT>/referentiel/rnsr_tutelles.parquet (scanR, build_tutelles_rnsr) : rnsr,
+    tutelle_id (identifiant Paysage), tutelle_nom : tutelles (« établissement
+    tutelle ») de chaque structure de recherche du RNSR, comme scanR.
 
 Exemple :
     from project.server.main.referentiel import build_referentiel
@@ -71,6 +78,14 @@ def referentiel_path(source: str = REFERENTIEL_SOURCE, ref_dir: str = REFERENTIE
 
 def correspondance_paysage_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
     return Path(ref_dir) / "paysage_ror.parquet"
+
+
+def successeurs_paysage_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
+    return Path(ref_dir) / "paysage_successeurs.parquet"
+
+
+def tutelles_rnsr_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
+    return Path(ref_dir) / "rnsr_tutelles.parquet"
 
 
 def _lignes_jsonl_gz(url_ou_fichier: str):
@@ -131,10 +146,16 @@ def _correspondance_paysage(e: dict):
     return (e["id"], ror, nom, _texte((e.get("currentLocalisation") or {}).get("iso3")))
 
 
-def _ecrire_correspondance(lignes: list, ref_dir: str) -> Path:
-    df = pd.DataFrame(lignes, columns=["referentiel_id", "ror", "nom", "pays_iso3"]).drop_duplicates(
-        "referentiel_id")
-    out = correspondance_paysage_path(ref_dir)
+def _successeurs_paysage(e: dict) -> list:
+    """[(paysage_id, successeur_id)] : relation « structure-predecesseur » dont e est
+    le prédécesseur (relatedObjectId = e), la ressource étant le successeur (règle de
+    scanR, paysage.build_successeur_map)."""
+    return [(e["id"], r["resourceId"]) for r in e.get("relations") or []
+            if r.get("relationTag") == "structure-predecesseur" and r.get("relatedObjectId") == e.get("id")
+            and r.get("resourceId") and r["resourceId"] != e.get("id")]
+
+
+def _ecrire(df: pd.DataFrame, out: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     with duckdb.connect() as con:
         con.register("df", df)
@@ -142,14 +163,31 @@ def _ecrire_correspondance(lignes: list, ref_dir: str) -> Path:
     return out
 
 
+def _ecrire_correspondance(lignes: list, ref_dir: str, successeurs: list = None) -> Path:
+    df = pd.DataFrame(lignes, columns=["referentiel_id", "ror", "nom", "pays_iso3"]).drop_duplicates(
+        "referentiel_id")
+    out = _ecrire(df, correspondance_paysage_path(ref_dir))
+    if successeurs is not None:
+        _ecrire(pd.DataFrame(successeurs, columns=["paysage_id", "successeur_id"]).drop_duplicates("paysage_id"),
+                successeurs_paysage_path(ref_dir))
+    return out
+
+
 def build_correspondance_paysage(url: str = PAYSAGE_DUMP_URL, ref_dir: str = REFERENTIEL_DIR,
                                  verbose: bool = True) -> str:
-    """Écrit seulement <ref_dir>/paysage_ror.parquet (identifiant Paysage -> ROR).
-    Inutile si build_referentiel() a été lancé avec la source Paysage, qui l'écrit aussi."""
-    lignes = [c for c in map(_correspondance_paysage, _lignes_jsonl_gz(url)) if c]
-    out = _ecrire_correspondance(lignes, ref_dir)
+    """Écrit seulement <ref_dir>/paysage_ror.parquet (identifiant Paysage -> ROR) et
+    paysage_successeurs.parquet. Inutile si build_referentiel() a été lancé avec la
+    source Paysage, qui les écrit aussi."""
+    lignes, successeurs = [], []
+    for e in _lignes_jsonl_gz(url):
+        c = _correspondance_paysage(e)
+        if c:
+            lignes.append(c)
+        successeurs += _successeurs_paysage(e)
+    out = _ecrire_correspondance(lignes, ref_dir, successeurs)
     if verbose:
-        print(f"Paysage -> ROR : {len(lignes):,} structures avec un ROR -> {out}")
+        print(f"Paysage -> ROR : {len(lignes):,} structures avec un ROR, {len(successeurs):,} "
+              f"successeurs -> {out}")
     return str(out)
 
 
@@ -161,6 +199,63 @@ def charger_correspondance_paysage(ref_dir: str = REFERENTIEL_DIR, construire: b
         if not construire:
             return None
         build_correspondance_paysage(ref_dir=ref_dir)
+    return duckdb.sql(f"SELECT * FROM read_parquet('{p}')").df()
+
+
+def charger_successeurs_paysage(ref_dir: str = REFERENTIEL_DIR, construire: bool = True) -> dict:
+    """{paysage_id: successeur direct} ; reconstruit la correspondance Paysage si la table
+    manque (construire=True), sinon {}."""
+    p = successeurs_paysage_path(ref_dir)
+    if not p.exists():
+        if not construire:
+            return {}
+        build_correspondance_paysage(ref_dir=ref_dir)
+    df = duckdb.sql(f"SELECT * FROM read_parquet('{p}')").df()
+    return dict(zip(df["paysage_id"], df["successeur_id"]))
+
+
+def successeur_final(paysage_id, successeurs: dict):
+    """Structure actuelle : suit les successeurs jusqu'au dernier (cycles ignorés),
+    comme scanR (paysage.get_successeur)."""
+    vus = set()
+    while paysage_id in successeurs and paysage_id not in vus:
+        vus.add(paysage_id)
+        paysage_id = successeurs[paysage_id]
+    return paysage_id
+
+
+def build_tutelles_rnsr(url: str = SCANR_ORGANIZATIONS_URL, ref_dir: str = REFERENTIEL_DIR,
+                        verbose: bool = True) -> str:
+    """Écrit <ref_dir>/rnsr_tutelles.parquet : (rnsr, tutelle_id, tutelle_nom) pour chaque
+    structure du RNSR de scanR (organizations-v2) et chacune de ses institutions de type
+    « établissement tutelle » (identifiant Paysage), comme scanR (projects.py)."""
+    lignes = []
+    for e in _lignes_jsonl_gz(url):
+        rnsrs = {_texte(k.get("id")) for k in e.get("externalIds") or [] if k.get("type") == "rnsr"}
+        rnsrs = {r for r in rnsrs if r}
+        if not rnsrs:
+            continue
+        for inst in e.get("institutions") or []:
+            if not isinstance(inst, dict) or inst.get("relationType") != "établissement tutelle":
+                continue
+            t = _texte(inst.get("structure"))
+            if t:
+                lignes += [(r, t, _texte(inst.get("label"))) for r in rnsrs]
+    df = pd.DataFrame(lignes, columns=["rnsr", "tutelle_id", "tutelle_nom"]).drop_duplicates(
+        ["rnsr", "tutelle_id"])
+    out = _ecrire(df, tutelles_rnsr_path(ref_dir))
+    if verbose:
+        print(f"RNSR -> tutelles : {df['rnsr'].nunique():,} structures, {len(df):,} liens -> {out}")
+    return str(out)
+
+
+def charger_tutelles_rnsr(ref_dir: str = REFERENTIEL_DIR, construire: bool = True) -> pd.DataFrame:
+    """Table (rnsr, tutelle_id, tutelle_nom) ; la construit si elle manque (construire=True)."""
+    p = tutelles_rnsr_path(ref_dir)
+    if not p.exists():
+        if not construire:
+            return pd.DataFrame(columns=["rnsr", "tutelle_id", "tutelle_nom"])
+        build_tutelles_rnsr(ref_dir=ref_dir)
     return duckdb.sql(f"SELECT * FROM read_parquet('{p}')").df()
 
 
@@ -217,7 +312,7 @@ def build_referentiel(source: str = REFERENTIEL_SOURCE, url: str = None,
     url = url or (PAYSAGE_DUMP_URL if source == "paysage" else SCANR_ORGANIZATIONS_URL)
     lire = _ligne_paysage if source == "paysage" else _ligne_scanr
     cats = set(categories or [])
-    lignes, corresp, total = [], [], 0
+    lignes, corresp, successeurs, total = [], [], [], 0
     for e in _lignes_jsonl_gz(url):
         total += 1
         ligne = lire(e, cats)
@@ -227,8 +322,9 @@ def build_referentiel(source: str = REFERENTIEL_SOURCE, url: str = None,
             c = _correspondance_paysage(e)
             if c:
                 corresp.append(c)
+            successeurs += _successeurs_paysage(e)
     if source == "paysage":
-        _ecrire_correspondance(corresp, ref_dir)
+        _ecrire_correspondance(corresp, ref_dir, successeurs)
     df = pd.DataFrame(lignes, columns=COLONNES)
     # Un même ROR sur plusieurs structures (ancienne et nouvelle, par exemple) :
     # on garde en priorité celle du périmètre, puis une structure active.

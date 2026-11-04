@@ -131,14 +131,14 @@ minimales pour entrer dans le top), `nb_articles_au_seuil` (ex aequo au seuil),
 ### `erc_effectifs` — bourses ERC
 
 Une ligne par `entite_type` × `entite_id` × `annee_appel` × `discipline_code` × `type_bourse`.
-Source : open data ESR, jeu `fr-esr-erc-persons` (`erc.compute_erc()`). L'entité `MONDE`
-(toutes les candidatures ERC) donne les dénominateurs des parts.
+Source : open data ESR, participations aux projets Horizon Europe (`erc.compute_erc()`, lecture
+par `horizon.py`) : propositions évaluées (`fr-esr-horizon-projets-soumis-candidats`, structure
+au dépôt) et projets lauréats (`fr-esr-horizon-projects-entities`, structure à la signature),
+lignes ERC (`thema_code = "ERC"`) des porteurs seulement (`erc_role = "PI"`). L'entité `MONDE`
+(tous les projets ERC) donne les dénominateurs des parts.
 
-Couverture : appels **Horizon Europe (2021 et après)**, ceux du jeu source. Pour Horizon 2020
-(appels 2014–2020), l'open data ESR ne publie les candidatures évaluées que par pays
-(`fr-esr-erc-projects-synthese`) ; l'établissement d'accueil n'y figure que pour les lauréats
-(`fr-esr-erc-projects-entities`). Sans structure au dépôt, ces années ne sont pas intégrées.
-Les années dont les résultats ne sont pas tous publiés sont listées dans
+Couverture : appels **Horizon Europe (2021 et après)**. Les appels Horizon 2020 ne sont pas
+dans ces jeux. Les années dont les résultats ne sont pas tous publiés sont listées dans
 `erc_meta.annees_provisoires`.
 
 | Champ | Type | Contenu |
@@ -146,28 +146,46 @@ Les années dont les résultats ne sont pas tous publiés sont listées dans
 | `entite_type`, `entite_id` | | `monde`, `pays` (ISO2, outre-mer sous `FR`), `etablissement` (ROR court) |
 | `annee_appel` | entier | année de l'appel ERC |
 | `discipline_code` | texte ou null | panel ERC (`panel_code` de la source), mêmes codes que `biblio_disciplines` ; null quand la source n'a pas de panel (voir ci-dessous) |
-| `type_bourse` | texte | code ERC du type de bourse (`destination_code`), voir ci-dessous |
-| `nb_candidatures` | entier | projets déposés dans l'entité (évalués ou financés) |
-| `nb_candidatures_retenues` | entier | dont projets financés, où que le projet soit signé |
-| `nb_laureats` | entier | projets financés **signés** dans l'entité (lignes `stage = successful`) ; pour `MONDE`, chaque projet financé une fois (= `nb_candidatures_retenues`) |
-| `nb_laureats_arrivees` | entier | lauréats signés dans l'entité, déposés dans une autre entité (0 pour `MONDE`) |
+| `type_bourse` | texte | code ERC du type de bourse (`destination_code`, en majuscules : `SyG` → `SYG`), voir ci-dessous |
+| `nb_candidatures` | entier | projets évalués (`project_id` distincts du jeu des soumis) déposés dans l'entité |
+| `nb_candidatures_retenues` | entier | dont projets financés (`project_id` présent chez les lauréats), où que le projet soit signé |
+| `nb_laureats` | entier | projets financés (`project_id` distincts du jeu des lauréats) **signés** dans l'entité ; pour `MONDE`, chaque projet financé une fois |
+| `nb_laureats_arrivees` | entier | lauréats signés dans l'entité, non déposés dans l'entité ; pour `MONDE` : lauréats absents du jeu des soumis (0 attendu) |
 | `nb_laureats_departs` | entier | candidatures retenues déposées dans l'entité, signées dans une autre (0 pour `MONDE`) |
+| `nb_pi_candidats` | entier | porteurs (lignes `erc_role = "PI"`) des projets évalués, rattachés à l'entité |
+| `nb_pi_laureats` | entier | porteurs des projets financés, rattachés à l'entité |
+
+Deux modes de comptage, au même grain : **en projets** (`nb_candidatures`, `nb_laureats`, par
+défaut) ou **en porteurs** (`nb_pi_candidats`, `nb_pi_laureats`). Ils ne diffèrent que pour
+les Synergy Grants (2 à 4 PI par projet, chacun rattaché à sa structure) : une Synergy à deux
+PI d'une même université compte 1 projet et 2 PI pour cette université.
 
 Règle dépôt / signature (celle des statistiques officielles) : le jeu source suit le parcours
 du porteur. Un projet financé dont le porteur a changé d'établissement (ou de pays) entre le
-dépôt et la signature a ses lignes `evaluated` dans la structure de dépôt et sa ligne
-`successful` dans la nouvelle structure. **La candidature est comptée dans la structure de
+dépôt et la signature a sa ligne dans le jeu des soumis dans la structure de dépôt et sa ligne
+dans le jeu des lauréats dans la nouvelle structure. **La candidature est comptée dans la structure de
 dépôt, le lauréat dans la structure de signature.** Si un porteur dépose dans A et signe dans
 B, A compte une candidature, une candidature retenue et un départ ; B compte un lauréat et une
 arrivée, sans la candidature correspondante. Pour chaque ligne :
 `nb_laureats = nb_candidatures_retenues + nb_laureats_arrivees - nb_laureats_departs`
 (vérifié par `compute_erc()`, écarts dans `erc_meta.controles`). Arrivées et départs se
 comptent au niveau de l'entité : un passage d'un institut à un autre de la même université
-n'est ni une arrivée ni un départ pour l'université. Un projet financé sans ligne `evaluated`
-est compté au dépôt dans sa structure de signature (nombre dans `erc_meta.controles`).
+n'est ni une arrivée ni un départ pour l'université. Un projet lauréat absent du jeu des
+soumis compte comme arrivée partout, `MONDE` compris (nombre dans `erc_meta.controles`).
 
-Autres règles : une candidature est un projet. Elle compte aussi pour les tutelles OpenAlex de
-sa structure, comme les articles (de même pour un lauréat). Le pays est celui de la structure
+Établissements (même logique que scanR, `horizon.rattacher_structures`) : un projet compte
+pour la structure participante (`entities_id` : Paysage, ROR ou RNSR) et, pour une participation
+française, pour **toutes les tutelles** des laboratoires RNSR de `numero_national_de_structure`
+(plusieurs valeurs séparées par `;` ; tutelles « établissement tutelle » du référentiel des
+organisations de scanR). Un ERC hébergé par le CNRS dans une UMR compte donc pour le CNRS et pour
+les universités et écoles tutelles de l'UMR. Chaque structure est remplacée par son successeur
+Paysage (relation « structure-predecesseur », jusqu'à la structure actuelle) avant d'être
+convertie en ROR : les projets s'affichent sur les établissements actuels, jamais sur
+d'anciens noms ou des établissements fusionnés. Le projet compte enfin pour les tutelles
+OpenAlex de ces établissements, comme les articles. Un même projet ne compte qu'une fois par
+entité, quel que soit le nombre de chemins qui y mènent.
+
+Autres règles : une candidature est un projet (`project_id`). Le pays est celui de la structure
 (dépôt pour les candidatures, signature pour les lauréats), pas la nationalité du porteur.
 Comptage entier : une Synergy à plusieurs hôtes compte pour chacun. Les structures sans ROR
 (ni directement, ni via Paysage) ne comptent que pour leur pays et pour `MONDE` ; elles sont
@@ -182,9 +200,11 @@ Types de bourse (libellés et effectifs dans `erc_meta.types_bourse`) :
 | `ADG` | Advanced Grant | oui (quelques candidatures sans panel) |
 | `SYG` | Synergy Grant | non |
 | `POC` | Proof of Concept | non |
-| `PERA` | Public Engagement with Research Award (prix, aucun lauréat dans la source) | non |
-| `SJI` | Science Journalism Initiative | non |
-| `ERC-OTHER` | Autres actions ERC | non |
+| `PERA` | Public Engagement with Research Award (prix) | non |
+| `SJI` | Science Journalism Initiative (pas de ligne PI chez les lauréats) | non |
+| `ERC-OTHER` | Autres actions ERC (pas de ligne PI chez les lauréats) | non |
+
+Seuls les types qui ont des lignes `erc_role = "PI"` apparaissent dans `erc_effectifs`.
 
 Tous les types sont gardés dans les données. Le calcul par défaut porte sur
 `erc_meta.types_bourse_defaut` (`STG`, `COG`, `ADG`) : les autres n'ont pas de panel et, pour
@@ -202,17 +222,18 @@ Index : `(entite_id, annee_appel, discipline_code, type_bourse)`, `(entite_type,
 
 | Champ | Contenu |
 |---|---|
-| `source` | `dataset`, `date_extraction` |
+| `source` | `soumis`, `laureats` (identifiants des jeux), `date_extraction` |
 | `date_calcul` | date du calcul |
 | `annees` | années d'appel présentes |
 | `annees_provisoires` | années d'appel dont les résultats ne sont pas tous publiés : candidatures et taux de succès vont encore évoluer (à signaler, ou exclure des comparaisons dans le temps) |
 | `annees_provisoires_motifs` | `{ "2025": "aucune candidature ADG ; …" }` : pourquoi chaque année est provisoire |
-| `types_bourse` | liste d'objets `{ code, libelle, avec_panel, principal, nb_candidatures, nb_candidatures_retenues, nb_candidatures_sans_panel }` ; `avec_panel` : au moins la moitié des candidatures du type ont un panel |
+| `types_bourse` | liste d'objets `{ code, libelle, avec_panel, principal, nb_candidatures, nb_candidatures_retenues, nb_laureats, nb_pi_candidats, nb_pi_laureats, nb_candidatures_sans_panel }` (`MONDE`) ; `avec_panel` : au moins la moitié des projets du type ont un panel |
+| `modes_comptage` | `{ projets: ["nb_candidatures", "nb_laureats"], pi: ["nb_pi_candidats", "nb_pi_laureats"] }` |
 | `types_bourse_defaut` | types du calcul par défaut : `["STG", "COG", "ADG"]` |
 | `panels` | panels présents |
 | `pays_compares` | pays de la comparaison internationale ERC : France puis les 25 pays qui déposent le plus (tous types) ; distincts des pays de la bibliométrie, où figurent les États-Unis ou la Chine |
 | `parametres` | paramètres du calcul |
-| `controles` | taux de rattachement à un ROR, valeurs de `stage` et de `role`, panels inconnus de la bibliométrie ; mobilité : `nb_laureats_changement_etablissement` (lauréats dont la structure de signature diffère de celle de dépôt), `nb_laureats_changement_pays`, `nb_laureats_sans_ligne_evaluated`, `nb_laureats_signature_sans_structure`, `nb_lignes_ecart_controle_laureats` (0 attendu) |
+| `controles` | liens vers les établissements par origine (`liens_etablissement` : `structure`, `tutelle_rnsr`), `nb_participations_successeur`, `nb_participations_avec_rnsr`, `nb_participations_avec_tutelles_rnsr` ; nombres de lignes par jeu, valeurs de `stage`, `erc_role` et `destination_code`, taux de rattachement à un ROR (candidatures et lauréats), panels inconnus de la bibliométrie ; mobilité : `nb_laureats_changement_etablissement` (lauréats dont la structure de signature diffère de celle de dépôt), `nb_laureats_changement_pays`, `nb_laureats_sans_candidature` (lauréats absents du jeu des soumis), `nb_lignes_ecart_controle_laureats` (0 attendu) |
 | `methode`, `sources` | textes à afficher tels quels (couverture, années provisoires, règles) |
 
 Règle des années provisoires (`ERC_ANNEES_PROVISOIRES` dans `config.py`) : liste imposée si
@@ -229,7 +250,7 @@ aucune candidature ou aucun lauréat, ou si ses candidatures sont inférieures �
 | Influence | `part_top10_cites` | `nb_articles_top10_cites` | `nb_articles_top10_cites` |
 | Prestige | `part_revues_tete` | `nb_articles_revues_tete_disciplinaires` (+ `…_multidisciplinaires` si l'option est cochée) | idem |
 | Part d'un partenaire | `part_copublications` | `nb_articles_copublies` (entité, partenaire) | `nb_articles` de l'entité |
-| ERC : taux de succès | `taux_succes` | `nb_laureats` (entité) | `nb_candidatures` (même entité) |
+| ERC : taux de succès | `taux_succes` | `nb_laureats` (entité) | `nb_candidatures` (même entité) ; en porteurs : `nb_pi_laureats` / `nb_pi_candidats` |
 | ERC : part des candidatures | `part_candidatures` | `nb_candidatures` (entité) | `nb_candidatures` (`MONDE`) |
 | ERC : part des lauréats | `part_laureats` | `nb_laureats` (entité) | `nb_laureats` (`MONDE`) |
 | ERC : solde de mobilité des lauréats | `solde_mobilite_laureats` | `nb_laureats_arrivees - nb_laureats_departs` (entité) | — (différence, pas un ratio) |
@@ -240,7 +261,7 @@ panels et types, en additionnant les effectifs avant de diviser. Le numérateur 
 signés dans l'entité) n'est **pas** un sous-ensemble du dénominateur (candidatures déposées
 dans l'entité) : pour une petite entité qui accueille des lauréats venus d'ailleurs, le taux
 peut dépasser 100 %. Ne pas le plafonner. Exemple : France, appels 2023, tous types :
-163 lauréats signés en France / 795 candidatures déposées en France.
+163 lauréats signés en France / 795 candidatures déposées en France (statistiques officielles).
 Solde de mobilité des lauréats = `nb_laureats_arrivees - nb_laureats_departs`, sommés sur la
 même sélection ; positif : l'entité attire plus de lauréats qu'elle n'en voit partir.
 

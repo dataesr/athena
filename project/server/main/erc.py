@@ -9,59 +9,58 @@ discipline, comparaison internationale).
 
 Source
 ------
-  Open data ESR, jeu ERC_ODS_DATASET (fr-esr-erc-persons) : une ligne par personne
-  et par projet (role : fellow, principal investigator, main_contact...), avec
-  stage = evaluated (candidature évaluée) ou successful (projet financé).
-  Colonnes utilisées : project_id, stage, call_year, panel_code, destination_code
-  (STG, COG, ADG, SYG, POC), entities_id (identifiant Paysage ou ROR de la structure
-  d'accueil), entities_name, country_code (ISO3), country_code2.
+  Lignes ERC (thema_code = ERC_THEMA) des deux jeux Horizon Europe de l'open data ESR,
+  lus par horizon.py (une ligne par participation) :
+    soumis    propositions évaluées (stage = evaluated), structure au dépôt
+    laureats  projets financés (stage = successful), structure à la signature
+  Seules les lignes des porteurs comptent (erc_role = ERC_ROLE_PI) : une par projet pour
+  STG, COG, ADG et POC, 2 à 4 pour les Synergy (SYG, un PI par ligne).
 
 Règles
 ------
-  Couverture : celle du jeu source, soit les appels Horizon Europe (2021 et après).
-  Pour Horizon 2020 (appels 2014-2020), l'open data ESR ne publie les candidatures
-  évaluées que par pays (fr-esr-erc-projects-synthese) ; la structure d'accueil n'y
-  figure que pour les lauréats (fr-esr-erc-projects-entities). Sans structure au
-  dépôt, ces années ne sont pas intégrées (vérifié le 2026-11-03).
-  Discipline : discipline_code = panel_code, null quand la source n'a pas de panel :
-  toujours pour les Synergy (SYG), Proof of Concept (POC), PERA, SJI et ERC-OTHER,
-  et pour quelques STG / COG / ADG. Ces candidatures ne comptent que pour « toutes
-  disciplines ». erc_meta.types_bourse indique, pour chaque type, s'il a un panel.
-  Candidature : un project_id. Lauréat : un projet qui a au moins une ligne
-  stage = ERC_STAGE_LAUREAT.
-  Dépôt et signature (règle des statistiques officielles) : le jeu suit le parcours
-  du porteur. La candidature est comptée dans la structure de dépôt (lignes
-  stage <> successful ; à défaut, projet présent seulement comme lauréat, celles du
-  lauréat), le lauréat dans la structure de signature (lignes stage = successful).
-    nb_candidatures           candidatures déposées dans l'entité
-    nb_candidatures_retenues  dont financées, où que le projet soit signé
+  Couverture : appels Horizon Europe (2021 et après). Les appels Horizon 2020 ne sont
+  pas dans ces jeux.
+  Deux modes de comptage, au même grain :
+    projets  nombre de project_id distincts (nb_candidatures, nb_laureats...)
+    PI       nombre de porteurs (lignes PI distinctes : nb_pi_candidats, nb_pi_laureats) ;
+             ne diffère du premier que pour les Synergy
+  Taux de succès = projets lauréats (jeu laureats) / projets évalués (jeu soumis), pour la
+  même entité. La candidature est comptée dans la structure de dépôt, le lauréat dans la
+  structure de signature (règle des statistiques officielles) :
+    nb_candidatures           projets évalués, déposés dans l'entité
+    nb_candidatures_retenues  dont financés (project_id présent chez les lauréats), où
+                              que le projet soit signé
     nb_laureats               projets financés signés dans l'entité
-    nb_laureats_arrivees      signés dans l'entité, déposés ailleurs
+    nb_laureats_arrivees      signés dans l'entité, non déposés dans l'entité
     nb_laureats_departs       déposés dans l'entité et financés, signés ailleurs
   nb_laureats = nb_candidatures_retenues + nb_laureats_arrivees - nb_laureats_departs
-  (vérifié par compute_erc). Taux de succès = nb_laureats / nb_candidatures : le
-  numérateur n'est pas inclus dans le dénominateur et peut le dépasser.
-  Établissement : entities_id converti en ROR (directement, ou par la table
-  Paysage -> ROR de referentiel.py). Si ERC_RATTACHEMENT_LIGNEE, la candidature
-  compte aussi pour les tutelles OpenAlex du ROR (même règle que les articles :
-  un ERC d'un institut compte pour l'institut et son université). Les structures
-  sans ROR sont listées dans erc_non_rattaches.csv.
-  Pays : pays de la structure (country_code), en code ISO2 comme OpenAlex
-  (GB et GR, pas UK et EL).
-  Comptage entier : une candidature compte 1 pour chaque entité présente (une
-  Synergy à plusieurs établissements compte pour chacun) ; MONDE = toutes les
-  candidatures, une fois chacune, et nb_laureats = nb_candidatures_retenues.
-  Une bourse ERC n'a qu'un porteur (sauf les Synergy, 2 à 4) : le nombre de
-  candidatures est donc, à ces exceptions près, le nombre de personnes qui ont
-  candidaté (une personne qui candidate deux années compte deux fois).
+  (vérifié par compute_erc). Pour MONDE, les « arrivées » sont les lauréats absents du
+  jeu des soumis (écart entre les deux jeux, 0 attendu).
+  Discipline : discipline_code = panel_code, null quand la source n'a pas de panel :
+  toujours pour les Synergy et les Proof of Concept, et pour quelques STG / COG / ADG.
+  Ces lignes ne comptent que pour « toutes disciplines ». Année, panel et type d'un
+  projet : valeur la plus fréquente de ses lignes (lauréats d'abord).
+  Établissement (horizon.rattacher_structures, même logique que scanR) : le projet compte
+  pour la structure participante (entities_id : Paysage, ROR ou RNSR) et, pour une
+  participation française, pour toutes les tutelles des laboratoires RNSR indiqués
+  (numero_national_de_structure, plusieurs valeurs séparées par ;) : un ERC hébergé par le
+  CNRS dans une UMR compte aussi pour les universités tutelles de l'UMR. Chaque structure
+  est remplacée par son successeur Paysage (fusions, changements de nom), pour tout
+  afficher sur les établissements actuels, puis convertie en ROR (table Paysage -> ROR).
+  Si ERC_RATTACHEMENT_LIGNEE, le projet compte aussi pour les tutelles OpenAlex de ces
+  ROR (même règle que les articles). Les participations sans aucun établissement sont
+  listées dans erc_non_rattaches.csv.
+  Pays : pays de la structure, en code ISO2 comme OpenAlex (GB et GR), outre-mer sous FR.
+  Comptage entier : un projet compte 1 pour chaque entité présente (une Synergy à
+  plusieurs établissements compte pour chacun) ; MONDE compte chaque projet une fois.
 
 Sorties (dans ERC_DIR = <DATA_DIR>/erc/)
 ----------------------------------------
-  erc_persons.parquet       copie brute du jeu ODS (relecture, reproductibilité)
   erc_effectifs.parquet     une ligne par entite_type x entite_id x annee_appel x
                             discipline_code x type_bourse :
                               nb_candidatures, nb_candidatures_retenues, nb_laureats,
-                              nb_laureats_arrivees, nb_laureats_departs
+                              nb_laureats_arrivees, nb_laureats_departs,
+                              nb_pi_candidats, nb_pi_laureats
   erc_entites.parquet       pays et établissements présents : entite_id, entite_type,
                             nom, pays_code, nb_candidatures, nb_candidatures_retenues,
                             nb_laureats
@@ -70,34 +69,35 @@ Sorties (dans ERC_DIR = <DATA_DIR>/erc/)
                             pays comparés, contrôles, textes de méthode
   erc_non_rattaches.csv     structures de dépôt ou de signature sans ROR (à corriger
                             dans Paysage)
+  Les copies brutes des jeux sont dans HORIZON_DIR (horizon.py).
 
 Exemple :
     from project.server.main.erc import compute_erc
     res = compute_erc()
-    res = compute_erc(telecharger=False)   # réutilise erc_persons.parquet
+    res = compute_erc(telecharger=False)   # réutilise les copies de HORIZON_DIR
 """
 
 import datetime as dt
 import json
-import re
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
 from .common import MONDE_ID, PAYS_NOMS, pays_list_sql
-from .config import (CLASSEMENT, DATA_DIR, ERC_ANNEES_PROVISOIRES, ERC_DIR, ERC_ODS_DATASET,
-                     ERC_PAYS_COMPARAISON, ERC_PAYS_COMPARAISON_N, ERC_RATTACHEMENT_LIGNEE,
-                     ERC_SEUIL_ANNEE_COMPLETE, ERC_STAGE_LAUREAT, ERC_TYPES_BOURSE,
-                     ERC_TYPES_PRINCIPAUX, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR, REFERENTIEL_DIR)
+from .config import (CLASSEMENT, DATA_DIR, ERC_ANNEES_PROVISOIRES, ERC_DIR, ERC_PAYS_COMPARAISON,
+                     ERC_PAYS_COMPARAISON_N, ERC_RATTACHEMENT_LIGNEE, ERC_ROLE_PI,
+                     ERC_SEUIL_ANNEE_COMPLETE, ERC_THEMA, ERC_TYPES_BOURSE, ERC_TYPES_PRINCIPAUX,
+                     ETAB_EXCLUDE, HORIZON_DIR, HORIZON_ODS_LAUREATS, HORIZON_ODS_SOUMIS,
+                     LINEAGE_CUTS, PAYS_FR, REFERENTIEL_DIR)
+from .horizon import lire_horizon, participations, rattacher_structures
 from .referentiel import charger_correspondance_paysage
-from .utils_ods import get_ods_data
 
-COLONNES_REQUISES = ["project_id", "stage", "call_year", "panel_code", "destination_code",
-                     "entities_id", "entities_name", "country_code"]
 CLES = ["annee_appel", "discipline_code", "type_bourse"]
+EFFECTIFS = ["nb_candidatures", "nb_candidatures_retenues", "nb_laureats", "nb_laureats_arrivees",
+             "nb_laureats_departs", "nb_pi_candidats", "nb_pi_laureats"]
 
-# Libellés des types de bourse (destination_code). Un type absent reçoit son code.
+# Libellés des types de bourse (destination_code, en majuscules). Un type absent reçoit son code.
 LIBELLES_TYPES_BOURSE = {
     "STG": "Starting Grant",
     "COG": "Consolidator Grant",
@@ -108,28 +108,6 @@ LIBELLES_TYPES_BOURSE = {
     "SJI": "Initiative pour le journalisme scientifique (Science Journalism Initiative)",
     "ERC-OTHER": "Autres actions ERC",
 }
-
-# ROR court : 0 + 6 caractères (alphabet Crockford, sans i, l, o, u) + 2 chiffres
-ROR_RE = re.compile(r"^0[a-hj-km-np-tv-z0-9]{6}[0-9]{2}$")
-
-# Codes « européens » de la Commission -> ISO 3166-1 alpha-2
-CORRECTIONS_ISO2 = {"UK": "GB", "EL": "GR"}
-# ISO3 -> ISO2 (pays des structures d'accueil ERC : UE, pays associés et autres)
-ISO3_ISO2 = {
-    "AUT": "AT", "BEL": "BE", "BGR": "BG", "HRV": "HR", "CYP": "CY", "CZE": "CZ", "DNK": "DK",
-    "EST": "EE", "FIN": "FI", "FRA": "FR", "DEU": "DE", "GRC": "GR", "HUN": "HU", "IRL": "IE",
-    "ITA": "IT", "LVA": "LV", "LTU": "LT", "LUX": "LU", "MLT": "MT", "NLD": "NL", "POL": "PL",
-    "PRT": "PT", "ROU": "RO", "SVK": "SK", "SVN": "SI", "ESP": "ES", "SWE": "SE",
-    "GBR": "GB", "CHE": "CH", "NOR": "NO", "ISL": "IS", "LIE": "LI", "ISR": "IL", "TUR": "TR",
-    "SRB": "RS", "MNE": "ME", "MKD": "MK", "ALB": "AL", "BIH": "BA", "MDA": "MD", "UKR": "UA",
-    "GEO": "GE", "ARM": "AM", "FRO": "FO", "TUN": "TN", "XKX": "XK", "KOS": "XK", "RUS": "RU",
-    "USA": "US", "CAN": "CA", "MEX": "MX", "BRA": "BR", "ARG": "AR", "CHL": "CL", "COL": "CO",
-    "CHN": "CN", "JPN": "JP", "KOR": "KR", "TWN": "TW", "HKG": "HK", "SGP": "SG", "IND": "IN",
-    "AUS": "AU", "NZL": "NZ", "ZAF": "ZA", "EGY": "EG", "MAR": "MA", "DZA": "DZ",
-    "GLP": "GP", "MTQ": "MQ", "GUF": "GF", "REU": "RE", "MYT": "YT", "SPM": "PM", "BLM": "BL",
-    "MAF": "MF", "WLF": "WF", "PYF": "PF", "NCL": "NC",
-}
-
 
 def erc_path(nom: str, erc_dir: str = ERC_DIR) -> Path:
     return Path(erc_dir) / nom
@@ -152,7 +130,7 @@ def annees_provisoires(eff: pd.DataFrame, types_principaux=ERC_TYPES_PRINCIPAUX,
     if imposees is not None:
         return sorted(int(a) for a in imposees), {int(a): "liste imposée (config)" for a in imposees}
     m = eff[(eff["entite_id"] == MONDE_ID) & eff["type_bourse"].isin(types_principaux)]
-    par = m.groupby(["annee_appel", "type_bourse"])[["nb_candidatures", "nb_candidatures_retenues"]].sum()
+    par = m.groupby(["annee_appel", "type_bourse"])[["nb_candidatures", "nb_laureats"]].sum()
     tot = m.groupby("annee_appel")["nb_candidatures"].sum()
     motifs = {}
     for a in tot.index:
@@ -173,58 +151,24 @@ def annees_provisoires(eff: pd.DataFrame, types_principaux=ERC_TYPES_PRINCIPAUX,
     return sorted(motifs), motifs
 
 
-def types_bourse_meta(projets: pd.DataFrame, types_principaux=ERC_TYPES_PRINCIPAUX) -> list:
+def types_bourse_meta(eff: pd.DataFrame, projets: pd.DataFrame,
+                      types_principaux=ERC_TYPES_PRINCIPAUX) -> list:
     """[{code, libelle, avec_panel, principal, nb_candidatures, nb_candidatures_retenues,
-    nb_candidatures_sans_panel}] ; avec_panel : au moins la moitié des candidatures du type
-    ont un panel (vrai pour STG, COG, ADG ; faux pour SYG, POC...)."""
+    nb_laureats, nb_pi_candidats, nb_pi_laureats, nb_candidatures_sans_panel}] (MONDE) ;
+    avec_panel : au moins la moitié des projets du type ont un panel (vrai pour STG, COG,
+    ADG ; faux pour SYG, POC)."""
+    m = eff[eff["entite_id"] == MONDE_ID].groupby("type_bourse")[EFFECTIFS].sum()
     res = []
     for t, g in projets.groupby("type_bourse"):
-        sans = int(g["discipline_code"].isna().sum())
+        sans_panel = g["discipline_code"].isna()
+        e = m.loc[t] if t in m.index else pd.Series(0, index=EFFECTIFS)
         res.append({"code": t, "libelle": LIBELLES_TYPES_BOURSE.get(t, t),
-                    "avec_panel": bool(sans <= len(g) / 2), "principal": t in types_principaux,
-                    "nb_candidatures": int(len(g)), "nb_candidatures_retenues": int(g["laureat"].sum()),
-                    "nb_candidatures_sans_panel": sans})
+                    "avec_panel": bool(sans_panel.sum() <= len(g) / 2), "principal": t in types_principaux,
+                    **{c: int(e[c]) for c in ["nb_candidatures", "nb_candidatures_retenues", "nb_laureats",
+                                              "nb_pi_candidats", "nb_pi_laureats"]},
+                    "nb_candidatures_sans_panel": int((sans_panel & g["soumis"]).sum())})
     ordre = {t: k for k, t in enumerate(LIBELLES_TYPES_BOURSE)}
     return sorted(res, key=lambda x: (ordre.get(x["code"], len(ordre)), x["code"]))
-
-
-# --- Lecture -----------------------------------------------------------------------
-
-def lire_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR,
-             telecharger: bool = True) -> pd.DataFrame:
-    """Jeu ODS en texte (aucune conversion automatique), copié dans
-    <erc_dir>/erc_persons.parquet. telecharger=False : relit cette copie."""
-    f = erc_path("erc_persons.parquet", erc_dir)
-    if not telecharger:
-        if not f.exists():
-            raise FileNotFoundError(f"{f} absent : lancer compute_erc(telecharger=True)")
-        return duckdb.sql(f"SELECT * FROM read_parquet('{f}')").df()
-    df = get_ods_data(dataset, strict=True, dtype=str, keep_default_na=False)
-    if df.empty:
-        raise ValueError(f"jeu ODS {dataset} vide")
-    df.columns = [c.strip().lower() for c in df.columns]
-    f.parent.mkdir(parents=True, exist_ok=True)
-    with duckdb.connect() as con:
-        con.register("df", df)
-        con.execute(f"COPY df TO '{f}' (FORMAT parquet, COMPRESSION zstd)")
-    return df
-
-
-def pays_iso2(iso3: str, code2: str = None):
-    """Code ISO2 du pays : par l'ISO3, sinon par le code à deux lettres de la
-    Commission (UK -> GB, EL -> GR). None si inconnu."""
-    iso3 = (iso3 or "").strip().upper()
-    if iso3 in ISO3_ISO2:
-        return ISO3_ISO2[iso3]
-    c2 = (code2 or "").strip().upper()
-    if len(c2) == 2 and c2.isalpha():
-        return CORRECTIONS_ISO2.get(c2, c2)
-    return None
-
-
-def _texte(v):
-    v = str(v).strip() if v is not None and not (isinstance(v, float) and pd.isna(v)) else ""
-    return v or None
 
 
 def _plus_frequent(s: pd.Series):
@@ -234,70 +178,33 @@ def _plus_frequent(s: pd.Series):
 
 # --- Préparation ---------------------------------------------------------------------
 
-def preparer_candidatures(df: pd.DataFrame, stage_laureat: str = ERC_STAGE_LAUREAT,
-                          types_bourse=ERC_TYPES_BOURSE) -> tuple:
-    """(projets, depot, signature) :
-    projets   : une ligne par project_id : annee_appel, discipline_code, type_bourse, laureat,
-                a_candidature (au moins une ligne stage <> successful)
-    depot     : (project_id, entities_id, entities_name, pays_code) des structures de dépôt
-                (lignes de candidature ; à défaut, lignes du lauréat : voir controles)
-    signature : mêmes colonnes, structures de signature des projets financés
-                (lignes stage = successful)"""
-    manquantes = [c for c in COLONNES_REQUISES if c not in df.columns]
-    if manquantes:
-        raise ValueError(f"colonnes absentes du jeu ERC : {manquantes} (lues : {list(df.columns)})")
-    d = pd.DataFrame({
-        "project_id": df["project_id"].map(_texte),
-        "stage": df["stage"].map(_texte).str.lower(),
-        "annee_appel": pd.to_numeric(df["call_year"].map(_texte), errors="coerce").astype("Int64"),
-        "discipline_code": df["panel_code"].map(_texte).str.upper(),
-        "type_bourse": df["destination_code"].map(_texte).str.upper(),
-        "entities_id": df["entities_id"].map(_texte),
-        "entities_name": df["entities_name"].map(_texte),
-        "pays_code": [pays_iso2(a, b) for a, b in zip(
-            df["country_code"], df["country_code2"] if "country_code2" in df.columns else [None] * len(df))],
-    })
-    d = d[d["project_id"].notna()]
+def lignes_pi(p: pd.DataFrame, thema: str = ERC_THEMA, role_pi: str = ERC_ROLE_PI) -> pd.DataFrame:
+    """Lignes ERC des porteurs, à partir de horizon.participations()."""
+    erc = (p["thema_code"] == thema.upper()) | (p["action_id"] == thema.upper())
+    return p[erc & (p["erc_role"].str.upper() == role_pi.upper())].copy()
+
+
+def preparer_projets(soumis: pd.DataFrame, laureats: pd.DataFrame, types_bourse=ERC_TYPES_BOURSE) -> tuple:
+    """(projets, soumis, laureats) : projets = une ligne par project_id : annee_appel,
+    discipline_code, type_bourse (valeur la plus fréquente, lauréats d'abord), soumis,
+    laureat ; soumis et laureats restreints aux types retenus."""
+    def _attr(d):
+        g = d.groupby("project_id")
+        return pd.DataFrame({"annee_appel": g["annee_appel"].agg(_plus_frequent),
+                             "discipline_code": g["panel_code"].agg(_plus_frequent),
+                             "type_bourse": g["destination_code"].agg(_plus_frequent)})
+    a_l, a_s = _attr(laureats), _attr(soumis)
+    projets = a_l.combine_first(a_s)   # valeurs des lauréats, complétées par celles des soumis
+    projets.index.name = "project_id"
+    projets = projets.reset_index()
+    projets["annee_appel"] = pd.to_numeric(projets["annee_appel"]).astype("Int64")
+    projets["soumis"] = projets["project_id"].isin(set(soumis["project_id"]))
+    projets["laureat"] = projets["project_id"].isin(set(laureats["project_id"]))
     if types_bourse:
-        d = d[d["type_bourse"].isin([t.upper() for t in types_bourse])]
-    d["est_laureat"] = d["stage"] == stage_laureat.lower()
-
-    g = d.groupby("project_id")
-    projets = pd.DataFrame({
-        "annee_appel": g["annee_appel"].agg(_plus_frequent),
-        "discipline_code": g["discipline_code"].agg(_plus_frequent),
-        "type_bourse": g["type_bourse"].agg(_plus_frequent),
-        "laureat": g["est_laureat"].any(),
-        "a_candidature": (~d["est_laureat"]).groupby(d["project_id"]).any(),
-    }).reset_index()
-    projets["annee_appel"] = projets["annee_appel"].astype("Int64")
-
-    def _structures(lignes):
-        s = lignes[["project_id", "entities_id", "entities_name", "pays_code"]]
-        # Plusieurs identifiants dans une cellule (séparés par ; | ,) : une ligne chacun
-        s = s.assign(entities_id=s["entities_id"].str.split(r"[;|,]")).explode("entities_id")
-        s["entities_id"] = s["entities_id"].map(_texte)
-        return s.drop_duplicates()
-
-    # Dépôt : lignes de candidature si le projet en a, sinon lignes du lauréat
-    avec_cand = set(projets.loc[projets["a_candidature"], "project_id"])
-    depot = _structures(d[d["project_id"].isin(avec_cand) != d["est_laureat"]])
-    signature = _structures(d[d["est_laureat"]])
-    return projets, depot, signature
-
-
-def rattacher_ror(accueil: pd.DataFrame, ref_dir: str = REFERENTIEL_DIR) -> pd.DataFrame:
-    """Ajoute ror et type_identifiant (ror | paysage | inconnu | vide) aux lignes d'accueil."""
-    corresp = charger_correspondance_paysage(ref_dir)
-    p2r = dict(zip(corresp["referentiel_id"], corresp["ror"]))
-    ids = accueil["entities_id"].fillna("")
-    norm = ids.str.strip().str.rstrip("/").str.split("/").str[-1]
-    est_ror = norm.str.lower().str.match(ROR_RE)
-    a = accueil.copy()
-    a["ror"] = norm.str.lower().where(est_ror, ids.map(p2r))
-    a["type_identifiant"] = ["vide" if not i else "ror" if r else "paysage" if i in p2r else "inconnu"
-                             for i, r in zip(ids, est_ror)]
-    return a
+        projets = projets[projets["type_bourse"].isin([t.upper() for t in types_bourse])]
+        garde = set(projets["project_id"])
+        soumis, laureats = soumis[soumis["project_id"].isin(garde)], laureats[laureats["project_id"].isin(garde)]
+    return projets.reset_index(drop=True), soumis, laureats
 
 
 def tutelles_ror(rors, data_dir: str = DATA_DIR, lineage_cuts=LINEAGE_CUTS,
@@ -333,29 +240,33 @@ def _methode(meta: dict) -> list:
     sans_panel = ", ".join(t["code"] for t in meta["types_bourse"] if not t["avec_panel"])
     principaux = ", ".join(meta["types_bourse_defaut"])
     return [
-        "Source : open data de l'enseignement supérieur et de la recherche, jeu « "
-        f"{meta['source']['dataset']} » (candidatures évaluées et projets financés par l'ERC).",
+        "Source : open data de l'enseignement supérieur et de la recherche, participations aux "
+        f"projets Horizon Europe : propositions évaluées (« {meta['source']['soumis']} ») et projets "
+        f"financés (« {meta['source']['laureats']} »), lignes ERC des porteurs (PI).",
         (f"Couverture : appels {a[0]} à {a[-1]} (Horizon Europe). " if a else "Couverture : aucune année. ")
-        + "Les appels Horizon 2020 (2014-2020) ne sont pas inclus : l'open data ne publie pas "
-        "l'établissement d'accueil des candidatures non retenues de cette période.",
+        + "Les appels Horizon 2020 (2014-2020) ne sont pas inclus.",
         (f"Années provisoires : {', '.join(map(str, prov))} ; tous les résultats de ces appels ne "
          "sont pas encore publiés, les candidatures et le taux de succès vont évoluer."
          if prov else "Aucune année provisoire : les résultats de tous les appels couverts sont publiés."),
-        "Candidature : un projet déposé à un appel ERC, comptée dans la structure de dépôt. Lauréat : "
-        "un projet financé, compté dans la structure de signature (règle des statistiques officielles). "
+        "Candidature : un projet évalué, compté dans la structure de dépôt. Lauréat : un projet "
+        "financé, compté dans la structure de signature (règle des statistiques officielles). "
         "Taux de succès : lauréats / candidatures, pour la même entité, la même période et les mêmes "
         "panels ; un porteur qui change d'établissement entre le dépôt et la signature compte une "
         "candidature dans le premier et un lauréat dans le second, si bien que le taux d'une petite "
         "entité peut dépasser 100 %.",
+        "Comptage : en projets (par défaut) ou en porteurs (PI) ; les deux ne diffèrent que pour les "
+        "Synergy Grants, qui ont de 2 à 4 porteurs.",
         f"Types de bourse : calcul par défaut sur {principaux}. "
         "Discipline : panel ERC du projet (mêmes codes que les disciplines de la bibliométrie). "
-        + (f"Les types {sans_panel} n'ont pas de panel, de même que quelques autres candidatures : "
-           if sans_panel else "Les candidatures sans panel ")
-        + "elles ne comptent que pour « toutes disciplines ».",
-        "Établissement : structure de dépôt ou de signature, identifiée par son ROR "
-        "(directement ou via Paysage)"
-        + (" ; une candidature ou un lauréat compte aussi pour les tutelles de cette structure, "
-           "comme les articles"
+        + (f"Les types {sans_panel} n'ont pas de panel, de même que quelques autres projets : "
+           if sans_panel else "Les projets sans panel ")
+        + "ils ne comptent que pour « toutes disciplines ».",
+        "Établissement : structure de dépôt ou de signature et, pour les participations françaises, "
+        "toutes les tutelles des laboratoires (RNSR) où le projet est mené, comme dans scanR : un "
+        "projet hébergé par un organisme dans une unité mixte compte aussi pour les universités et "
+        "écoles tutelles de l'unité. Les structures fusionnées ou renommées sont remplacées par "
+        "l'établissement actuel (successeurs Paysage)"
+        + (" ; un projet compte aussi pour les tutelles de ces établissements, comme les articles"
            if meta["parametres"]["rattachement_lignee"] else "") + ".",
         "Pays : pays de la structure de dépôt (candidatures) ou de signature (lauréats), pas la "
         "nationalité du porteur.",
@@ -364,84 +275,81 @@ def _methode(meta: dict) -> list:
     ]
 
 
-def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir: str = DATA_DIR,
+def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir: str = DATA_DIR,
                 ref_dir: str = REFERENTIEL_DIR, classement: str = CLASSEMENT,
-                stage_laureat: str = ERC_STAGE_LAUREAT, types_bourse=ERC_TYPES_BOURSE,
+                thema: str = ERC_THEMA, role_pi: str = ERC_ROLE_PI, types_bourse=ERC_TYPES_BOURSE,
                 rattachement_lignee: bool = ERC_RATTACHEMENT_LIGNEE,
                 pays_comparaison=ERC_PAYS_COMPARAISON, pays_comparaison_n: int = ERC_PAYS_COMPARAISON_N,
                 types_principaux=ERC_TYPES_PRINCIPAUX, annees_provisoires_imposees=ERC_ANNEES_PROVISOIRES,
                 seuil_annee_complete: float = ERC_SEUIL_ANNEE_COMPLETE,
                 telecharger: bool = True, verbose: bool = True) -> dict:
     """Calcule les effectifs ERC et écrit les sorties dans erc_dir (voir l'en-tête).
-    Renvoie un résumé (nombres de projets, taux de rattachement, fichiers)."""
+    telecharger=False : relit les copies de horizon_dir. Renvoie un résumé."""
     out = Path(erc_dir)
     out.mkdir(parents=True, exist_ok=True)
-    brut = lire_erc(dataset, erc_dir, telecharger)
-    stages = brut["stage"].str.strip().str.lower().value_counts().to_dict()
-    roles = brut["role"].str.strip().str.lower().value_counts().to_dict() if "role" in brut else {}
-    projets, depot, signature = preparer_candidatures(brut, stage_laureat, types_bourse)
-    depot = rattacher_ror(depot, ref_dir)
-    signature = rattacher_ror(signature, ref_dir)
-    toutes = pd.concat([depot, signature], ignore_index=True)
+    part = {j: participations(lire_horizon(j, horizon_dir, telecharger), j) for j in ("soumis", "laureats")}
+    erc = {j: p[(p["thema_code"] == thema.upper()) | (p["action_id"] == thema.upper())] for j, p in part.items()}
+    valeurs = {j: {c: e[c].fillna("(vide)").value_counts().to_dict()
+                   for c in ["stage", "erc_role", "destination_code"]} for j, e in erc.items()}
+    soumis, laureats = (lignes_pi(erc[j], thema, role_pi) for j in ("soumis", "laureats"))
+    projets, soumis, laureats = preparer_projets(soumis, laureats, types_bourse)
+    soumis, liens_s = rattacher_structures(soumis, ref_dir)
+    laureats, liens_l = rattacher_structures(laureats, ref_dir)
+    toutes = pd.concat([soumis, laureats], ignore_index=True)
+    # lien (participation -> établissement) avec les attributs de la participation
+    attrs = ["ligne", "project_id", "participation_id", "entities_name", "pays_code"]
+    liens = {"d": liens_s.merge(soumis[attrs], on="ligne"), "s": liens_l.merge(laureats[attrs], on="ligne")}
+    tous_liens = pd.concat(liens.values(), ignore_index=True)
 
-    # Structures sans ROR (dépôt ou signature) : à corriger dans Paysage
-    nr = toutes[toutes["ror"].isna()]
+    # Participations sans aucun établissement (ni structure, ni tutelle) : à corriger
+    nr = pd.concat([soumis[~soumis["ligne"].isin(liens_s["ligne"])],
+                    laureats[~laureats["ligne"].isin(liens_l["ligne"])]], ignore_index=True)
     non_rattaches = (nr.groupby(["entities_id", "type_identifiant"], dropna=False)
                      .agg(nom=("entities_name", _plus_frequent), pays_code=("pays_code", _plus_frequent),
-                          nb_candidatures=("project_id", "nunique"))
-                     .reset_index().sort_values("nb_candidatures", ascending=False))
+                          nb_projets=("project_id", "nunique"))
+                     .reset_index().sort_values("nb_projets", ascending=False))
     non_rattaches.to_csv(out / "erc_non_rattaches.csv", sep=";", index=False, encoding="utf-8")
 
     # Établissements : ROR de la structure, puis tutelles ; pays : pays de la structure
-    rors = sorted(set(toutes["ror"].dropna()))
-    if rattachement_lignee:
-        lien = tutelles_ror(rors, data_dir)
-    else:
-        lien = pd.DataFrame({"ror": rors, "entite_id": rors})
+    rors = sorted(set(tous_liens["ror"]))
+    lien = (tutelles_ror(rors, data_dir) if rattachement_lignee
+            else pd.DataFrame({"ror": rors, "entite_id": rors}))
 
-    def _etab(s):
-        return (s.dropna(subset=["ror"])[["project_id", "ror"]].drop_duplicates()
-                .merge(lien, on="ror")[["project_id", "entite_id"]].drop_duplicates())
-
-    def _pays(s):
-        return (s.dropna(subset=["pays_code"])
-                .assign(entite_id=lambda x: x["pays_code"].where(~x["pays_code"].isin(PAYS_FR), "FR"))
-                [["project_id", "entite_id"]].drop_duplicates())
+    def _long(d, src):
+        cols = ["project_id", "participation_id"]
+        li = liens[src]
+        monde = d[cols].assign(entite_type="monde", entite_id=MONDE_ID)
+        pays = (d.dropna(subset=["pays_code"])
+                .assign(entite_type="pays",
+                        entite_id=lambda x: x["pays_code"].where(~x["pays_code"].isin(PAYS_FR), "FR"))
+                [cols + ["entite_type", "entite_id"]])
+        etab = (li[cols + ["ror"]].merge(lien, on="ror")
+                .assign(entite_type="etablissement")[cols + ["entite_type", "entite_id"]])
+        return pd.concat([monde, pays, etab], ignore_index=True).drop_duplicates().assign(src=src)
 
     con = duckdb.connect()
     con.register("projets", projets)
-    for nom, tab in [("dep_etab", _etab(depot)), ("sig_etab", _etab(signature)),
-                     ("dep_pays", _pays(depot)), ("sig_pays", _pays(signature))]:
-        con.register(nom, tab)
-    # Une ligne par (projet, entité) : déposé dans l'entité (d), signé dans l'entité (s).
-    # nb_laureats = nb_candidatures_retenues + arrivees - departs par construction.
-    agreg = """count(*) FILTER (WHERE d)::BIGINT AS nb_candidatures,
+    con.register("lignes", pd.concat([_long(soumis, "d"), _long(laureats, "s")], ignore_index=True))
+    # Une ligne par (entité, projet) : déposé dans l'entité (d), signé dans l'entité (s),
+    # et nombre de porteurs de chaque côté.
+    eff = con.execute(f"""
+        WITH par_projet AS (
+            SELECT entite_type, entite_id, project_id,
+                   bool_or(src = 'd') AS d, bool_or(src = 's') AS s,
+                   count(DISTINCT participation_id) FILTER (WHERE src = 'd') AS pi_d,
+                   count(DISTINCT participation_id) FILTER (WHERE src = 's') AS pi_s
+            FROM lignes GROUP BY ALL)
+        SELECT c.entite_type, c.entite_id, p.annee_appel, p.discipline_code, p.type_bourse,
+               count(*) FILTER (WHERE d)::BIGINT AS nb_candidatures,
                count(*) FILTER (WHERE d AND p.laureat)::BIGINT AS nb_candidatures_retenues,
                count(*) FILTER (WHERE s)::BIGINT AS nb_laureats,
                count(*) FILTER (WHERE s AND NOT d)::BIGINT AS nb_laureats_arrivees,
-               count(*) FILTER (WHERE d AND p.laureat AND NOT s)::BIGINT AS nb_laureats_departs"""
-
-    def _niveau(type_, dep, sig):
-        return f"""
-        SELECT '{type_}' AS entite_type, entite_id, p.annee_appel, p.discipline_code, p.type_bourse,
-               {agreg}
-        FROM (SELECT coalesce(a.project_id, b.project_id) AS project_id,
-                     coalesce(a.entite_id, b.entite_id) AS entite_id,
-                     a.project_id IS NOT NULL AS d, b.project_id IS NOT NULL AS s
-              FROM {dep} a FULL JOIN (SELECT x.* FROM {sig} x JOIN projets q USING (project_id)
-                                      WHERE q.laureat) b USING (project_id, entite_id)) c
-        JOIN projets p USING (project_id) GROUP BY ALL"""
-
-    eff = con.execute(f"""
-        SELECT 'monde' AS entite_type, '{MONDE_ID}' AS entite_id, p.annee_appel, p.discipline_code,
-               p.type_bourse, count(*)::BIGINT AS nb_candidatures,
-               count(*) FILTER (WHERE p.laureat)::BIGINT AS nb_candidatures_retenues,
-               count(*) FILTER (WHERE p.laureat)::BIGINT AS nb_laureats,
-               0::BIGINT AS nb_laureats_arrivees, 0::BIGINT AS nb_laureats_departs
-        FROM projets p GROUP BY ALL
-        UNION ALL {_niveau('pays', 'dep_pays', 'sig_pays')}
-        UNION ALL {_niveau('etablissement', 'dep_etab', 'sig_etab')}
-        ORDER BY 1, 2, 3, 4, 5
+               count(*) FILTER (WHERE d AND p.laureat AND NOT s)::BIGINT AS nb_laureats_departs,
+               sum(pi_d)::BIGINT AS nb_pi_candidats,
+               sum(pi_s)::BIGINT AS nb_pi_laureats
+        FROM par_projet c JOIN projets p USING (project_id)
+        GROUP BY 1, 2, 3, 4, 5
+        ORDER BY CASE entite_type WHEN 'monde' THEN 0 WHEN 'pays' THEN 1 ELSE 2 END, 2, 3, 4, 5
     """).df()
     con.execute(f"COPY (SELECT * FROM eff) TO '{out / 'erc_effectifs.parquet'}' (FORMAT parquet)")
 
@@ -451,21 +359,17 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
     nb_lignes_ecart = int((ecart != 0).sum())
 
     # Mobilité des lauréats entre dépôt et signature (structure : ROR, sinon identifiant source)
-    def _ensembles(s, col):
-        return s.dropna(subset=[col]).groupby("project_id")[col].agg(frozenset)
-    laur = projets.loc[projets["laureat"], "project_id"]
-    cle = lambda s: s.assign(structure=s["ror"].fillna(s["entities_id"]),
-                             pays=s["pays_code"].where(~s["pays_code"].isin(PAYS_FR), "FR"))
-    dep_c, sig_c = cle(depot), cle(signature)
-    mob = pd.DataFrame({"project_id": laur})
+    def _ensembles(d, col):
+        return d.dropna(subset=[col]).groupby("project_id")[col].agg(frozenset)
+    cle = lambda d: d.assign(structure=d["ror"].fillna(d["entities_id"]),
+                             pays=d["pays_code"].where(~d["pays_code"].isin(PAYS_FR), "FR"))
+    dep_c, sig_c = cle(soumis), cle(laureats)
+    mob = pd.DataFrame({"project_id": projets.loc[projets["laureat"] & projets["soumis"], "project_id"]})
+    nb_changements = {}
     for col in ["structure", "pays"]:
-        mob[f"dep_{col}"] = mob["project_id"].map(_ensembles(dep_c, col))
-        mob[f"sig_{col}"] = mob["project_id"].map(_ensembles(sig_c, col))
-    nb_changements = {c: int((mob[f"dep_{c}"].notna() & mob[f"sig_{c}"].notna()
-                              & (mob[f"dep_{c}"] != mob[f"sig_{c}"])).sum())
-                      for c in ["structure", "pays"]}
-    sans_eval = projets["laureat"] & ~projets["a_candidature"]
-    sig_sans_struct = int((~laur.isin(set(sig_c.dropna(subset=["structure"])["project_id"]))).sum())
+        dep, sig = mob["project_id"].map(_ensembles(dep_c, col)), mob["project_id"].map(_ensembles(sig_c, col))
+        nb_changements[col] = int((dep.notna() & sig.notna() & (dep != sig)).sum())
+    laur_sans_cand = projets["laureat"] & ~projets["soumis"]
 
     # Entités présentes (complètent la collection « entites »)
     cols_tot = ["nb_candidatures", "nb_candidatures_retenues", "nb_laureats"]
@@ -474,11 +378,12 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
     # (les sommes sur années et panels sont exactes : un projet n'a qu'une année et un panel)
     corresp = charger_correspondance_paysage(ref_dir)
     noms_ref = corresp.drop_duplicates("ror").set_index("ror")["nom"].to_dict()
-    infos_acc = toutes.dropna(subset=["ror"])
-    noms_erc = infos_acc.groupby("ror")["entities_name"].agg(_plus_frequent).to_dict()
-    pays_erc = infos_acc.groupby("ror")["pays_code"].agg(_plus_frequent).to_dict()
+    infos = tous_liens
+    noms_erc = (infos[infos["origine"] == "structure"].groupby("ror")["entities_name"]
+                .agg(_plus_frequent).to_dict())
+    pays_erc = infos.groupby("ror")["pays_code"].agg(_plus_frequent).to_dict()
     # tutelle sans ligne directe : pays le plus fréquent de ses structures
-    pays_tut = (infos_acc[["project_id", "ror"]].drop_duplicates().merge(lien, on="ror")
+    pays_tut = (infos[["project_id", "ror"]].drop_duplicates().merge(lien, on="ror")
                 .assign(pays=lambda x: x["ror"].map(pays_erc))
                 .groupby("entite_id")["pays"].agg(_plus_frequent).to_dict())
     etab = tot["entite_type"] == "etablissement"
@@ -506,27 +411,37 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
     panels = sorted(set(projets["discipline_code"].dropna()))
     hors_biblio = []
     if f_disc.exists():
-        connus = {r[0] for r in duckdb.sql(f"SELECT DISTINCT discipline_code "
-                                           f"FROM read_parquet('{f_disc}')").fetchall()}
-        hors_biblio = [p for p in panels if p not in connus]
+        disc_biblio = {r[0] for r in duckdb.sql(f"SELECT DISTINCT discipline_code "
+                                                f"FROM read_parquet('{f_disc}')").fetchall()}
+        hors_biblio = [p for p in panels if p not in disc_biblio]
 
-    nb_acc = depot["project_id"].nunique()
-    proj_rattaches = depot.dropna(subset=["ror"])["project_id"].nunique()
+    nb_dep = soumis["project_id"].nunique()
+    dep_rattaches = liens["d"]["project_id"].nunique()
+    nb_sig = laureats["project_id"].nunique()
+    sig_rattaches = liens["s"]["project_id"].nunique()
+    origines = tous_liens["origine"].value_counts().to_dict()
+    nb_successeurs = int(toutes["successeur"].sum())
+    nb_avec_rnsr = int(toutes["rnsr"].notna().sum())
+    nb_avec_tutelles = int((toutes["nb_tutelles_rnsr"] > 0).sum())
     annees = sorted(int(a) for a in projets["annee_appel"].dropna().unique())
     prov, motifs_prov = annees_provisoires(eff, types_principaux, seuil_annee_complete,
                                            annees_provisoires_imposees)
-    types_meta = types_bourse_meta(projets, types_principaux)
+    types_meta = types_bourse_meta(eff, projets, types_principaux)
+    monde = eff[eff["entite_type"] == "monde"][EFFECTIFS].sum()
     meta = {
-        "source": {"dataset": dataset, "date_extraction": dt.date.today().isoformat()},
+        "source": {"soumis": HORIZON_ODS_SOUMIS, "laureats": HORIZON_ODS_LAUREATS,
+                   "date_extraction": dt.date.today().isoformat()},
         "date_calcul": dt.date.today().isoformat(),
         "annees": annees,
         "annees_provisoires": prov,
         "annees_provisoires_motifs": {str(a): m for a, m in motifs_prov.items()},
         "types_bourse": types_meta,
         "types_bourse_defaut": [t for t in types_principaux if t in {x["code"] for x in types_meta}],
+        "modes_comptage": {"projets": ["nb_candidatures", "nb_laureats"],
+                           "pi": ["nb_pi_candidats", "nb_pi_laureats"]},
         "panels": panels,
         "pays_compares": compares,
-        "parametres": {"stage_laureat": stage_laureat, "types_bourse": list(types_bourse or []),
+        "parametres": {"thema": thema, "role_pi": role_pi, "types_bourse": list(types_bourse or []),
                        "rattachement_lignee": bool(rattachement_lignee),
                        "pays_comparaison": list(pays_comparaison or []),
                        "pays_comparaison_n": pays_comparaison_n,
@@ -535,59 +450,66 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
                                                        else list(annees_provisoires_imposees)),
                        "seuil_annee_complete": seuil_annee_complete},
         "controles": {
-            "nb_lignes": int(len(brut)), "valeurs_stage": stages, "valeurs_role": roles,
-            "nb_candidatures": int(len(projets)), "nb_laureats": int(projets["laureat"].sum()),
-            "nb_candidatures_rattachees_etablissement": int(proj_rattaches),
-            "part_rattachees_etablissement": round(proj_rattaches / nb_acc, 4) if nb_acc else None,
-            "identifiants": depot["type_identifiant"].value_counts().to_dict(),
-            "identifiants_signature": signature["type_identifiant"].value_counts().to_dict(),
+            "nb_lignes": {j: int(len(p)) for j, p in part.items()},
+            "nb_lignes_erc": {j: int(len(e)) for j, e in erc.items()},
+            "valeurs": valeurs,
+            "nb_candidatures": int(monde["nb_candidatures"]), "nb_laureats": int(monde["nb_laureats"]),
+            "nb_pi_candidats": int(monde["nb_pi_candidats"]), "nb_pi_laureats": int(monde["nb_pi_laureats"]),
+            "nb_candidatures_rattachees_etablissement": int(dep_rattaches),
+            "part_rattachees_etablissement": round(dep_rattaches / nb_dep, 4) if nb_dep else None,
+            "part_laureats_rattaches_etablissement": round(sig_rattaches / nb_sig, 4) if nb_sig else None,
+            "identifiants": soumis["type_identifiant"].value_counts().to_dict(),
+            "identifiants_signature": laureats["type_identifiant"].value_counts().to_dict(),
+            "liens_etablissement": origines,
+            "nb_participations_successeur": nb_successeurs,
+            "nb_participations_avec_rnsr": nb_avec_rnsr,
+            "nb_participations_avec_tutelles_rnsr": nb_avec_tutelles,
             "nb_laureats_changement_etablissement": nb_changements["structure"],
             "nb_laureats_changement_pays": nb_changements["pays"],
-            "nb_laureats_sans_ligne_evaluated": int(sans_eval.sum()),
-            "nb_laureats_signature_sans_structure": sig_sans_struct,
+            "nb_laureats_sans_candidature": int(laur_sans_cand.sum()),
             "nb_lignes_ecart_controle_laureats": nb_lignes_ecart,
             "nb_structures_non_rattachees": int(len(non_rattaches)),
             "panels_hors_bibliometrie": hors_biblio,
         },
     }
     meta["methode"] = _methode(meta)
-    meta["sources"] = (f"Source : open data ESR, jeu {dataset} (extrait le "
-                       f"{meta['source']['date_extraction']}) ; correspondance Paysage -> ROR.")
+    meta["sources"] = (f"Source : open data ESR, jeux {HORIZON_ODS_SOUMIS} et {HORIZON_ODS_LAUREATS} "
+                       f"(extraits le {meta['source']['date_extraction']}) ; correspondance Paysage -> ROR.")
     (out / "erc_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
 
     if verbose:
         c = meta["controles"]
-        print(f"ERC : {c['nb_lignes']:,} lignes, {c['nb_candidatures']:,} candidatures, "
-              f"{c['nb_laureats']:,} lauréats ({c['nb_laureats'] / max(c['nb_candidatures'], 1):.1%})")
-        print(f"  stage : {stages}")
-        print(f"  identifiants de dépôt : {c['identifiants']} ; de signature : "
-              f"{c['identifiants_signature']}")
+        print(f"ERC : lignes {c['nb_lignes_erc']} ; {c['nb_candidatures']:,} candidatures "
+              f"({c['nb_pi_candidats']:,} PI), {c['nb_laureats']:,} lauréats ({c['nb_pi_laureats']:,} PI), "
+              f"taux {c['nb_laureats'] / max(c['nb_candidatures'], 1):.1%}")
+        for j, v in valeurs.items():
+            print(f"  {j} : {v}")
+        print(f"  identifiants de dépôt : {c['identifiants']} ; de signature : {c['identifiants_signature']}")
+        print(f"  liens vers un établissement : {origines} ; structures remplacées par leur successeur "
+              f"Paysage : {nb_successeurs:,} ; participations avec RNSR : {nb_avec_rnsr:,} "
+              f"(dont {nb_avec_tutelles:,} avec des tutelles trouvées)")
+        print(f"  rattachés à un établissement (ROR) : candidatures {dep_rattaches:,} / {nb_dep:,} "
+              f"({c['part_rattachees_etablissement'] or 0:.1%}), lauréats {sig_rattaches:,} / {nb_sig:,} "
+              f"({c['part_laureats_rattaches_etablissement'] or 0:.1%})")
         print(f"  lauréats ayant changé d'établissement entre dépôt et signature : "
               f"{c['nb_laureats_changement_etablissement']:,}, de pays : {c['nb_laureats_changement_pays']:,}")
-        if c["nb_laureats_sans_ligne_evaluated"]:
-            print(f"  ATTENTION : {c['nb_laureats_sans_ligne_evaluated']:,} lauréats sans ligne de "
-                  "candidature (evaluated) : comptés au dépôt dans leur structure de signature")
-        if c["nb_laureats_signature_sans_structure"]:
-            print(f"  ATTENTION : {c['nb_laureats_signature_sans_structure']:,} lauréats sans structure "
-                  "de signature renseignée : absents de nb_laureats des établissements et des pays")
+        if c["nb_laureats_sans_candidature"]:
+            print(f"  ATTENTION : {c['nb_laureats_sans_candidature']:,} projets lauréats absents du jeu des "
+                  f"soumis (project_id) : comptés comme arrivées, y compris pour MONDE")
         if nb_lignes_ecart:
             print(f"  ATTENTION : {nb_lignes_ecart} lignes où nb_laureats <> nb_candidatures_retenues "
                   "+ nb_laureats_arrivees - nb_laureats_departs")
-        print(f"  candidatures rattachées à un établissement (ROR) : {proj_rattaches:,} / {nb_acc:,} "
-              f"({c['part_rattachees_etablissement'] or 0:.1%})")
         fr_nr = non_rattaches[non_rattaches["pays_code"].isin(PAYS_FR)]
         if len(fr_nr):
-            print(f"  structures françaises sans ROR : {len(fr_nr)} ({int(fr_nr['nb_candidatures'].sum())} "
-                  f"candidatures), ex. " + " ; ".join(fr_nr["nom"].head(5).astype(str)))
+            print(f"  structures françaises sans ROR : {len(fr_nr)} ({int(fr_nr['nb_projets'].sum())} "
+                  f"projets), ex. " + " ; ".join(fr_nr["nom"].head(5).astype(str)))
         if hors_biblio:
             print(f"  panels absents des disciplines de la bibliométrie : {hors_biblio}")
         print("  types de bourse : " + " ; ".join(
-            f"{t['code']} {t['nb_candidatures']} ({t['nb_candidatures_sans_panel']} sans panel)"
-            for t in types_meta))
+            f"{t['code']} {t['nb_candidatures']} cand. / {t['nb_laureats']} laur. "
+            f"({t['nb_candidatures_sans_panel']} sans panel)" for t in types_meta))
         print(f"  années provisoires : {motifs_prov or 'aucune'}")
-        fr = eff[eff["entite_id"] == "FR"].groupby("annee_appel")[
-            ["nb_candidatures", "nb_candidatures_retenues", "nb_laureats", "nb_laureats_arrivees",
-             "nb_laureats_departs"]].sum()
+        fr = eff[eff["entite_id"] == "FR"].groupby("annee_appel")[EFFECTIFS].sum()
         fr["taux_succes"] = (fr["nb_laureats"] / fr["nb_candidatures"]).round(3)
         print("  France par année d'appel :\n" + fr.to_string())
         print(f"  pays comparés : {', '.join(compares)}")

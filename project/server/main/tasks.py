@@ -24,6 +24,8 @@ def create_task_compute(args: dict) -> None:
 # 0. Référentiel des établissements français (moins d'une minute)
 #    Télécharge : paysage_dump.jsonl.gz (scanR, REFERENTIEL_SOURCE = "paysage")
 #                 ou organizations-v2.jsonl.gz (REFERENTIEL_SOURCE = "scanr")
+#    Écrit aussi paysage_ror.parquet et paysage_successeurs.parquet (structures
+#            fusionnées -> structure actuelle), utilisés par l'étape ERC
 #    Écrit : /data/referentiel/paysage.parquet (une ligne par structure avec un ROR :
 #            nom d'usage, sigle, catégorie, ville, dans_perimetre)
 #    Ne change aucun calcul : sert au périmètre du sélecteur et aux noms affichés.
@@ -104,15 +106,20 @@ def create_task_compute(args: dict) -> None:
     compute_top10(perimetre="revues_sjr")
 
 # ---------------------------------------------------------------------------
-# 5 bis. Bourses ERC (une à deux minutes) : AVANT l'étape 6, qui calcule aussi
-#    les articles des pays de la comparaison ERC (intensité de candidature)
-#    Télécharge : le jeu fr-esr-erc-persons de l'open data ESR (ODS_API_KEY en
-#                 variable d'environnement si le jeu n'est pas public)
-#    Lit : /data/referentiel/paysage_ror.parquet (construit au besoin),
-#          inst_lineage.parquet et institutions.parquet (rattachement aux tutelles)
-#    Écrit dans erc/ : erc_persons.parquet (copie brute), erc_effectifs.parquet,
-#          erc_entites.parquet, erc_meta.json, erc_non_rattaches.csv
-#    Affiche : part des candidatures rattachées à un ROR, la France par année.
+# 5 bis. Bourses ERC (quelques minutes) : AVANT l'étape 6, qui calcule aussi
+#    les articles des pays de la comparaison ERC
+#    Télécharge : les participations Horizon Europe de l'open data ESR, propositions
+#                 évaluées (fr-esr-horizon-projets-soumis-candidats, non public :
+#                 ODS_API_KEY en variable d'environnement) et projets lauréats
+#                 (fr-esr-horizon-projects-entities) ; copies dans horizon/
+#                 (compute_erc(telecharger=False) les relit)
+#    Lit : /data/referentiel/ (construits au besoin) : paysage_ror.parquet et
+#          paysage_successeurs.parquet (dump Paysage), rnsr_tutelles.parquet (organisations
+#          scanR : tutelles des laboratoires RNSR) ; inst_lineage.parquet et
+#          institutions.parquet (rattachement aux tutelles OpenAlex)
+#    Écrit dans erc/ : erc_effectifs.parquet, erc_entites.parquet, erc_meta.json,
+#          erc_non_rattaches.csv
+#    Affiche : rattachement à un ROR, mobilité des lauréats, la France par année.
 # ---------------------------------------------------------------------------
     compute_erc()
 

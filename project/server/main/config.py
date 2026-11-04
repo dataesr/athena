@@ -192,14 +192,24 @@ DASHBOARD_ORDRE_SELECTEUR = "taille"   # ordre quand la recherche est vide :
 ODS_BASE_URL = "https://data.enseignementsup-recherche.gouv.fr"
 ODS_API_KEY = os.getenv("ODS_API_KEY")   # facultative (jeux publics) ; jamais en dur ici
 
+# --- Horizon Europe (horizon.py) --------------------------------------------------
+# Participations aux projets Horizon Europe, deux jeux de même structure (une ligne par
+# participation : projet x structure x rôle) : propositions évaluées et projets lauréats.
+# Copie brute dans <DATA_DIR>/horizon/ ; sert aux ERC (erc.py) et à d'autres programmes.
+HORIZON_ODS_SOUMIS = "fr-esr-horizon-projets-soumis-candidats"   # stage = evaluated
+HORIZON_ODS_LAUREATS = "fr-esr-horizon-projects-entities"       # stage = successful
+HORIZON_DIR = f"{DATA_DIR}/horizon"
+HORIZON_COLONNES_EXCLUES = ("abstract",)   # textes longs non conservés dans la copie
+
 # --- Bourses ERC (erc.py) ---------------------------------------------------------
 # Candidatures et lauréats ERC par entité (établissement, pays, monde), année d'appel,
 # panel (= discipline_code de la bibliométrie) et type de bourse (STG, COG, ADG, SYG, POC).
-# Sorties dans <DATA_DIR>/erc/ : la lignée OpenAlex du snapshot sert au rattachement.
-ERC_ODS_DATASET = "fr-esr-erc-persons"
+# Lignes ERC des jeux Horizon Europe (thema_code = ERC_THEMA), porteurs seulement
+# (erc_role = ERC_ROLE_PI). Sorties dans <DATA_DIR>/erc/ : la lignée OpenAlex du snapshot
+# sert au rattachement.
 ERC_DIR = f"{DATA_DIR}/erc"
-ERC_STAGE_LAUREAT = "successful"   # valeur de « stage » d'un projet financé ; les autres
-                                   # valeurs (evaluated...) sont des candidatures
+ERC_THEMA = "ERC"
+ERC_ROLE_PI = "PI"
 ERC_TYPES_BOURSE = None            # ex. ("STG", "COG", "ADG", "SYG") ; None = tous
 ERC_RATTACHEMENT_LIGNEE = True     # une candidature compte aussi pour les tutelles de
                                    # l'établissement d'accueil (lignée OpenAlex, comme les articles)
@@ -209,12 +219,12 @@ ERC_PAYS_COMPARAISON_N = 25        # les N pays qui déposent le plus de candida
                                    # effectifs bibliométriques de ces pays : lancer compute_erc()
                                    # AVANT compute_indicators() (voir pipeline.py).
 # Types de bourse de référence (calcul par défaut du tableau, pays comparés, années provisoires).
-# Les autres types restent dans les données (SYG, POC, PERA, SJI, ERC-OTHER).
+# Les autres types restent dans les données (SYG, POC...).
 ERC_TYPES_PRINCIPAUX = ("STG", "COG", "ADG")
 # Années d'appel provisoires (résultats pas encore tous publiés) :
 #   liste imposée, ex. [2025] ; None = détection automatique : une année est provisoire si
 #   - l'un des ERC_TYPES_PRINCIPAUX, présent les autres années, n'y a aucune candidature
-#     ou aucun lauréat, ou si
+#     ou aucun lauréat (projets), ou si
 #   - ses candidatures (types principaux, MONDE) sont inférieures à ERC_SEUIL_ANNEE_COMPLETE
 #     fois la médiane des autres années.
 ERC_ANNEES_PROVISOIRES = None
