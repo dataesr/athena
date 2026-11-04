@@ -461,8 +461,9 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
     for col in ["structure", "pays"]:
         mob[f"dep_{col}"] = mob["project_id"].map(_ensembles(dep_c, col))
         mob[f"sig_{col}"] = mob["project_id"].map(_ensembles(sig_c, col))
-    connus = lambda c: mob[f"dep_{c}"].notna() & mob[f"sig_{c}"].notna()
-    change = lambda c: connus(c) & (mob[f"dep_{c}"] != mob[f"sig_{c}"])
+    nb_changements = {c: int((mob[f"dep_{c}"].notna() & mob[f"sig_{c}"].notna()
+                              & (mob[f"dep_{c}"] != mob[f"sig_{c}"])).sum())
+                      for c in ["structure", "pays"]}
     sans_eval = projets["laureat"] & ~projets["a_candidature"]
     sig_sans_struct = int((~laur.isin(set(sig_c.dropna(subset=["structure"])["project_id"]))).sum())
 
@@ -540,8 +541,8 @@ def compute_erc(dataset: str = ERC_ODS_DATASET, erc_dir: str = ERC_DIR, data_dir
             "part_rattachees_etablissement": round(proj_rattaches / nb_acc, 4) if nb_acc else None,
             "identifiants": depot["type_identifiant"].value_counts().to_dict(),
             "identifiants_signature": signature["type_identifiant"].value_counts().to_dict(),
-            "nb_laureats_changement_etablissement": int(change("structure").sum()),
-            "nb_laureats_changement_pays": int(change("pays").sum()),
+            "nb_laureats_changement_etablissement": nb_changements["structure"],
+            "nb_laureats_changement_pays": nb_changements["pays"],
             "nb_laureats_sans_ligne_evaluated": int(sans_eval.sum()),
             "nb_laureats_signature_sans_structure": sig_sans_struct,
             "nb_lignes_ecart_controle_laureats": nb_lignes_ecart,
