@@ -292,6 +292,13 @@ PRIX_GROUPES = [
      "porteurs": ["IPU6Y"]},
     {"code": "MEDAILLES_CNRS", "libelle": "Médailles du CNRS", "categories": ["Médaille du CNRS"]},
 ]
+# Discipline (panel ERC) des lauréats, par leurs publications OpenAlex (prix_disciplines.py) :
+# auteur retrouvé par ORCID, à défaut par nom + établissement ; topics -> panels par la table
+# de l'étape 3. L'extraction relit les works du snapshot (long, comme l'étape 1).
+PRIX_PUB_ANNEE_MIN = 1990          # publications lues (lauréats anciens : années 1990-2000)
+PRIX_DISC_FENETRE = 10             # années de publications jusqu'au prix (année du prix comprise)
+PRIX_DISC_MIN_PUBLICATIONS = 3     # moins de publications dans la fenêtre : toutes celles lues
+PRIX_DISC_NOMS = True              # sans ORCID : appariement par nom + établissement du lauréat
 
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)

@@ -25,6 +25,8 @@ CONTRAT_DONNEES.md. Résumé :
                            a été lancé)
   prix_catalogue           un document par prix : libellés, catégories, porteurs, groupes
   prix_laureats            un document par lauréat : identité, prix, année, établissements
+                           (+ discipline si prix_disciplines.compute_prix_disciplines() a été lancé)
+  prix_effectifs_disciplines  lauréats par entité x année x prix x discipline (idem)
   prix_meta                un document : source, années, groupes de prix, textes de méthode
 
 1. publish()          écrit <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz
@@ -59,7 +61,8 @@ from .entites import construire_entites
 
 COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copublications",
                "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta", "erc_effectifs", "erc_meta",
-               "prix_effectifs", "prix_catalogue", "prix_laureats", "prix_meta"]
+               "prix_effectifs", "prix_catalogue", "prix_laureats", "prix_meta",
+               "prix_effectifs_disciplines"]
 
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
 INDEX = {
@@ -84,6 +87,8 @@ INDEX = {
     "prix_laureats": [[("entites", 1), ("prix_id", 1), ("annee", 1)], [("prix_id", 1), ("annee", 1)],
                       [("laureat_id", 1)]],
     "prix_meta": [],
+    "prix_effectifs_disciplines": [[("entite_id", 1), ("annee", 1), ("prix_id", 1), ("discipline_code", 1)],
+                                   [("prix_id", 1), ("entite_type", 1), ("discipline_code", 1)]],
 }
 
 
@@ -222,6 +227,27 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
             if (prix / f"{nom}.parquet").exists():
                 tables[nom] = sql(f"SELECT * FROM read_parquet('{prix}/{nom}.parquet')")
         tables["prix_meta"] = _json(prix / "prix_meta.json")
+        # Disciplines des lauréats (facultatif : prix_disciplines.compute_prix_disciplines())
+        f_ld = prix / "prix_laureats_disciplines.parquet"
+        if f_ld.exists():
+            ld = sql(f"""SELECT laureat_id, discipline_code, domaine_code, disciplines, methode_discipline,
+                                  nb_publications_discipline FROM read_parquet('{f_ld}')""")
+            if "prix_laureats" in tables:
+                avant = len(tables["prix_laureats"])
+                tables["prix_laureats"] = tables["prix_laureats"].merge(ld, on="laureat_id", how="left")
+                manquants = int(tables["prix_laureats"]["methode_discipline"].isna().sum())
+                if manquants:
+                    print(f"ATTENTION : {manquants:,} / {avant:,} lauréats sans discipline calculée -> "
+                          f"relancer compute_prix_disciplines() après compute_prix()")
+            if (prix / "prix_effectifs_disciplines.parquet").exists():
+                tables["prix_effectifs_disciplines"] = sql(
+                    f"SELECT * FROM read_parquet('{prix}/prix_effectifs_disciplines.parquet')")
+            dm = _json(prix / "prix_disciplines_meta.json")
+            if dm:
+                tables["prix_meta"]["disciplines"] = {k: v for k, v in dm.items() if k != "methode"}
+                tables["prix_meta"]["methode"] = list(tables["prix_meta"].get("methode") or []) + dm["methode"]
+        elif verbose:
+            print(f"{f_ld} absent : prix sans discipline (lancer compute_prix_disciplines())")
     elif verbose:
         print(f"{prix_dir}/prix_effectifs.parquet absent : prix non publiés (lancer compute_prix())")
     return tables

@@ -2,6 +2,7 @@ from project.server.main.copublications import compute_copublications
 from project.server.main.disciplines import build_disciplines
 from project.server.main.erc import compute_erc
 from project.server.main.prix import compute_prix
+from project.server.main.prix_disciplines import compute_prix_disciplines, extraire_publications_laureats
 from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
 from project.server.main.indicators import compute_indicators
@@ -140,6 +141,17 @@ def create_task_compute(args: dict) -> None:
     compute_prix()
 
 # ---------------------------------------------------------------------------
+# 5 quater. Discipline (panel ERC) des lauréats de prix, par leurs publications
+#    Lit sur S3 : les works du snapshot (auteurs, topic, année ; de l'ordre de l'étape 2,
+#                 reprise possible ; seuls de nouveaux lauréats déclenchent une relecture)
+#    Lit : prix/prix_personnes.parquet, disciplines/, inst_lineage.parquet
+#    Écrit dans prix/ : publications/*.parquet, prix_laureats_disciplines.parquet,
+#          prix_effectifs_disciplines.parquet, prix_disciplines_meta.json
+# ---------------------------------------------------------------------------
+    extraire_publications_laureats()
+    compute_prix_disciplines()
+
+# ---------------------------------------------------------------------------
 # 6. Effectifs : monde, 25 pays (+ pays de la comparaison ERC), établissements
 #    français et 300 étrangers (15 à 45 min)
 #    Lit : top10/, works/ (pays, revue), work_inst/, institutions.parquet,
@@ -166,7 +178,8 @@ def create_task_compute(args: dict) -> None:
 #          config/etablissements_dashboard.csv (corrections, facultatif)
 #    Écrit dans publication/erc/ : entites, biblio_disciplines, biblio_effectifs,
 #          biblio_copublications (si PUBLIER_COPUBLICATIONS), biblio_revues_tete, biblio_seuils_top10, biblio_meta,
-#          erc_effectifs, erc_meta, prix_effectifs, prix_catalogue, prix_laureats, prix_meta
+#          erc_effectifs, erc_meta, prix_effectifs, prix_catalogue, prix_laureats, prix_meta,
+#          prix_effectifs_disciplines
 #          (.jsonl.gz pour Mongo, .parquet), et manifest.json
 # ---------------------------------------------------------------------------
     publish()

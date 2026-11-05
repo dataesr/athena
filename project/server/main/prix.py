@@ -45,6 +45,8 @@ Sorties (dans PRIX_DIR = <DATA_DIR>/prix/)
   prix_meta.json            source, années, groupes, contrôles, textes de méthode
   prix_non_rattaches.csv    structures d'affiliation sans établissement (à corriger dans
                             Paysage)
+  prix_personnes.parquet    usage interne (prix_disciplines.py) : lauréats, nom, ORCID,
+                            établissements, même si PRIX_PUBLIER_LAUREATS = False
   prix_brut.parquet         copie brute du jeu (telecharger=False la relit)
 
 Exemple :
@@ -315,6 +317,12 @@ def compute_prix(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR, ref_dir: st
         con.execute(f"COPY pub TO '{f_laur}' (FORMAT parquet)")
     elif f_laur.exists():
         f_laur.unlink()
+
+    # Personnes et établissements, toujours écrit (usage interne : prix_disciplines.py)
+    pers = l[["laureat_id", "prix_id", "annee", "laureat_type", "prenom", "nom", "orcid"]].copy()
+    pers["entites"] = pers["laureat_id"].map(ent_l).map(lambda v: v if isinstance(v, list) else [])
+    con.register("pers", pers)
+    con.execute(f"COPY pers TO '{out / 'prix_personnes.parquet'}' (FORMAT parquet)")
 
     # Entités : nom et pays (référentiel Paysage, sinon libellé de la structure)
     corresp = charger_correspondance_paysage(ref_dir)

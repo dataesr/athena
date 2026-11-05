@@ -304,6 +304,26 @@ Liste nominative (données ouvertes de Paysage), pour afficher les lauréats d'u
 | `structures_ids`, `structures_libelles` | listes : affiliations dans la source (les deux listes ne sont **pas** dans le même ordre) |
 | `idref`, `orcid`, `wikidata` | identifiants de la personne |
 | `entites` | liste des `entite_id` (établissements) pour lesquels le lauréat compte ; filtre `{ entites: "<ROR>" }` |
+| `discipline_code`, `domaine_code` | panel ERC principal du lauréat (le plus fréquent dans ses publications) et son domaine (`LS`, `PE`, `SH`) ; null si non classé. Présents si `prix_disciplines.compute_prix_disciplines()` a été lancé |
+| `disciplines` | liste `{ discipline_code, poids }` (parts des publications, somme 1 ; vide si non classé) |
+| `methode_discipline` | `orcid` (auteur OpenAlex retrouvé par l'ORCID), `nom_affiliation` (même nom et une publication dans l'un des `entites`), `non_classe` |
+| `nb_publications_discipline` | publications utilisées (fenêtre de `PRIX_DISC_FENETRE` ans jusqu'au prix ; toutes si moins de `PRIX_DISC_MIN_PUBLICATIONS`) |
+
+### `prix_effectifs_disciplines` — lauréats par discipline
+
+Même grain que `prix_effectifs` plus `discipline_code` (panel ERC, mêmes codes que
+`biblio_disciplines` et `erc_effectifs`) : une ligne par `entite_type` × `entite_id` × `annee`
+× `prix_id` × `discipline_code`. Seuls les lauréats classés y figurent (couverture :
+`prix_meta.disciplines.controles`). Publiée si `compute_prix_disciplines()` a été lancé.
+
+| Champ | Contenu |
+|---|---|
+| `nb_laureats` | lauréats dont c'est la discipline **principale** (entier ; chaque lauréat classé compte une fois) |
+| `nb_laureats_fractionnaire` | somme des poids du lauréat dans cette discipline (décimal) |
+
+Les deux comptages ne se mélangent pas. Sur une même sélection, Σ `nb_laureats` = Σ
+`nb_laureats_fractionnaire` = nombre de lauréats classés (≤ `prix_effectifs.nb_laureats`).
+Domaine : additionner les panels du domaine (lettres en tête du code).
 
 ### `prix_meta` — un seul document
 
@@ -317,7 +337,8 @@ Liste nominative (données ouvertes de Paysage), pour afficher les lauréats d'u
 | `nb_prix` | nombre de prix |
 | `parametres` | paramètres du calcul |
 | `controles` | `nb_lignes`, `nb_laureats`, `nb_lignes_doublons`, `nb_laureats_sans_annee`, `laureat_type`, `genre`, `nb_personnes_sans_structure`, `nb_laureats_rattaches_etablissement`, `part_laureats_avec_structure_rattaches`, `liens_etablissement` (`structure`, `tutelle_rnsr`), `nb_structures_successeur`, `nb_laureats_avec_rnsr`, `nb_laureats_avec_tutelles_rnsr`, `nb_etablissements`, `groupes_vides` |
-| `methode`, `sources` | textes à afficher tels quels |
+| `methode`, `sources` | textes à afficher tels quels (avec, si elles sont calculées, les règles des disciplines) |
+| `disciplines` | si `compute_prix_disciplines()` a été lancé : `classement`, `parametres` (`fenetre`, `min_publications`, `noms`, `annee_min_publications`), `controles` (`nb_laureats_personnes`, `nb_avec_orcid`, `par_methode`, `part_classes`, `par_domaine`) |
 
 ## 3. Indicateurs
 
@@ -446,5 +467,6 @@ db.prix_effectifs_<version>.aggregate([
 | 6 | `indicators.compute_indicators()` | `indicateurs/erc_effectifs.parquet`, `erc_entites.parquet` |
 | 6b | `copublications.compute_copublications()` | `indicateurs/erc_copublications.parquet` |
 | ERC | `erc.compute_erc()` | `erc/erc_effectifs.parquet`, `erc_entites.parquet`, `erc_meta.json`, `erc_non_rattaches.csv` |
-| Prix | `prix.compute_prix()` | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv` |
+| Prix | `prix.compute_prix()` | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv`, `prix_personnes.parquet` (interne) |
+| Prix : disciplines | `prix_disciplines.extraire_publications_laureats()` puis `compute_prix_disciplines()` | `prix/publications/`, `prix_laureats_disciplines.parquet`, `prix_effectifs_disciplines.parquet`, `prix_disciplines_meta.json` |
 | 7 | `publish.publish()` puis `publish.publish_mongo()` | `publication/erc/*.jsonl.gz` puis MongoDB |

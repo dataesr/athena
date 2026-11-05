@@ -28,6 +28,7 @@ dans [CONTRAT_DONNEES.md](CONTRAT_DONNEES.md).
 | 6b | `copublications.compute_copublications()` | partenaires de chaque pays et établissement |
 | 6c | `erc.compute_erc()` | bourses ERC (participations Horizon Europe de l'open data ESR, lues par `horizon.py`) : candidatures et lauréats par établissement, pays et panel |
 | 6d | `prix.compute_prix()` | prix et distinctions (lauréats recensés dans Paysage : IUF, médailles du CNRS…) par établissement, année et prix |
+| 6e | `prix_disciplines.extraire_publications_laureats()`, `compute_prix_disciplines()` | panel ERC des lauréats par leurs publications OpenAlex (ORCID, sinon nom + établissement ; relit les works du snapshot) |
 | 7 | `publish.publish()` / `publish.publish_mongo()` | fichiers de publication, puis chargement dans MongoDB |
 | 8 | `export_dashboard.build_dashboard()` | aperçu HTML autonome |
 
