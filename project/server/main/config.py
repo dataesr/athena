@@ -153,6 +153,9 @@ COPUB_MAX_ENTITES_PAR_ARTICLE = None   # ex. 50 : ignore les articles à très n
 MONGO_URI = os.getenv("MONGO_URI")                       # ne jamais écrire l'URI en dur ici
 MONGO_DB = os.getenv("MONGO_DB_NAME", "tableaux-staging")
 TABLEAUX_BOARD_ID = "suivi-recherche"   # identifiant du tableau dans la collection « boards »
+PUBLIER_COPUBLICATIONS = False     # biblio_copublications (volumineuse) : publiée par publish() et
+                                   # chargée par publish_mongo() seulement si True (ou, pour Mongo,
+                                   # demandée explicitement : publish_mongo(collections=[...]))
 
 # --- Référentiel des établissements (étape 0, referentiel.py) ----------------------
 # Sert au périmètre du sélecteur et aux noms / sigles / catégories affichés ; ne change

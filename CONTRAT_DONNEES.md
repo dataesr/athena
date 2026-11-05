@@ -90,6 +90,8 @@ Index : `(entite_id, perimetre, classement, annee_publication, discipline_code)`
 
 ### `biblio_copublications`
 
+Publiée seulement si `PUBLIER_COPUBLICATIONS = True` (config.py, défaut `False`) : sinon absente de `manifest.json` et de Mongo.
+
 Une ligne par `perimetre` × `entite_id` × `partenaire_id` × `annee_publication` × `discipline_code`.
 
 | Champ | Type | Contenu |

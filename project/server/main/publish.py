@@ -14,6 +14,7 @@ CONTRAT_DONNEES.md. Résumé :
   biblio_effectifs         nombres d'articles par périmètre x entité x année x discipline
                            (l'entité MONDE donne les dénominateurs)
   biblio_copublications    articles cosignés par entité x partenaire x année x discipline
+                           (seulement si config.PUBLIER_COPUBLICATIONS = True)
   biblio_revues_tete       revues de tête de chaque discipline
   biblio_seuils_top10      seuil de citations du top 10 % par discipline x année
   biblio_meta              un document : snapshot, paramètres, textes de méthode
@@ -52,7 +53,8 @@ import pandas as pd
 
 from .common import DOMAINES_NOMS
 from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_DB, MONGO_URI, PRIX_DIR,
-                     REFERENTIEL_DIR, REFERENTIEL_SOURCE, SJR_PATH, TABLEAUX_BOARD_ID)
+                     PUBLIER_COPUBLICATIONS, REFERENTIEL_DIR, REFERENTIEL_SOURCE, SJR_PATH,
+                     TABLEAUX_BOARD_ID)
 from .entites import construire_entites
 
 COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copublications",
@@ -164,7 +166,8 @@ def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) ->
 
 def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
             referentiel_source: str = REFERENTIEL_SOURCE, referentiel_dir: str = REFERENTIEL_DIR,
-            erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR) -> dict:
+            erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR,
+            copublications: bool = PUBLIER_COPUBLICATIONS) -> dict:
     """Chaque collection sous forme de DataFrame (ou de dict pour biblio_meta, erc_meta, prix_meta)."""
     ind, rt, t10 = data_dir / "indicateurs", data_dir / "revues_tete", data_dir / "top10"
     sql = lambda q: duckdb.sql(q).df()
@@ -181,7 +184,10 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
 
     tables["biblio_effectifs"] = sql(f"SELECT * FROM read_parquet('{ind}/{classement}_effectifs.parquet')")
     f_cop = ind / f"{classement}_copublications.parquet"
-    if f_cop.exists():
+    if not copublications:
+        if verbose:
+            print("biblio_copublications non publiée (PUBLIER_COPUBLICATIONS = False)")
+    elif f_cop.exists():
         tables["biblio_copublications"] = sql(f"SELECT * FROM read_parquet('{f_cop}')")
     elif verbose:
         print(f"{f_cop} absent : biblio_copublications non publiée (lancer compute_copublications())")
@@ -232,16 +238,17 @@ def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
             etabs_path: str = DASHBOARD_ETABS_PATH, out_dir: str = None,
             parquet: bool = True, referentiel_source: str = REFERENTIEL_SOURCE,
             referentiel_dir: str = REFERENTIEL_DIR, erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR,
-            verbose: bool = True) -> dict:
+            copublications: bool = PUBLIER_COPUBLICATIONS, verbose: bool = True) -> dict:
     """Écrit chaque collection dans <out_dir> (défaut <data_dir>/publication/<classement>) :
     <collection>.jsonl.gz (un document JSON par ligne, prêt pour Mongo) et, si parquet=True,
     <collection>.parquet ; plus manifest.json (liste, nombre de lignes, colonnes).
+    copublications : publier biblio_copublications (défaut : config.PUBLIER_COPUBLICATIONS).
     Renvoie le manifeste."""
     data_dir = Path(data_dir)
     out = Path(out_dir) if out_dir else data_dir / "publication" / classement
     out.mkdir(parents=True, exist_ok=True)
     tables = _tables(classement, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir, erc_dir,
-                     prix_dir)
+                     prix_dir, copublications)
     manifeste = {"classement": classement, "genere_le": dt.datetime.now().isoformat(timespec="seconds"),
                  "snapshot_openalex": tables["biblio_meta"]["snapshot_openalex"], "collections": {}}
     for nom, t in tables.items():
@@ -289,7 +296,7 @@ def _lire_jsonl(f: Path, taille: int):
 def publish_mongo(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, uri: str = MONGO_URI,
                   db_name: str = MONGO_DB, board_id: str = TABLEAUX_BOARD_ID, collections=None,
                   pub_dir: str = None, enregistrer_version: bool = True, taille_lot: int = 20000,
-                  verbose: bool = True) -> dict:
+                  copublications: bool = PUBLIER_COPUBLICATIONS, verbose: bool = True) -> dict:
     """Charge les fichiers de publish() dans MongoDB (convention de tableaux).
 
     Chaque collection est écrite dans une NOUVELLE collection <nom>_<horodatage> :
@@ -298,6 +305,9 @@ def publish_mongo(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, uri: s
     du tableau (collection « boards », id = board_id, entrée data.id = <nom>), comme
     le fait la page d'administration de tableaux (/admin/upload-version).
     uri : défaut = variable d'environnement MONGO_URI (jamais en dur dans le code).
+    collections : défaut = toutes celles du manifeste, sauf biblio_copublications si
+    copublications=False (défaut : config.PUBLIER_COPUBLICATIONS) ; une liste explicite
+    est chargée telle quelle.
     Renvoie {collection: nom de la version créée}."""
     try:
         from pymongo import MongoClient
@@ -309,7 +319,12 @@ def publish_mongo(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, uri: s
     man = _json(src / "manifest.json")
     if not man:
         raise FileNotFoundError(f"{src}/manifest.json absent : lancer publish() d'abord")
-    noms = collections or list(man["collections"])
+    noms = collections or [n for n in man["collections"]
+                           if copublications or n != "biblio_copublications"]
+    absents = [n for n in noms if n not in man["collections"]]
+    if absents:
+        raise ValueError(f"{', '.join(absents)} absente(s) de {src}/manifest.json : relancer publish()"
+                         + (" avec copublications=True" if "biblio_copublications" in absents else ""))
     client = MongoClient(uri)
     db = client[db_name]
     horodatage = int(time.time() * 1000)            # millisecondes, comme tableaux

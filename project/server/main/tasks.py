@@ -165,7 +165,7 @@ def create_task_compute(args: dict) -> None:
 #    Lit : indicateurs/, revues_tete/, top10/*_seuils, disciplines/, le référentiel,
 #          config/etablissements_dashboard.csv (corrections, facultatif)
 #    Écrit dans publication/erc/ : entites, biblio_disciplines, biblio_effectifs,
-#          biblio_copublications, biblio_revues_tete, biblio_seuils_top10, biblio_meta,
+#          biblio_copublications (si PUBLIER_COPUBLICATIONS), biblio_revues_tete, biblio_seuils_top10, biblio_meta,
 #          erc_effectifs, erc_meta, prix_effectifs, prix_catalogue, prix_laureats, prix_meta
 #          (.jsonl.gz pour Mongo, .parquet), et manifest.json
 # ---------------------------------------------------------------------------
