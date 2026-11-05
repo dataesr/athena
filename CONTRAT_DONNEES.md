@@ -47,6 +47,7 @@ financements, innovation) : toujours `entite_id`.
 | `nom_openalex` | texte | nom dans OpenAlex |
 | `sigle` | texte | sigle du référentiel |
 | `categorie` | texte | catégorie du référentiel (Université, Organisme de recherche…) |
+| `groupe_etablissement` | texte ou null | groupe de comparaison des établissements français : `universites`, `organismes`, `sante`, `ecoles-ingenieurs`, `grands-etablissements`, `commerce-iep`, `prive`, `autres` (mêmes codes que `GROUPES_ETABLISSEMENTS` de tableaux). Déduit de **toutes** les catégories Paysage (typologie universitaire, habilitation CTI…), pas seulement de `categorie`, qui est souvent un statut (« Grand établissement » pour l'Université de Lorraine) ; la colonne `groupe` du fichier de corrections l'emporte. null hors établissements français. À utiliser à la place de `categorie` pour regrouper les établissements comparés |
 | `ville` | texte | ville du référentiel |
 | `referentiel_id` | texte | identifiant Paysage (ou scanR) |
 | `pays_code` | texte | pays de l'établissement (ou du pays lui-même) |
