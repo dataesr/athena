@@ -11,7 +11,7 @@ Sources, jointes sur le ROR :
   - le référentiel Paysage ou scanR (étape 0, referentiel.py) : nom d'usage,
     sigle, catégorie, ville, et le périmètre du sélecteur ;
   - le fichier de corrections FACULTATIF (config.DASHBOARD_ETABS_PATH) :
-    ror ; nom ; alias ; exclure ;
+    ror ; nom ; alias ; exclure ; groupe ;
   - les bourses ERC, si erc.compute_erc() a été lancé (<ERC_DIR>/erc_entites.parquet) :
     nombre de candidatures, et les établissements qui ont des candidatures ERC mais
     pas d'entité bibliométrique (ajoutés avec nb_articles = 0, hors sélecteur) ;
@@ -25,6 +25,9 @@ Une ligne par entité (construire_entites) :
   nom_openalex             nom dans OpenAlex
   sigle                    sigle du référentiel
   categorie                catégorie du référentiel (Université, Organisme de recherche...)
+  groupe_etablissement     groupe de comparaison (config.GROUPES_ETABLISSEMENTS : universites,
+                           ecoles-ingenieurs...), établissements français seulement ; lu dans
+                           toutes les catégories Paysage, colonne « groupe » du fichier prioritaire
   ville                    ville du référentiel
   referentiel_id           identifiant Paysage (ou scanR)
   pays_code                pays de l'établissement (ou du pays lui-même)
@@ -57,9 +60,11 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from .common import pays_list_sql
 from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DASHBOARD_ORDRE_SELECTEUR, DATA_DIR,
-                     ERC_DIR, PRIX_DIR, REFERENTIEL_DIR, REFERENTIEL_SOURCE)
-from .referentiel import charger_referentiel
+                     ERC_DIR, GROUPES_ETABLISSEMENTS, PAYS_FR, PRIX_DIR, REFERENTIEL_DIR,
+                     REFERENTIEL_SOURCE)
+from .referentiel import charger_referentiel, groupe_etablissement
 
 _MOTS_VIDES = {"de", "du", "des", "la", "le", "les", "l", "d", "et", "en", "pour", "sur", "aux", "au",
                "a", "à", "of", "the", "and", "for", "in", "at", "y", "del", "der", "und", "für"}
@@ -88,6 +93,7 @@ def load_etab_selection(path: str = DASHBOARD_ETABS_PATH) -> pd.DataFrame:
       nom    facultatif : nom affiché (sinon le nom OpenAlex)
       alias  facultatif : termes de recherche supplémentaires, séparés par |
       exclure facultatif : 1 (ou oui) = retirer l'établissement du sélecteur
+      groupe facultatif : groupe de comparaison imposé (code de config.GROUPES_ETABLISSEMENTS)
     Les autres colonnes sont ignorées. L'ordre des lignes sert si
     DASHBOARD_ORDRE_SELECTEUR = "fichier".
     """
@@ -95,18 +101,21 @@ def load_etab_selection(path: str = DASHBOARD_ETABS_PATH) -> pd.DataFrame:
     lignes = [l for l in p.read_text(encoding="utf-8-sig").splitlines()
               if l.strip() and not l.lstrip().startswith("#")]
     if not lignes:
-        return pd.DataFrame(columns=["ror", "nom", "alias"])
+        return pd.DataFrame(columns=["ror", "nom", "alias", "exclure", "groupe"])
     sep = ";" if lignes[0].count(";") >= lignes[0].count(",") else ","
     df = pd.read_csv(io.StringIO("\n".join(lignes)), sep=sep, dtype=str, keep_default_na=False)
     df.columns = [c.strip().lower() for c in df.columns]
     if "ror" not in df.columns:
         raise ValueError(f"{p} : colonne « ror » absente (colonnes lues : {list(df.columns)})")
-    for c in ("nom", "alias", "exclure"):
+    for c in ("nom", "alias", "exclure", "groupe"):
         if c not in df.columns:
             df[c] = ""
     df["ror"] = df["ror"].str.strip().str.rstrip("/").str.split("/").str[-1]
     df = df[df["ror"] != ""].drop_duplicates("ror")
-    df = df[["ror", "nom", "alias", "exclure"]].map(lambda v: str(v).strip())
+    df = df[["ror", "nom", "alias", "exclure", "groupe"]].map(lambda v: str(v).strip())
+    inconnus = sorted(set(df["groupe"]) - set(GROUPES_ETABLISSEMENTS) - {""})
+    if inconnus:
+        raise ValueError(f"{p} : groupe(s) inconnu(s) {inconnus} (attendu : {list(GROUPES_ETABLISSEMENTS)})")
     df["exclure"] = df["exclure"].str.lower().isin(["1", "oui", "true", "vrai", "x"])
     return df
 
@@ -127,7 +136,7 @@ def write_etab_selection(path: str = DASHBOARD_ETABS_PATH, classement: str = CLA
         SELECT entite_id AS ror, '' AS nom, '' AS alias, '' AS exclure, nb_articles, type_openalex,
                nom AS nom_openalex
         FROM read_parquet('{f_ent}')
-        WHERE entite_type = 'etablissement' AND pays_code = 'FR' AND nb_articles >= {int(min_articles)}
+        WHERE entite_type = 'etablissement' AND pays_code IN ({pays_list_sql(PAYS_FR)}) AND nb_articles >= {int(min_articles)}
         ORDER BY nb_articles DESC
     """).df()
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -204,7 +213,7 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
             seulement_erc = pd.Series([False] * (len(ent) - len(ajout)) + [True] * len(ajout))
             if verbose:
                 print(f"ERC : {len(ajout):,} entités sans données bibliométriques ajoutées "
-                      f"(dont {int((ajout['pays_code'] == 'FR').sum())} établissements français)")
+                      f"(dont {int(ajout['pays_code'].isin(PAYS_FR).sum())} établissements français)")
     ent["nb_candidatures_erc"] = ent["nb_candidatures_erc"].astype("Int64")
     # entité présente seulement par des lauréats arrivés d'ailleurs : aucune candidature -> null
     ent.loc[ent["nb_candidatures_erc"] == 0, "nb_candidatures_erc"] = pd.NA
@@ -219,6 +228,9 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
         ent["nb_laureats_prix"] = ent["entite_id"].map(dict(zip(prix["entite_id"], prix["nb_laureats"])))
     ent["nb_laureats_prix"] = ent["nb_laureats_prix"].astype("Int64")
     etab = ent["entite_type"] == "etablissement"
+    # OpenAlex code l'outre-mer à part (RE, GF, GP, MQ, NC, PF...) : ces établissements sont
+    # français (périmètre Paysage, sélecteur, comparaisons filtrées sur pays_code = "FR")
+    ent.loc[etab & ent["pays_code"].isin(PAYS_FR), "pays_code"] = "FR"
     fr = etab & (ent["pays_code"] == "FR")
 
     # --- Référentiel (Paysage ou scanR), joint sur le ROR -----------------------------
@@ -226,8 +238,11 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     if ref is None and referentiel_source and verbose:
         print(f"Référentiel {referentiel_source} absent de {referentiel_dir} : lancer build_referentiel() "
               f"(noms OpenAlex, pas de périmètre)")
-    cols_ref = ["sigle", "categorie", "ville", "referentiel_id", "nom_officiel", "nom_en", "dans_perimetre"]
+    cols_ref = ["sigle", "categorie", "ville", "referentiel_id", "nom_officiel", "nom_en", "dans_perimetre",
+                "categories"]
     if ref is not None:
+        if "categories" not in ref.columns:      # référentiel construit avant l'ajout de la colonne
+            ref["categories"] = None
         ref = ref.rename(columns={"ror": "entite_id", "nom": "nom_referentiel"})
         ent = ent.merge(ref[["entite_id", "nom_referentiel"] + cols_ref], on="entite_id", how="left")
         # nom affiché : nom d'usage du référentiel pour les établissements qui y sont
@@ -242,6 +257,12 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     if sel is not None:
         noms = {r.ror: r.nom for r in sel.itertuples() if r.nom}
         ent["nom"] = [noms.get(i, n) for i, n in zip(ent["entite_id"], ent["nom"])]
+
+    # --- Groupe de comparaison (établissements français) ------------------------------
+    impose = {r.ror: r.groupe for r in sel.itertuples() if r.groupe} if sel is not None else {}
+    ent["groupe_etablissement"] = [
+        impose.get(i) or groupe_etablissement(c, cs) if f else None
+        for i, c, cs, f in zip(ent["entite_id"], ent["categorie"], ent["categories"], fr)]
 
     # --- Alias de recherche ------------------------------------------------------------
     # Ordre de priorité : alias du fichier, sigle et noms du référentiel, sigles et
@@ -307,4 +328,6 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
             if inconnus:
                 print(f"  fichier de corrections : {len(inconnus)} ROR sans entité française retenue : "
                       f"{', '.join(inconnus[:20])}{' ...' if len(inconnus) > 20 else ''}")
-    return ent.drop(columns=["nom_referentiel", "nom_officiel", "nom_en", "dans_perimetre"])
+        g = ent.loc[ent["selecteur"] & (ent["entite_type"] == "etablissement"), "groupe_etablissement"]
+        print("  groupes (sélecteur) : " + " ; ".join(f"{k} {v}" for k, v in g.value_counts().items()))
+    return ent.drop(columns=["nom_referentiel", "nom_officiel", "nom_en", "dans_perimetre", "categories"])

@@ -256,7 +256,13 @@ def _daily_manifest(entity: str, date: str) -> dict:
             break
         token = r["NextContinuationToken"]
     if not files:
-        raise FileNotFoundError(f"aucun fichier Parquet sous s3://{DAILY_BUCKET}/{prefix}")
+        try:
+            recentes = ", ".join(list_daily_snapshots()[-5:])
+        except Exception:                      # la liste n'est qu'une aide au diagnostic
+            recentes = "(liste indisponible)"
+        raise FileNotFoundError(f"aucun fichier Parquet sous s3://{DAILY_BUCKET}/{prefix} : snapshot "
+                                f"pas encore publié ? Dates disponibles les plus récentes : {recentes} "
+                                f"(SNAPSHOT dans config.py)")
     return {"date": date, "source": "daily", "entity": entity,
             "files": sorted(files, key=lambda f: f["url"])}
 

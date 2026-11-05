@@ -174,6 +174,46 @@ REFERENTIEL_CATEGORIES = [
     "Établissement privé d'enseignement universitaire",
     "Établissement d'enseignement supérieur privé rattachés à un EPSCP",
 ]
+# Groupes de comparaison des établissements (champ entites.groupe_etablissement : matrice et
+# classements de tableaux). La catégorie principale de Paysage est souvent un statut
+# juridique (« Grand établissement » pour l'Université de Lorraine, « Grand établissement
+# relevant d'un autre département ministériel » pour l'École polytechnique) : les règles
+# lisent TOUTES les catégories Paysage de la structure (typologie « Université
+# pluridisciplinaire avec santé », habilitation CTI...). Première règle satisfaite gagne,
+# sinon « autres ». Une colonne « groupe » du fichier de corrections (DASHBOARD_ETABS_PATH)
+# l'emporte. Codes et libellés alignés sur tableaux (suivi-recherche/matrice.js).
+GROUPES_ETABLISSEMENTS = {
+    "universites": "Universités",
+    "organismes": "Organismes de recherche",
+    "sante": "Établissements de santé",
+    "ecoles-ingenieurs": "Écoles d'ingénieurs",
+    "grands-etablissements": "Grands établissements, ENS et instituts",
+    "commerce-iep": "Écoles de commerce et IEP",
+    "prive": "Établissements privés",
+    "autres": "Autres établissements",
+}
+GROUPES_ETABLISSEMENTS_REGLES = [
+    ("organismes", ["Organisme de recherche"]),
+    ("sante", ["Centre hospitalier", "Centre de lutte contre le cancer", "Institut hospitalo-universitaire"]),
+    # typologie universitaire, avant les habilitations d'ingénieur (universités avec une école interne)
+    ("universites", ["Université", "Université pluridisciplinaire avec santé",
+                     "Université pluridisciplinaire hors santé", "Université scientifique et/ou médicale",
+                     "Université tertiaire - droit et économie",
+                     "Université tertiaire - lettres et sciences Humaines"]),
+    ("ecoles-ingenieurs", ["École d'ingénieurs", "École nationale supérieure d'ingénieurs",
+                           "Institut national polytechnique", "Université de technologie",
+                           "École habilitée à délivrer un diplôme d'ingénieur",
+                           "École ou site relevant d'une école accréditée à délivrer un titre d'ingénieur diplômé"]),
+    ("commerce-iep", ["École de commerce et de management", "Institut d'étude politique"]),
+    # regroupements sans typologie universitaire ni habilitation d'ingénieur
+    ("universites", ["Établissement public expérimental", "Communauté d'universités et établissements"]),
+    ("grands-etablissements", ["Grand établissement", "École normale supérieure",
+                               "Grand établissement relevant d'un autre département ministériel",
+                               "Institut ou école extérieur aux universités"]),
+    ("prive", ["Établissement d'enseignement supérieur privé d'intérêt général",
+               "Établissement privé d'enseignement universitaire",
+               "Établissement d'enseignement supérieur privé rattachés à un EPSCP"]),
+]
 
 # --- Sélecteur d'établissements (entites.py) ------------------------------------------
 # Établissements proposés = périmètre du référentiel (ci-dessus) qui ont des articles

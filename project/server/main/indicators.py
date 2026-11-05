@@ -516,7 +516,7 @@ def compute_indicators(classement: str = CLASSEMENT,
                    {ratios}
             FROM avec_monde
             JOIN (SELECT entite_id, nom, pays_code FROM read_parquet('{f_ent}')) USING (entite_id)
-            WHERE entite_type = 'etablissement' AND perimetre = '{perimetres[0]}' AND pays_code = 'FR'
+            WHERE entite_type = 'etablissement' AND perimetre = '{perimetres[0]}' AND pays_code IN ({pays_list_sql(etab_countries or PAYS_FR)})
             GROUP BY 1 ORDER BY nb_articles DESC LIMIT 15
         """).df() if n_etab else None,
         "pays": con.execute(f"""

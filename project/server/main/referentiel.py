@@ -17,7 +17,7 @@ Sources (config.REFERENTIEL_SOURCE)
   "paysage" : https://scanr-data.s3.gra.io.cloud.ovh.net/production/paysage_dump.jsonl.gz
               (une structure Paysage par ligne). Champs utilisés : id, displayName,
               currentName (usualName, officialName, shortName, acronymFr, acronymEn),
-              nameEn, category.usualNameFr, status, identifiers (type, value, active),
+              nameEn, category.usualNameFr, categories.usualNameFr, status, identifiers (type, value, active),
               relations (relationTag, resourceId), currentLocalisation (city, iso3).
   "scanr"   : https://scanr-data.s3.gra.io.cloud.ovh.net/production/organizations-v2.jsonl.gz
               (référentiel des organisations de scanR). Champs utilisés : id, label,
@@ -35,7 +35,9 @@ Sortie
 ------
   <DATA_ROOT>/referentiel/<source>.parquet, une ligne par structure qui a un ROR :
     ror, referentiel_source, referentiel_id, nom, nom_officiel, nom_en, sigle,
-    categorie, ville, pays_iso3, actif, structure_de_tete, dans_perimetre, date_extraction
+    categorie, ville, pays_iso3, actif, structure_de_tete, dans_perimetre, categories
+    (toutes les catégories : typologie, habilitations... ; sert à groupe_etablissement()),
+    date_extraction
   <DATA_ROOT>/referentiel/paysage_ror.parquet (source Paysage seulement) : TOUTES les
     correspondances identifiant Paysage -> ROR, sans dédoublonnage par ROR, françaises
     et étrangères : referentiel_id, ror, nom, pays_iso3. Sert aux jeux de données qui
@@ -65,11 +67,11 @@ import duckdb
 import pandas as pd
 import requests
 
-from .config import (PAYSAGE_DUMP_URL, REFERENTIEL_CATEGORIES, REFERENTIEL_DIR,
-                     REFERENTIEL_SOURCE, SCANR_ORGANIZATIONS_URL)
+from .config import (GROUPES_ETABLISSEMENTS_REGLES, PAYSAGE_DUMP_URL, REFERENTIEL_CATEGORIES,
+                     REFERENTIEL_DIR, REFERENTIEL_SOURCE, SCANR_ORGANIZATIONS_URL)
 
 COLONNES = ["ror", "referentiel_source", "referentiel_id", "nom", "nom_officiel", "nom_en", "sigle",
-            "categorie", "ville", "pays_iso3", "actif", "structure_de_tete", "dans_perimetre"]
+            "categorie", "ville", "pays_iso3", "actif", "structure_de_tete", "dans_perimetre", "categories"]
 
 
 def referentiel_path(source: str = REFERENTIEL_SOURCE, ref_dir: str = REFERENTIEL_DIR) -> Path:
@@ -274,6 +276,10 @@ def _ligne_paysage(e: dict, categories: set) -> dict:
         "categorie": cat, "ville": _texte(loc.get("city")) or _texte(loc.get("locality")),
         "pays_iso3": _texte(loc.get("iso3")), "actif": actif, "structure_de_tete": tete,
         "dans_perimetre": bool(tete and actif and nom and cat in categories),
+        # toutes les catégories (typologie, habilitations...), par priorité Paysage
+        "categories": [c["usualNameFr"] for c in sorted(
+            (c for c in e.get("categories") or [] if isinstance(c, dict) and _texte(c.get("usualNameFr"))),
+            key=lambda c: c.get("priority") if isinstance(c.get("priority"), (int, float)) else 999)],
     }
 
 
@@ -297,6 +303,7 @@ def _ligne_scanr(e: dict, categories: set) -> dict:
         "pays_iso3": "FRA" if e.get("isFrench") else None, "actif": actif,
         "structure_de_tete": None,
         "dans_perimetre": bool(e.get("isFrench") and actif and nom and cat in categories),
+        "categories": cats,
     }
 
 
@@ -347,6 +354,14 @@ def build_referentiel(source: str = REFERENTIEL_SOURCE, url: str = None,
               f"{res['nb_perimetre']:,} dans le périmètre -> {out}")
         print(par_cat.to_string(index=False))
     return res
+
+
+def groupe_etablissement(categorie, categories=None, regles=GROUPES_ETABLISSEMENTS_REGLES) -> str:
+    """Groupe de comparaison (config.GROUPES_ETABLISSEMENTS) : première règle dont une
+    catégorie figure parmi la catégorie principale et toutes les catégories ; sinon « autres »."""
+    autres = [] if categories is None or isinstance(categories, (str, float)) else list(categories)
+    toutes = {c for c in [categorie, *autres] if isinstance(c, str)}
+    return next((code for code, cats in regles if toutes.intersection(cats)), "autres")
 
 
 def charger_referentiel(source: str = REFERENTIEL_SOURCE, ref_dir: str = REFERENTIEL_DIR):
