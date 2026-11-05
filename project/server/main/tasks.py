@@ -9,7 +9,8 @@ from project.server.main.logger import get_logger
 from project.server.main.openalex_s3 import diagnose_daily
 from project.server.main.projects import generate_projects
 from project.server.main.publish import publish, publish_mongo
-from project.server.main.referentiel import build_referentiel
+from project.server.main.config import SNAPSHOT
+from project.server.main.referentiel import build_referentiel, build_tutelles_rnsr
 from project.server.main.top_journals import compute_top_journals, top_journals_from_review
 from project.server.main.top10_citations import compute_top10
 
@@ -34,6 +35,7 @@ def create_task_compute(args: dict) -> None:
 #    REFERENTIEL_CATEGORIES (config.py). Remplace l'ancien paysage.get_perimeter().
 # ---------------------------------------------------------------------------
     build_referentiel()
+    build_tutelles_rnsr()      # tutelles des laboratoires RNSR (scanR), pour les ERC et les prix
 
 # ---------------------------------------------------------------------------
 # 1. Vérifier l'accès aux snapshots quotidiens (facultatif, quelques secondes)
@@ -58,9 +60,10 @@ def create_task_compute(args: dict) -> None:
 #      institutions.parquet    institutions, ROR, pays, type, tutelles, sigles
 #      inst_lineage.parquet    (institution, tutelle) dépliée pour le filtre établissement
 #    En cas d'interruption : relancer la même commande, seul ce qui manque est relu.
-#    Déjà fait pour le 15 octobre : inutile de relancer (les fichiers sont réutilisés).
+#    Date : SNAPSHOT dans config.py. Si le snapshot est déjà extrait, les fichiers sont
+#    réutilisés (seul ce qui manque est relu).
 # ---------------------------------------------------------------------------
-    #res = extract_snapshot("2026-10-15")
+    extract_snapshot(SNAPSHOT)
 
     # Contrôles (lecture locale seulement, rien n'est téléchargé ni écrit)
     #summary()             # volumes par année, part avec un pays, nombre d'articles France
