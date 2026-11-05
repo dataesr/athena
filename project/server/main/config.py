@@ -31,7 +31,7 @@ import os
 #   SNAPSHOT = "2026-10-01"  -> /data/snapshots/2026-10-01 (créé par extract_snapshot())
 # Liste des snapshots disponibles localement : extract_works.list_snapshots()
 DATA_ROOT = "/data"
-SNAPSHOT = "2026-10-15"            # figé sur le snapshot quotidien du 15 octobre 2026
+SNAPSHOT = "2026-11-05"            # figé sur le snapshot quotidien de cette date
 
 # Source des snapshots OpenAlex :
 #   "public" : bucket public s3://openalex, snapshot trimestriel, seul le dernier
