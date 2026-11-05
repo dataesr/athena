@@ -1,6 +1,7 @@
 from project.server.main.copublications import compute_copublications
 from project.server.main.disciplines import build_disciplines
 from project.server.main.erc import compute_erc
+from project.server.main.prix import compute_prix
 from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
 from project.server.main.indicators import compute_indicators
@@ -124,6 +125,18 @@ def create_task_compute(args: dict) -> None:
     compute_erc()
 
 # ---------------------------------------------------------------------------
+# 5 ter. Prix et distinctions (une à deux minutes)
+#    Télécharge : les lauréats des prix recensés dans Paysage (fr_esr_paysage_laureats_all,
+#                 non public : ODS_API_KEY) ; copie dans prix/prix_brut.parquet
+#                 (compute_prix(telecharger=False) la relit)
+#    Lit : /data/referentiel/ (comme l'étape ERC), inst_lineage.parquet et institutions.parquet
+#    Écrit dans prix/ : prix_effectifs.parquet, prix_catalogue.parquet, prix_laureats.parquet,
+#          prix_entites.parquet, prix_meta.json, prix_non_rattaches.csv
+#    Affiche : rattachement aux établissements, effectifs des groupes de prix (PRIX_GROUPES).
+# ---------------------------------------------------------------------------
+    compute_prix()
+
+# ---------------------------------------------------------------------------
 # 6. Effectifs : monde, 25 pays (+ pays de la comparaison ERC), établissements
 #    français et 300 étrangers (15 à 45 min)
 #    Lit : top10/, works/ (pays, revue), work_inst/, institutions.parquet,
@@ -150,7 +163,7 @@ def create_task_compute(args: dict) -> None:
 #          config/etablissements_dashboard.csv (corrections, facultatif)
 #    Écrit dans publication/erc/ : entites, biblio_disciplines, biblio_effectifs,
 #          biblio_copublications, biblio_revues_tete, biblio_seuils_top10, biblio_meta,
-#          erc_effectifs, erc_meta
+#          erc_effectifs, erc_meta, prix_effectifs, prix_catalogue, prix_laureats, prix_meta
 #          (.jsonl.gz pour Mongo, .parquet), et manifest.json
 # ---------------------------------------------------------------------------
     publish()

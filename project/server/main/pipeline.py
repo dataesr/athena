@@ -14,6 +14,7 @@ Les étapes (chacune dépend des précédentes)
   "top_journals"          compute_top_journals          revues de tête + appariement SJR
   "top10"                 compute_top10 (par périmètre) top 10 % des plus cités
   "erc"                   compute_erc                   candidatures et lauréats ERC (open data ESR)
+  "prix"                  compute_prix                  lauréats des prix (IUF...) par établissement
   "indicators"            compute_indicators            effectifs par entité/année/discipline
   "copublications"        compute_copublications        partenaires de chaque entité
   "publish"               publish                       fichiers pour tableaux (publication/)
@@ -36,7 +37,8 @@ Que relancer quand on change quelque chose ?
   périmètre (types, années)           -> run(start="top_journals")
   pays, établissements, seuils étab.  -> run(start="indicators")
   fichier de corrections, alias       -> run(steps=["publish"])
-  mise à jour de Paysage / scanR      -> run(steps=["referentiel", "erc", "publish"])
+  mise à jour de Paysage / scanR      -> run(steps=["referentiel", "erc", "prix", "publish"])
+  mise à jour des prix                -> run(steps=["prix", "publish"])
   mise à jour des données ERC         -> run(steps=["erc", "publish"]) ; si erc_meta.pays_compares
                                          change : run(steps=["erc", "indicators", "copublications",
                                          "publish"]) (publish() le signale)
@@ -68,12 +70,13 @@ from .disciplines import build_disciplines
 from .erc import compute_erc
 from .extract_sources_institutions import extract_sources_institutions
 from .indicators import compute_indicators
+from .prix import compute_prix
 from .publish import publish
 from .referentiel import build_referentiel
 from .top10_citations import compute_top10
 from .top_journals import compute_top_journals, top_journals_from_review
 
-STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc",
+STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc", "prix",
          "indicators", "copublications", "publish"]
 
 
@@ -134,6 +137,11 @@ def step_erc(data_dir: str = DATA_DIR, **kw):
     return compute_erc(data_dir=data_dir, **kw)
 
 
+def step_prix(data_dir: str = DATA_DIR, **kw):
+    """Prix et distinctions : lauréats par établissement, année et prix."""
+    return compute_prix(data_dir=data_dir, **kw)
+
+
 def step_publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, **kw):
     """Étape 7 : fichiers de publication (le chargement Mongo reste manuel : publish_mongo())."""
     return publish(classement, data_dir=data_dir, **kw)
@@ -186,6 +194,7 @@ def run(steps=None, start: str = None, end: str = None,
         "indicators": lambda: step_indicators(classement, perimetres, data_dir),
         "copublications": lambda: step_copublications(classement, perimetres, data_dir),
         "erc": lambda: step_erc(data_dir),
+        "prix": lambda: step_prix(data_dir),
         "publish": lambda: step_publish(classement, data_dir),
     }
     if "review" in steps and not reviewed_csv:

@@ -1,4 +1,4 @@
-# Contrat de données — bibliométrie et bourses ERC (application tableaux)
+# Contrat de données — bibliométrie, bourses ERC et prix (application tableaux)
 
 Ce document décrit les données produites par la chaîne Python (`project/server/main/`)
 pour l'application [tableaux](https://github.com/dataesr/tableaux). Il fait foi pour
@@ -53,6 +53,7 @@ financements, innovation) : toujours `entite_id`.
 | `type_openalex` | texte | `education`, `facility`, `government`… |
 | `nb_articles` | entier | taille : articles du premier périmètre, toute la période (0 pour une entité présente seulement dans les données ERC) |
 | `nb_candidatures_erc` | entier ou null | candidatures ERC, toutes années (null : aucune) |
+| `nb_laureats_prix` | entier ou null | lauréats de prix (`prix_effectifs`, tous prix, toutes années ; null : aucun). Aucune entité n'est ajoutée au registre par les prix |
 | `pays_compare` | booléen | pays retenu pour la comparaison internationale **bibliométrique** (`biblio_meta.pays_compares`) |
 | `pays_compare_erc` | booléen | pays retenu pour la comparaison internationale **ERC** (`erc_meta.pays_compares`) |
 | `tutelles` | liste | ROR des tutelles (lignée OpenAlex) |
@@ -242,6 +243,79 @@ principaux. Une année est provisoire si l'un de ces types, présent les autres 
 aucune candidature ou aucun lauréat, ou si ses candidatures sont inférieures à 75 %
 (`ERC_SEUIL_ANNEE_COMPLETE`) de la médiane des autres années.
 
+### `prix_effectifs` — prix et distinctions
+
+Source : jeu ODS `fr_esr_paysage_laureats_all` (non public, clé `ODS_API_KEY`) : lauréats
+des prix et distinctions recensés dans Paysage (Institut universitaire de France,
+médailles du CNRS, prix des académies et des sociétés savantes…), une ligne par lauréat
+d'un prix une année (`prix_laureat_identifiant`). Le recensement n'est pas exhaustif,
+surtout pour les années anciennes.
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `entite_type`, `entite_id` | | `pays` (`FR` : tous les lauréats du jeu) ou `etablissement` (ROR court) |
+| `annee` | entier | année d'attribution (`annee` de la source, à défaut les 4 premiers chiffres de `prix_annee`) |
+| `prix_id` | texte | identifiant Paysage du prix (`prix_identifiant`), voir `prix_catalogue` |
+| `nb_laureats` | entier | lauréats du prix cette année rattachés à l'entité |
+| `nb_laureats_femmes`, `nb_laureats_hommes` | entier | dont femmes, dont hommes (`laureat_personne_genre` ; le reste : genre inconnu ou lauréat structure) |
+
+Établissement, même logique que les ERC (scanR) : chaque structure d'affiliation du lauréat
+(`laureat_structures_associees_identifiant`, identifiants Paysage, et leurs ROR), remplacée
+par son successeur Paysage (établissement actuel : « Université de Provence » compte pour
+Aix-Marseille Université), plus toutes les tutelles de ses laboratoires RNSR
+(`laureat_structures_associees_identifiant_rnsr`), puis, si `PRIX_RATTACHEMENT_LIGNEE`, les
+tutelles OpenAlex. Un lauréat de type `Structure` (ex. entreprise du concours i-Nov) compte
+pour la structure elle-même. Les laboratoires qui ont un ROR dans Paysage sont aussi des
+entités (comme en bibliométrie) : pour comparer des établissements, ne garder que les
+entités du sélecteur (`entites.selecteur`).
+Comptage entier : un lauréat compte 1 pour chacun de ses établissements, une seule fois.
+On compte des **attributions**, pas des personnes : une personne nommée membre junior puis
+senior de l'IUF compte deux fois dans le groupe IUF (sommer les prix d'un groupe reste juste).
+Lauréats sans année : écartés (`prix_meta.controles.nb_laureats_sans_annee`).
+
+### `prix_catalogue` — un document par prix
+
+| Champ | Contenu |
+|---|---|
+| `prix_id` | identifiant Paysage du prix |
+| `libelle`, `libelle_francais`, `libelle_anglais` | libellés |
+| `categories` | liste (`prix_categories` : « Médaille du CNRS », « Prix de thèse »…) |
+| `porteurs_ids`, `porteurs_libelles` | listes : structures qui décernent le prix (Paysage) |
+| `site_internet`, `wikidata` | liens |
+| `nb_laureats`, `nb_laureats_femmes`, `nb_laureats_hommes` | lauréats, toutes années (`FR`) |
+| `annee_min`, `annee_max` | première et dernière année présentes |
+| `groupes` | codes des groupes de `prix_meta.groupes` auxquels le prix appartient |
+
+### `prix_laureats` — un document par lauréat
+
+Liste nominative (données ouvertes de Paysage), pour afficher les lauréats d'un
+établissement. Publiée si `PRIX_PUBLIER_LAUREATS`.
+
+| Champ | Contenu |
+|---|---|
+| `laureat_id` | `prix_laureat_identifiant` |
+| `prix_id`, `prix_libelle`, `annee` | prix et année |
+| `laureat_type` | `Personne` ou `Structure` |
+| `personne_id` | identifiant Paysage du lauréat (personne ou structure) |
+| `libelle`, `prenom`, `nom`, `genre` | identité (`genre` : `femme`, `homme` ou null) |
+| `structures_ids`, `structures_libelles` | listes : affiliations dans la source (les deux listes ne sont **pas** dans le même ordre) |
+| `idref`, `orcid`, `wikidata` | identifiants de la personne |
+| `entites` | liste des `entite_id` (établissements) pour lesquels le lauréat compte ; filtre `{ entites: "<ROR>" }` |
+
+### `prix_meta` — un seul document
+
+| Champ | Contenu |
+|---|---|
+| `source` | `jeu`, `date_extraction` |
+| `date_calcul` | date du calcul |
+| `annees` | années présentes (de la première à la dernière) |
+| `groupes` | liste d'objets `{ code, libelle, prix, nb_prix, nb_laureats }` : groupes de prix proposés (`PRIX_GROUPES` dans `config.py` : `IUF` = prix décernés par l'IUF, membres juniors et seniors ; `MEDAILLES_CNRS`) |
+| `groupe_defaut` | code du groupe affiché par défaut (`IUF`) |
+| `nb_prix` | nombre de prix |
+| `parametres` | paramètres du calcul |
+| `controles` | `nb_lignes`, `nb_laureats`, `nb_lignes_doublons`, `nb_laureats_sans_annee`, `laureat_type`, `genre`, `nb_personnes_sans_structure`, `nb_laureats_rattaches_etablissement`, `part_laureats_avec_structure_rattaches`, `liens_etablissement` (`structure`, `tutelle_rnsr`), `nb_structures_successeur`, `nb_laureats_avec_rnsr`, `nb_laureats_avec_tutelles_rnsr`, `nb_etablissements`, `groupes_vides` |
+| `methode`, `sources` | textes à afficher tels quels |
+
 ## 3. Indicateurs
 
 | Indicateur | Nom du ratio | Numérateur (entité) | Dénominateur (`MONDE`) |
@@ -255,6 +329,8 @@ aucune candidature ou aucun lauréat, ou si ses candidatures sont inférieures �
 | ERC : part des lauréats | `part_laureats` | `nb_laureats` (entité) | `nb_laureats` (`MONDE`) ; en porteurs : `nb_pi_laureats` / `nb_pi_laureats` (`MONDE`) |
 | ERC : solde de mobilité des lauréats | `solde_mobilite_laureats` | `nb_laureats_arrivees - nb_laureats_departs` (entité) | — (différence, pas un ratio) |
 | ERC : intensité de candidature | `intensite_candidature` | `part_candidatures` (entité) | `part_articles` (entité) |
+| Prix : part des lauréats | `part_laureats_prix` | `nb_laureats` (établissement, `prix_effectifs`) | `nb_laureats` (`FR`) |
+| Prix : part de femmes | `part_femmes_prix` | `nb_laureats_femmes` (entité) | `nb_laureats_femmes + nb_laureats_hommes` (même entité) |
 
 ERC : taux de succès = `nb_laureats` ÷ `nb_candidatures`, même entité, mêmes années, mêmes
 panels et types, en additionnant les effectifs avant de diviser. Le numérateur (lauréats
@@ -283,6 +359,10 @@ moins que son poids dans les publications ne le laisserait attendre (signe possi
 d'auto-censure). Pour « toutes disciplines », restreindre les candidatures aux types avec
 panel (`types_bourse_defaut`), pour comparer les mêmes champs. Les années d'appel et de
 publication sont rapprochées telles quelles : choisir des périodes de même longueur.
+
+Prix : mêmes prix (un groupe = la liste `prix_meta.groupes[].prix`) et mêmes années au
+numérateur et au dénominateur, effectifs sommés avant de diviser. Un lauréat comptant pour
+plusieurs établissements, les parts des établissements ne s'additionnent pas à 100 %.
 
 ## 4. Règle de calcul (à respecter côté serveur)
 
@@ -339,6 +419,19 @@ db.erc_effectifs_<version>.aggregate([
 // solde_mobilite_laureats = nb_laureats_arrivees - nb_laureats_departs
 ```
 
+```js
+// Membres de l'IUF (juniors et seniors) d'Aix-Marseille Université, 2015-2025
+const iuf = meta.groupes.find((g) => g.code === "IUF").prix;
+db.prix_effectifs_<version>.aggregate([
+  { $match: { entite_id: { $in: ["035xkbk20", "FR"] }, prix_id: { $in: iuf },
+              annee: { $gte: 2015, $lte: 2025 } } },
+  { $group: { _id: { entite_id: "$entite_id", prix_id: "$prix_id" },
+              nb_laureats: { $sum: "$nb_laureats" } } }
+])
+// part_laureats_prix = AMU.nb_laureats / FR.nb_laureats ; liste : db.prix_laureats_<version>.find(
+//   { entites: "035xkbk20", prix_id: { $in: iuf }, annee: { $gte: 2015, $lte: 2025 } })
+```
+
 ## 5. Production
 
 | Étape | Fonction | Sortie |
@@ -350,4 +443,5 @@ db.erc_effectifs_<version>.aggregate([
 | 6 | `indicators.compute_indicators()` | `indicateurs/erc_effectifs.parquet`, `erc_entites.parquet` |
 | 6b | `copublications.compute_copublications()` | `indicateurs/erc_copublications.parquet` |
 | ERC | `erc.compute_erc()` | `erc/erc_effectifs.parquet`, `erc_entites.parquet`, `erc_meta.json`, `erc_non_rattaches.csv` |
+| Prix | `prix.compute_prix()` | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv` |
 | 7 | `publish.publish()` puis `publish.publish_mongo()` | `publication/erc/*.jsonl.gz` puis MongoDB |

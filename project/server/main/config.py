@@ -230,6 +230,26 @@ ERC_TYPES_PRINCIPAUX = ("STG", "COG", "ADG")
 ERC_ANNEES_PROVISOIRES = None
 ERC_SEUIL_ANNEE_COMPLETE = 0.75
 
+# --- Prix et distinctions (prix.py) ---------------------------------------------------
+# Lauréats des prix recensés dans Paysage (IUF, médailles du CNRS, prix des académies...),
+# une ligne par lauréat d'un prix une année. Jeu non public : clé ODS_API_KEY.
+# Sorties dans <DATA_DIR>/prix/ : la lignée OpenAlex du snapshot sert au rattachement.
+PRIX_ODS = "fr_esr_paysage_laureats_all"
+PRIX_DIR = f"{DATA_DIR}/prix"
+PRIX_COLONNES_EXCLUES = ("prix_detail",)   # textes longs non conservés dans la copie
+PRIX_RATTACHEMENT_LIGNEE = True    # un lauréat compte aussi pour les tutelles OpenAlex de
+                                   # ses établissements (comme les articles et les ERC)
+PRIX_ANNEE_MIN = None              # ex. 2000 : années antérieures écartées ; None = toutes
+PRIX_PUBLIER_LAUREATS = True       # collection prix_laureats (liste nominative des lauréats)
+# Groupes de prix proposés par le tableau : un prix appartient au groupe si son identifiant
+# est dans "prix", ou l'un de ses porteurs dans "porteurs", ou l'une de ses catégories dans
+# "categories" (identifiants et libellés Paysage). Le premier groupe est celui par défaut.
+PRIX_GROUPES = [
+    {"code": "IUF", "libelle": "Institut universitaire de France (membres juniors et seniors)",
+     "porteurs": ["IPU6Y"]},
+    {"code": "MEDAILLES_CNRS", "libelle": "Médailles du CNRS", "categories": ["Médaille du CNRS"]},
+]
+
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)
 DUCKDB_THREADS = None         # None = tous les cœurs

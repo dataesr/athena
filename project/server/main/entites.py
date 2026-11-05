@@ -14,7 +14,9 @@ Sources, jointes sur le ROR :
     ror ; nom ; alias ; exclure ;
   - les bourses ERC, si erc.compute_erc() a été lancé (<ERC_DIR>/erc_entites.parquet) :
     nombre de candidatures, et les établissements qui ont des candidatures ERC mais
-    pas d'entité bibliométrique (ajoutés avec nb_articles = 0, hors sélecteur).
+    pas d'entité bibliométrique (ajoutés avec nb_articles = 0, hors sélecteur) ;
+  - les prix, si prix.compute_prix() a été lancé (<PRIX_DIR>/prix_entites.parquet) :
+    nombre de lauréats des entités déjà présentes (aucune entité ajoutée).
 
 Une ligne par entité (construire_entites) :
   entite_id                ROR court, code ISO du pays, ou MONDE
@@ -29,6 +31,7 @@ Une ligne par entité (construire_entites) :
   type_openalex            education, facility, government... (établissements)
   nb_articles              taille (premier périmètre, toute la période)
   nb_candidatures_erc      candidatures ERC, toutes années (null : aucune ou pas de données ERC)
+  nb_laureats_prix         lauréats de prix, toutes années (null : aucun ou pas de données prix)
   pays_compare             pays retenu pour la comparaison internationale (bibliométrie)
   pays_compare_erc         pays retenu pour la comparaison internationale ERC (erc_meta)
   tutelles                 ROR des tutelles (lignée OpenAlex corrigée)
@@ -55,7 +58,7 @@ import duckdb
 import pandas as pd
 
 from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DASHBOARD_ORDRE_SELECTEUR, DATA_DIR,
-                     ERC_DIR, REFERENTIEL_DIR, REFERENTIEL_SOURCE)
+                     ERC_DIR, PRIX_DIR, REFERENTIEL_DIR, REFERENTIEL_SOURCE)
 from .referentiel import charger_referentiel
 
 _MOTS_VIDES = {"de", "du", "des", "la", "le", "les", "l", "d", "et", "en", "pour", "sur", "aux", "au",
@@ -161,12 +164,14 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
                        referentiel_source: str = REFERENTIEL_SOURCE,
                        referentiel_dir: str = REFERENTIEL_DIR,
                        ordre: str = DASHBOARD_ORDRE_SELECTEUR, erc_dir: str = ERC_DIR,
+                       prix_dir: str = PRIX_DIR,
                        verbose: bool = True) -> pd.DataFrame:
     """Registre complet des entités (voir l'en-tête du module).
     etabs_path         : fichier de corrections (None ou absent : pas de corrections)
     referentiel_source : "paysage" ou "scanr" (None : pas de référentiel)
     ordre              : "taille" ou "fichier" (ordre du sélecteur quand la recherche est vide)
-    erc_dir            : sorties de erc.compute_erc() (None ou absentes : pas de données ERC)"""
+    erc_dir            : sorties de erc.compute_erc() (None ou absentes : pas de données ERC)
+    prix_dir           : sorties de prix.compute_prix() (None ou absentes : pas de données prix)"""
     data_dir = Path(data_dir)
     f_ent = data_dir / "indicateurs" / f"{classement}_entites.parquet"
     if not f_ent.exists():
@@ -204,6 +209,15 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     # entité présente seulement par des lauréats arrivés d'ailleurs : aucune candidature -> null
     ent.loc[ent["nb_candidatures_erc"] == 0, "nb_candidatures_erc"] = pd.NA
     ent["pays_compare_erc"] = (ent["entite_type"] == "pays") & ent["entite_id"].isin(pays_erc)
+
+    # --- Prix : taille (les établissements présents seulement dans les prix, souvent des
+    # laboratoires cités comme affiliation, ne sont pas ajoutés au registre) -----------
+    f_prix = Path(prix_dir) / "prix_entites.parquet" if prix_dir else None
+    ent["nb_laureats_prix"] = pd.NA
+    if f_prix is not None and f_prix.exists():
+        prix = duckdb.sql(f"SELECT entite_id, nb_laureats FROM read_parquet('{f_prix}')").df()
+        ent["nb_laureats_prix"] = ent["entite_id"].map(dict(zip(prix["entite_id"], prix["nb_laureats"])))
+    ent["nb_laureats_prix"] = ent["nb_laureats_prix"].astype("Int64")
     etab = ent["entite_type"] == "etablissement"
     fr = etab & (ent["pays_code"] == "FR")
 
@@ -267,6 +281,7 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
         dedans |= fr & ent["entite_id"].isin(set(sel.loc[~sel["exclure"], "ror"]))
         dedans &= ~ent["entite_id"].isin(set(sel.loc[sel["exclure"], "ror"]))
     dedans &= ~seulement_erc      # sélecteur inchangé : seulement les entités bibliométriques
+                                  # (pas celles ajoutées par les ERC)
     if ordre == "fichier" and sel is not None:
         rang = {r: k for k, r in enumerate(sel["ror"])}
         cle = ent["entite_id"].map(rang).fillna(len(rang)) * 1e12 - ent["nb_articles"]

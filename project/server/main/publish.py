@@ -20,6 +20,11 @@ CONTRAT_DONNEES.md. Résumé :
   erc_effectifs            candidatures et lauréats ERC par entité x année d'appel x panel
                            x type de bourse (si erc.compute_erc() a été lancé)
   erc_meta                 un document : source, années, pays comparés, textes de méthode
+  prix_effectifs           lauréats de prix par entité x année x prix (si prix.compute_prix()
+                           a été lancé)
+  prix_catalogue           un document par prix : libellés, catégories, porteurs, groupes
+  prix_laureats            un document par lauréat : identité, prix, année, établissements
+  prix_meta                un document : source, années, groupes de prix, textes de méthode
 
 1. publish()          écrit <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz
                       (+ .parquet) et manifest.json. Aucune base nécessaire.
@@ -46,12 +51,13 @@ import duckdb
 import pandas as pd
 
 from .common import DOMAINES_NOMS
-from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_DB, MONGO_URI,
+from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_DB, MONGO_URI, PRIX_DIR,
                      REFERENTIEL_DIR, REFERENTIEL_SOURCE, SJR_PATH, TABLEAUX_BOARD_ID)
 from .entites import construire_entites
 
 COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copublications",
-               "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta", "erc_effectifs", "erc_meta"]
+               "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta", "erc_effectifs", "erc_meta",
+               "prix_effectifs", "prix_catalogue", "prix_laureats", "prix_meta"]
 
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
 INDEX = {
@@ -70,6 +76,12 @@ INDEX = {
     "erc_effectifs": [[("entite_id", 1), ("annee_appel", 1), ("discipline_code", 1), ("type_bourse", 1)],
                       [("entite_type", 1), ("annee_appel", 1)]],
     "erc_meta": [],
+    "prix_effectifs": [[("entite_id", 1), ("annee", 1), ("prix_id", 1)],
+                       [("prix_id", 1), ("entite_type", 1), ("annee", 1)]],
+    "prix_catalogue": [[("prix_id", 1)], [("groupes", 1)]],
+    "prix_laureats": [[("entites", 1), ("prix_id", 1), ("annee", 1)], [("prix_id", 1), ("annee", 1)],
+                      [("laureat_id", 1)]],
+    "prix_meta": [],
 }
 
 
@@ -152,13 +164,14 @@ def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) ->
 
 def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
             referentiel_source: str = REFERENTIEL_SOURCE, referentiel_dir: str = REFERENTIEL_DIR,
-            erc_dir: str = ERC_DIR) -> dict:
-    """Chaque collection sous forme de DataFrame (ou de dict pour biblio_meta, erc_meta)."""
+            erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR) -> dict:
+    """Chaque collection sous forme de DataFrame (ou de dict pour biblio_meta, erc_meta, prix_meta)."""
     ind, rt, t10 = data_dir / "indicateurs", data_dir / "revues_tete", data_dir / "top10"
     sql = lambda q: duckdb.sql(q).df()
     meta = meta_bibliometrie(classement, data_dir)
     tables = {"entites": construire_entites(classement, data_dir, etabs_path, referentiel_source,
-                                            referentiel_dir, erc_dir=erc_dir, verbose=verbose)}
+                                            referentiel_dir, erc_dir=erc_dir, prix_dir=prix_dir,
+                                            verbose=verbose)}
 
     disc = sql(f"""SELECT DISTINCT '{classement}' AS classement, discipline_code, discipline_nom, domaine_code
                    FROM read_parquet('{data_dir}/disciplines/{classement}.parquet')
@@ -196,6 +209,15 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
                   f"{', '.join(manquants)} -> relancer compute_indicators() après compute_erc()")
     elif verbose:
         print(f"{erc_dir}/erc_effectifs.parquet absent : erc_effectifs non publiée (lancer compute_erc())")
+    # Prix et distinctions (facultatif : prix.compute_prix())
+    prix = Path(prix_dir) if prix_dir else None
+    if prix is not None and (prix / "prix_effectifs.parquet").exists():
+        for nom in ["prix_effectifs", "prix_catalogue", "prix_laureats"]:
+            if (prix / f"{nom}.parquet").exists():
+                tables[nom] = sql(f"SELECT * FROM read_parquet('{prix}/{nom}.parquet')")
+        tables["prix_meta"] = _json(prix / "prix_meta.json")
+    elif verbose:
+        print(f"{prix_dir}/prix_effectifs.parquet absent : prix non publiés (lancer compute_prix())")
     return tables
 
 
@@ -209,7 +231,7 @@ def _cle_code(code: str):
 def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
             etabs_path: str = DASHBOARD_ETABS_PATH, out_dir: str = None,
             parquet: bool = True, referentiel_source: str = REFERENTIEL_SOURCE,
-            referentiel_dir: str = REFERENTIEL_DIR, erc_dir: str = ERC_DIR,
+            referentiel_dir: str = REFERENTIEL_DIR, erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR,
             verbose: bool = True) -> dict:
     """Écrit chaque collection dans <out_dir> (défaut <data_dir>/publication/<classement>) :
     <collection>.jsonl.gz (un document JSON par ligne, prêt pour Mongo) et, si parquet=True,
@@ -218,12 +240,13 @@ def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     data_dir = Path(data_dir)
     out = Path(out_dir) if out_dir else data_dir / "publication" / classement
     out.mkdir(parents=True, exist_ok=True)
-    tables = _tables(classement, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir, erc_dir)
+    tables = _tables(classement, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir, erc_dir,
+                     prix_dir)
     manifeste = {"classement": classement, "genere_le": dt.datetime.now().isoformat(timespec="seconds"),
                  "snapshot_openalex": tables["biblio_meta"]["snapshot_openalex"], "collections": {}}
     for nom, t in tables.items():
         f = out / f"{nom}.jsonl.gz"
-        if isinstance(t, dict):                               # biblio_meta, erc_meta : un seul document
+        if isinstance(t, dict):                     # biblio_meta, erc_meta, prix_meta : un seul document
             with gzip.open(f, "wt", encoding="utf-8") as fh:
                 fh.write(json.dumps(t, ensure_ascii=False) + "\n")
             manifeste["collections"][nom] = {"nb_documents": 1, "fichier": f.name}
