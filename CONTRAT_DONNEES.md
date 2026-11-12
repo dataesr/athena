@@ -1,4 +1,4 @@
-# Contrat de données — bibliométrie, bourses ERC et prix (application tableaux)
+# Contrat de données — bibliométrie, bourses ERC, prix et viviers (application tableaux)
 
 Ce document décrit les données produites par la chaîne Python (`project/server/main/`)
 pour l'application [tableaux](https://github.com/dataesr/tableaux). Il fait foi pour
@@ -340,6 +340,84 @@ Domaine : additionner les panels du domaine (lettres en tête du code).
 | `methode`, `sources` | textes à afficher tels quels (avec, si elles sont calculées, les règles des disciplines) |
 | `disciplines` | si `compute_prix_disciplines()` a été lancé : `classement`, `parametres` (`fenetre`, `min_publications`, `noms`, `annee_min_publications`), `controles` (`nb_laureats_personnes`, `nb_avec_orcid`, `par_methode`, `part_classes`, `par_domaine`) |
 
+### `viviers_effectifs` — chercheurs actifs par pays, établissement et discipline
+
+Dénominateur commun aux ERC, aux projets (Horizon Europe, ANR…) et aux prix : candidatures ou
+lauréats rapportés au nombre de chercheurs actifs. Publiée si `viviers.compute_viviers()` a été
+lancé. Une ligne par `entite_type` × `entite_id` × `discipline_code` ; **pas d'année** : le
+vivier est mesuré sur une seule période (`viviers_meta.periode`, 2021-2025 pour le moment : `VIVIER_ANNEE_DEBUT`-`VIVIER_ANNEE_FIN`,
+propres aux viviers et changées explicitement).
+
+Un chercheur est un auteur OpenAlex (`author_id`). Pays présents (`viviers_meta.pays`) : la
+France, les pays de la comparaison ERC (`erc_meta.pays_compares`, pour le taux de candidature,
+§3) et ceux de la comparaison bibliométrique (`biblio_meta.pays_compares`). Seules les
+signatures dans ces pays sont lues. Un chercheur est **actif** s'il a au moins `VIVIER_MIN_ARTICLES` (3) articles sur la période,
+dont au moins `VIVIER_MIN_ARTICLES_RECENTS` (1) sur les `VIVIER_ANNEES_RECENTES` (2) dernières
+années. Articles : ceux de `biblio_effectifs` (périmètre `viviers_meta.perimetre`, revues,
+avec discipline) ; ceux à plus de `VIVIER_MAX_AUTEURS_PAR_ARTICLE` (100) auteurs sont ignorés.
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `entite_type`, `entite_id` | | `pays` (code ISO2, outre-mer sous `FR`) ou `etablissement` (ROR court, établissements français) |
+| `discipline_code` | texte | panel ERC, mêmes codes que `biblio_disciplines` |
+| `nb_chercheurs` | entier | chercheurs actifs dont c'est la discipline **principale** |
+| `nb_chercheurs_fractionnaire` | décimal | somme des parts de la discipline dans les articles de chaque chercheur |
+| `nb_chercheurs_top10` | entier | dont chercheurs « top 10 % » (discipline principale) |
+| `nb_chercheurs_top10_fractionnaire` | décimal | idem, en fractionnaire |
+| `nb_chercheurs_auteur_principal` | entier | dont premier ou dernier auteur, ou correspondant, d'au moins un article (discipline principale) |
+
+Pays : un chercheur compte pour un pays si au moins `VIVIER_PART_MIN_PAYS` (50 %) de ses
+articles des années récentes y ont une affiliation ; **même règle pour tous les pays, France
+comprise** (un chercheur partagé à parts égales entre deux pays compte pour les deux).
+Activité et parts se calculent sur toutes ses signatures lues, tous pays confondus.
+
+Établissement : un chercheur compte pour un établissement si au moins
+`VIVIER_PART_MIN_ETABLISSEMENT` (50 %) de ses articles des années récentes y sont affiliés,
+structure ou l'une de ses tutelles (lignée OpenAlex corrigée, comme les articles) : un chercheur
+d'UMR compte pour l'UMR, ses universités et le CNRS ; une mobilité récente le rattache au nouvel
+établissement. Seuls les établissements de `entites` (étape 6) sont retenus. Comptage entier :
+les établissements ne s'additionnent pas.
+
+Chercheur « top 10 % » : au moins `VIVIER_MIN_TOP10` (1) article de la période dont la
+`fraction_top10_cites` (étape 4) atteint `VIVIER_SEUIL_FRACTION_TOP10` (0,5). Les années de
+`viviers_meta.annees_influence_provisoire` ont une fenêtre de citation pas encore close.
+
+Les deux comptages (principal / fractionnaire) ne se mélangent pas. Sur une même entité,
+Σ `nb_chercheurs` = Σ `nb_chercheurs_fractionnaire` = chercheurs actifs de l'entité.
+Domaine : additionner les panels du domaine.
+
+Index : `(entite_id, discipline_code)`, `(entite_type, discipline_code)`.
+
+### `viviers_chercheurs` — un document par chercheur actif rattaché à la France
+
+Liste nominative (données ouvertes OpenAlex) des chercheurs actifs rattachés à `FR` ou à un
+établissement français (pas ceux des autres pays). Publiée si `VIVIER_PUBLIER_CHERCHEURS`.
+
+| Champ | Contenu |
+|---|---|
+| `chercheur_id` | identifiant d'auteur OpenAlex (`A…`) |
+| `nom`, `orcid` | nom affiché par OpenAlex (le plus récent), ORCID (null si aucun) |
+| `pays` | pays de rattachement, part décroissante (ex. `["FR", "DE"]` pour un chercheur partagé) ; contient `FR` dès que `entites` n'est pas vide (avec les seuils par défaut, `VIVIER_PART_MIN_PAYS` ≤ `VIVIER_PART_MIN_ETABLISSEMENT`) |
+| `entites` | liste des `entite_id` (établissements) de rattachement, part décroissante ; filtre `{ entites: "<ROR>" }` ; vide si aucun établissement n'atteint le seuil (le chercheur compte alors pour `FR` seulement) |
+| `discipline_code`, `domaine_code` | panel principal et son domaine |
+| `disciplines` | liste `{ discipline_code, poids }` (somme 1) |
+| `nb_articles`, `nb_articles_recents` | articles de la période, des années récentes |
+| `nb_articles_auteur_principal`, `auteur_principal` | articles en premier ou dernier auteur ou correspondant ; booléen (seuil `VIVIER_MIN_AUTEUR_PRINCIPAL`) |
+| `nb_articles_top10`, `nb_articles_top10_cites`, `top10` | articles comptés dans le top 10 % (entier, seuil de fraction), somme des fractions (décimal), booléen « chercheur top 10 % » |
+| `annee_premiere_publication`, `annee_derniere_publication` | dans la période (pas un âge académique) |
+
+Index : `(entites, discipline_code)`, `(chercheur_id)`, `(orcid)`.
+
+### `viviers_meta` — un seul document
+
+`date_calcul`, `classement`, `perimetre`, `pays` (pays présents), `periode` (`annee_debut`, `annee_fin`,
+`annee_debut_recente`), `annees_influence_provisoire`, `parametres` (seuils et paramètres
+d'extraction), `controles` (`nb_auteurs_fenetre`, `nb_signatures_fenetre`,
+`nb_signatures_grandes_collaborations`, `nb_chercheurs_actifs` (tous pays), `nb_chercheurs_france`,
+`nb_chercheurs_rattaches_pays`, `par_pays`, `nb_chercheurs_top10`,
+`nb_chercheurs_auteur_principal`, `nb_chercheurs_avec_orcid`, `nb_chercheurs_rattaches`,
+`part_rattaches`, `nb_etablissements`, `par_domaine`), `methode` (textes à afficher tels quels).
+
 ## 3. Indicateurs
 
 | Indicateur | Nom du ratio | Numérateur (entité) | Dénominateur (`MONDE`) |
@@ -354,6 +432,8 @@ Domaine : additionner les panels du domaine (lettres en tête du code).
 | ERC : solde de mobilité des lauréats | `solde_mobilite_laureats` | `nb_laureats_arrivees - nb_laureats_departs` (entité) | — (différence, pas un ratio) |
 | ERC : intensité de candidature | `intensite_candidature` | `part_candidatures` (entité) | `part_articles` (entité) |
 | Prix : part des lauréats | `part_laureats_prix` | `nb_laureats` (établissement, `prix_effectifs`) | `nb_laureats` (`FR`) |
+| ERC : taux de candidature au vivier | `taux_candidature_vivier` | `nb_candidatures` (entité, `erc_effectifs`) | `nb_chercheurs` (même entité, `viviers_effectifs`) |
+| Vivier : part de chercheurs top 10 % | `part_chercheurs_top10` | `nb_chercheurs_top10` (entité) | `nb_chercheurs` (même entité) |
 | Prix : part de femmes | `part_femmes_prix` | `nb_laureats_femmes` (entité) | `nb_laureats_femmes + nb_laureats_hommes` (même entité) |
 
 ERC : taux de succès = `nb_laureats` ÷ `nb_candidatures`, même entité, mêmes années, mêmes
@@ -383,6 +463,26 @@ moins que son poids dans les publications ne le laisserait attendre (signe possi
 d'auto-censure). Pour « toutes disciplines », restreindre les candidatures aux types avec
 panel (`types_bourse_defaut`), pour comparer les mêmes champs. Les années d'appel et de
 publication sont rapprochées telles quelles : choisir des périodes de même longueur.
+
+ERC : taux de candidature au vivier = candidatures ÷ chercheurs actifs, même entité, mêmes
+panels. Sert surtout à **comparer la France aux autres pays** (`erc_meta.pays_compares`, tous
+présents dans `viviers_effectifs`) : candidatures du pays (pays de la structure de dépôt)
+rapportées aux chercheurs actifs de ce pays.
+- Années : le vivier n'a pas d'année ; prendre les appels de `viviers_meta.periode` (2021-2025
+  pour le moment, couverture Horizon Europe) et diviser par le nombre d'années pour un taux annuel.
+  Signaler `erc_meta.annees_provisoires`.
+- Types : `types_bourse_defaut` (STG, COG, ADG), seuls à avoir un panel ; « toutes
+  disciplines » = somme des panels des deux côtés.
+- Disciplines : même `discipline_code` (ou mêmes panels sommés) au numérateur et au
+  dénominateur ; `nb_chercheurs` (discipline principale) par défaut, ou
+  `nb_chercheurs_fractionnaire`, sans les mélanger.
+- Variante « excellence » : dénominateur `nb_chercheurs_top10` (chercheurs ayant au moins un
+  article du top 10 %), plus proche de la population visée par l'ERC.
+- Référence : l'ensemble des pays comparés (sommer candidatures et chercheurs de
+  `erc_meta.pays_compares`, puis diviser). Indice = taux du pays ÷ taux de l'ensemble.
+- Complément de l'intensité de candidature (`part_candidatures` ÷ `part_articles`) : ici on
+  compte des personnes, pas des articles, ce qui neutralise les écarts de productivité entre pays.
+Ce sont des ordres de grandeur (personnes OpenAlex, pas des effectifs RH).
 
 Prix : mêmes prix (un groupe = la liste `prix_meta.groupes[].prix`) et mêmes années au
 numérateur et au dénominateur, effectifs sommés avant de diviser. Un lauréat comptant pour
@@ -468,5 +568,6 @@ db.prix_effectifs_<version>.aggregate([
 | 6b | `copublications.compute_copublications()` | `indicateurs/erc_copublications.parquet` |
 | ERC | `erc.compute_erc()` | `erc/erc_effectifs.parquet`, `erc_entites.parquet`, `erc_meta.json`, `erc_non_rattaches.csv` |
 | Prix | `prix.compute_prix()` | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv`, `prix_personnes.parquet` (interne) |
-| Prix : disciplines | `prix_disciplines.extraire_publications_laureats()` puis `compute_prix_disciplines()` | `prix/publications/`, `prix_laureats_disciplines.parquet`, `prix_effectifs_disciplines.parquet`, `prix_disciplines_meta.json` |
+| Prix : disciplines | `publications_auteurs.extraire_publications()` (lecture commune avec les viviers) puis `prix_disciplines.compute_prix_disciplines()` | `prix/publications/`, `prix_laureats_disciplines.parquet`, `prix_effectifs_disciplines.parquet`, `prix_disciplines_meta.json` |
+| Viviers | `publications_auteurs.extraire_publications()` (lecture commune avec les prix) puis `viviers.compute_viviers()` | `viviers/auteurs/`, `viviers_chercheurs.parquet`, `viviers_effectifs.parquet`, `viviers_meta.json` |
 | 7 | `publish.publish()` puis `publish.publish_mongo()` | `publication/erc/*.jsonl.gz` puis MongoDB |

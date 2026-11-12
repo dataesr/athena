@@ -15,18 +15,23 @@ Les étapes (chacune dépend des précédentes)
   "top10"                 compute_top10 (par périmètre) top 10 % des plus cités
   "erc"                   compute_erc                   candidatures et lauréats ERC (open data ESR)
   "prix"                  compute_prix                  lauréats des prix (IUF...) par établissement
-  "prix_disciplines"      extraire_publications_laureats + compute_prix_disciplines
-                                                        panel ERC des lauréats par leurs publications
-                                                        (relit les works du snapshot : long)
   "indicators"            compute_indicators            effectifs par entité/année/discipline
+  "publications"          extraire_publications         publications des lauréats et signatures des
+                                                        viviers, en UNE lecture des works (long)
+  "prix_disciplines"      compute_prix_disciplines      panel ERC des lauréats par leurs publications
+  "viviers"               compute_viviers               chercheurs actifs par pays, établissement
+                                                        et discipline
   "copublications"        compute_copublications        partenaires de chaque entité
   "publish"               publish                       fichiers pour tableaux (publication/)
   (publish_mongo() n'est jamais lancé automatiquement : chargement en base à la main)
 
   "top_journals" passe AVANT "top10" : le périmètre "revues_sjr" a besoin de
   revues_tete/sources_sjr.parquet.
-  "erc" passe AVANT "indicators" : l'étape 6 calcule aussi les articles des pays de
-  la comparaison ERC (intensité de candidature).
+  "erc" passe AVANT "indicators" et "viviers" : ces étapes calculent aussi les articles et
+  les chercheurs actifs des pays de la comparaison ERC (intensité, taux de candidature).
+  "publications" passe APRÈS "prix" (lauréats cherchés) et "indicators" (pays de la
+  bibliométrie lus pour les viviers). "prix_disciplines" et "viviers" relancent
+  l'extraction s'il manque des fichiers (reprise : seuls les fichiers manquants sont relus).
 
 Que relancer quand on change quelque chose ?
 --------------------------------------------
@@ -42,7 +47,11 @@ Que relancer quand on change quelque chose ?
   fichier de corrections, alias       -> run(steps=["publish"])
   mise à jour de Paysage / scanR      -> run(steps=["referentiel", "erc", "prix", "publish"])
   mise à jour des prix                -> run(steps=["prix", "prix_disciplines", "publish"])
-                                         (seuls les nouveaux lauréats déclenchent une relecture des works)
+                                         (seuls les nouveaux lauréats déclenchent une relecture des
+                                         works, pour les prix seulement)
+  seuils des viviers (actifs, top 10 %) -> run(steps=["viviers", "publish"]) (pas de relecture des works)
+                                         ; liste des pays (ERC ou biblio) ou VIVIER_ANNEE_DEBUT avancé
+                                         -> relecture des works
   mise à jour des données ERC         -> run(steps=["erc", "publish"]) ; si erc_meta.pays_compares
                                          change : run(steps=["erc", "indicators", "copublications",
                                          "publish"]) (publish() le signale)
@@ -75,14 +84,16 @@ from .erc import compute_erc
 from .extract_sources_institutions import extract_sources_institutions
 from .indicators import compute_indicators
 from .prix import compute_prix
-from .prix_disciplines import compute_prix_disciplines, extraire_publications_laureats
+from .prix_disciplines import compute_prix_disciplines
+from .publications_auteurs import extraire_publications
 from .publish import publish
 from .referentiel import build_referentiel
 from .top10_citations import compute_top10
 from .top_journals import compute_top_journals, top_journals_from_review
+from .viviers import compute_viviers
 
 STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc", "prix",
-         "prix_disciplines", "indicators", "copublications", "publish"]
+         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "publish"]
 
 
 # --- Étapes individuelles ------------------------------------------------------
@@ -147,12 +158,25 @@ def step_prix(data_dir: str = DATA_DIR, **kw):
     return compute_prix(data_dir=data_dir, **kw)
 
 
-def step_prix_disciplines(data_dir: str = DATA_DIR, classement: str = CLASSEMENT):
-    """Discipline des lauréats de prix : publications OpenAlex (relecture des works), puis panels."""
-    res = extraire_publications_laureats(data_dir=data_dir)
+def step_publications(data_dir: str = DATA_DIR, **kw):
+    """Publications des lauréats et signatures des viviers : une seule lecture des works,
+    seuls les fichiers manquants de chaque sortie sont lus."""
+    res = extraire_publications(data_dir=data_dir, **kw)
     if res["erreurs"]:
         raise RuntimeError(f"{len(res['erreurs'])} fichier(s) works non lus : relancer (reprise possible)")
+    return res
+
+
+def step_prix_disciplines(data_dir: str = DATA_DIR, classement: str = CLASSEMENT):
+    """Discipline des lauréats de prix (extraction complétée si besoin, prix et viviers ensemble)."""
+    step_publications(data_dir)
     return compute_prix_disciplines(data_dir=data_dir, classement=classement)
+
+
+def step_viviers(data_dir: str = DATA_DIR, classement: str = CLASSEMENT):
+    """Viviers de chercheurs (extraction complétée si besoin, prix et viviers ensemble)."""
+    step_publications(data_dir)
+    return compute_viviers(data_dir=data_dir, classement=classement)
 
 
 def step_publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, **kw):
@@ -208,7 +232,9 @@ def run(steps=None, start: str = None, end: str = None,
         "copublications": lambda: step_copublications(classement, perimetres, data_dir),
         "erc": lambda: step_erc(data_dir),
         "prix": lambda: step_prix(data_dir),
+        "publications": lambda: step_publications(data_dir),
         "prix_disciplines": lambda: step_prix_disciplines(data_dir, classement),
+        "viviers": lambda: step_viviers(data_dir, classement),
         "publish": lambda: step_publish(classement, data_dir),
     }
     if "review" in steps and not reviewed_csv:

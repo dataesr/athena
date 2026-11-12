@@ -28,6 +28,10 @@ CONTRAT_DONNEES.md. Résumé :
                            (+ discipline si prix_disciplines.compute_prix_disciplines() a été lancé)
   prix_effectifs_disciplines  lauréats par entité x année x prix x discipline (idem)
   prix_meta                un document : source, années, groupes de prix, textes de méthode
+  viviers_effectifs        chercheurs actifs par entité x discipline (si viviers.compute_viviers()
+                           a été lancé)
+  viviers_chercheurs       un document par chercheur actif (si VIVIER_PUBLIER_CHERCHEURS)
+  viviers_meta             un document : période, paramètres, contrôles, textes de méthode
 
 1. publish()          écrit <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz
                       (+ .parquet) et manifest.json. Aucune base nécessaire.
@@ -56,13 +60,13 @@ import pandas as pd
 from .common import DOMAINES_NOMS
 from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_DB, MONGO_URI, PRIX_DIR,
                      PUBLIER_COPUBLICATIONS, REFERENTIEL_DIR, REFERENTIEL_SOURCE, SJR_PATH,
-                     TABLEAUX_BOARD_ID)
+                     TABLEAUX_BOARD_ID, VIVIER_PUBLIER_CHERCHEURS, VIVIERS_DIR)
 from .entites import construire_entites
 
 COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copublications",
                "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta", "erc_effectifs", "erc_meta",
                "prix_effectifs", "prix_catalogue", "prix_laureats", "prix_meta",
-               "prix_effectifs_disciplines"]
+               "prix_effectifs_disciplines", "viviers_effectifs", "viviers_chercheurs", "viviers_meta"]
 
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
 INDEX = {
@@ -89,6 +93,9 @@ INDEX = {
     "prix_meta": [],
     "prix_effectifs_disciplines": [[("entite_id", 1), ("annee", 1), ("prix_id", 1), ("discipline_code", 1)],
                                    [("prix_id", 1), ("entite_type", 1), ("discipline_code", 1)]],
+    "viviers_effectifs": [[("entite_id", 1), ("discipline_code", 1)], [("entite_type", 1), ("discipline_code", 1)]],
+    "viviers_chercheurs": [[("entites", 1), ("discipline_code", 1)], [("chercheur_id", 1)], [("orcid", 1)]],
+    "viviers_meta": [],
 }
 
 
@@ -172,8 +179,9 @@ def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) ->
 def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
             referentiel_source: str = REFERENTIEL_SOURCE, referentiel_dir: str = REFERENTIEL_DIR,
             erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR,
-            copublications: bool = PUBLIER_COPUBLICATIONS) -> dict:
-    """Chaque collection sous forme de DataFrame (ou de dict pour biblio_meta, erc_meta, prix_meta)."""
+            copublications: bool = PUBLIER_COPUBLICATIONS, viviers_dir: str = VIVIERS_DIR,
+            chercheurs: bool = VIVIER_PUBLIER_CHERCHEURS) -> dict:
+    """Chaque collection sous forme de DataFrame (ou de dict pour les collections *_meta)."""
     ind, rt, t10 = data_dir / "indicateurs", data_dir / "revues_tete", data_dir / "top10"
     sql = lambda q: duckdb.sql(q).df()
     meta = meta_bibliometrie(classement, data_dir)
@@ -250,6 +258,15 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
             print(f"{f_ld} absent : prix sans discipline (lancer compute_prix_disciplines())")
     elif verbose:
         print(f"{prix_dir}/prix_effectifs.parquet absent : prix non publiés (lancer compute_prix())")
+    # Viviers de chercheurs (facultatif : viviers.compute_viviers())
+    viv = Path(viviers_dir) if viviers_dir else None
+    if viv is not None and (viv / "viviers_effectifs.parquet").exists():
+        tables["viviers_effectifs"] = sql(f"SELECT * FROM read_parquet('{viv}/viviers_effectifs.parquet')")
+        if chercheurs and (viv / "viviers_chercheurs.parquet").exists():
+            tables["viviers_chercheurs"] = sql(f"SELECT * FROM read_parquet('{viv}/viviers_chercheurs.parquet')")
+        tables["viviers_meta"] = _json(viv / "viviers_meta.json")
+    elif verbose:
+        print(f"{viviers_dir}/viviers_effectifs.parquet absent : viviers non publiés (lancer compute_viviers())")
     return tables
 
 
@@ -264,7 +281,8 @@ def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
             etabs_path: str = DASHBOARD_ETABS_PATH, out_dir: str = None,
             parquet: bool = True, referentiel_source: str = REFERENTIEL_SOURCE,
             referentiel_dir: str = REFERENTIEL_DIR, erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR,
-            copublications: bool = PUBLIER_COPUBLICATIONS, verbose: bool = True) -> dict:
+            copublications: bool = PUBLIER_COPUBLICATIONS, viviers_dir: str = VIVIERS_DIR,
+            verbose: bool = True) -> dict:
     """Écrit chaque collection dans <out_dir> (défaut <data_dir>/publication/<classement>) :
     <collection>.jsonl.gz (un document JSON par ligne, prêt pour Mongo) et, si parquet=True,
     <collection>.parquet ; plus manifest.json (liste, nombre de lignes, colonnes).
@@ -274,12 +292,12 @@ def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     out = Path(out_dir) if out_dir else data_dir / "publication" / classement
     out.mkdir(parents=True, exist_ok=True)
     tables = _tables(classement, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir, erc_dir,
-                     prix_dir, copublications)
+                     prix_dir, copublications, viviers_dir)
     manifeste = {"classement": classement, "genere_le": dt.datetime.now().isoformat(timespec="seconds"),
                  "snapshot_openalex": tables["biblio_meta"]["snapshot_openalex"], "collections": {}}
     for nom, t in tables.items():
         f = out / f"{nom}.jsonl.gz"
-        if isinstance(t, dict):                     # biblio_meta, erc_meta, prix_meta : un seul document
+        if isinstance(t, dict):                     # collections *_meta : un seul document
             with gzip.open(f, "wt", encoding="utf-8") as fh:
                 fh.write(json.dumps(t, ensure_ascii=False) + "\n")
             manifeste["collections"][nom] = {"nb_documents": 1, "fichier": f.name}

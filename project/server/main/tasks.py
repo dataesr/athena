@@ -2,7 +2,8 @@ from project.server.main.copublications import compute_copublications
 from project.server.main.disciplines import build_disciplines
 from project.server.main.erc import compute_erc
 from project.server.main.prix import compute_prix
-from project.server.main.prix_disciplines import compute_prix_disciplines, extraire_publications_laureats
+from project.server.main.prix_disciplines import compute_prix_disciplines
+from project.server.main.publications_auteurs import extraire_publications
 from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
 from project.server.main.indicators import compute_indicators
@@ -14,6 +15,7 @@ from project.server.main.config import SNAPSHOT
 from project.server.main.referentiel import build_referentiel, build_tutelles_rnsr
 from project.server.main.top_journals import compute_top_journals, top_journals_from_review
 from project.server.main.top10_citations import compute_top10
+from project.server.main.viviers import compute_viviers
 
 logger = get_logger(__name__)
 
@@ -141,17 +143,6 @@ def create_task_compute(args: dict) -> None:
     compute_prix()
 
 # ---------------------------------------------------------------------------
-# 5 quater. Discipline (panel ERC) des lauréats de prix, par leurs publications
-#    Lit sur S3 : les works du snapshot (auteurs, topic, année ; de l'ordre de l'étape 2,
-#                 reprise possible ; seuls de nouveaux lauréats déclenchent une relecture)
-#    Lit : prix/prix_personnes.parquet, disciplines/, inst_lineage.parquet
-#    Écrit dans prix/ : publications/*.parquet, prix_laureats_disciplines.parquet,
-#          prix_effectifs_disciplines.parquet, prix_disciplines_meta.json
-# ---------------------------------------------------------------------------
-    extraire_publications_laureats()
-    compute_prix_disciplines()
-
-# ---------------------------------------------------------------------------
 # 6. Effectifs : monde, 25 pays (+ pays de la comparaison ERC), établissements
 #    français et 300 étrangers (15 à 45 min)
 #    Lit : top10/, works/ (pays, revue), work_inst/, institutions.parquet,
@@ -163,6 +154,40 @@ def create_task_compute(args: dict) -> None:
 #    Affiche : la France par année, les plus gros établissements, les pays comparés.
 # ---------------------------------------------------------------------------
     compute_indicators()
+
+# ---------------------------------------------------------------------------
+# 6 ter. Publications des lauréats de prix et signatures des viviers : UNE lecture des works
+#    Lit sur S3 : les works du snapshot (de l'ordre de l'étape 2, reprise possible, fichier
+#                 par fichier ; chaque sortie a sa reprise : de nouveaux lauréats ne relisent
+#                 que pour les prix, un changement de pays ou de période que pour les viviers)
+#    Après compute_prix() (lauréats cherchés), compute_erc() et compute_indicators() (pays).
+#    Écrit : prix/publications/*.parquet, viviers/auteurs/*.parquet
+# ---------------------------------------------------------------------------
+    extraire_publications()
+
+# ---------------------------------------------------------------------------
+# 6 quater. Discipline (panel ERC) des lauréats de prix, par leurs publications
+#    (règle commune avec les viviers : publications_auteurs.poids_disciplines)
+#    Lit : prix/prix_personnes.parquet, prix/publications/, disciplines/, inst_lineage.parquet
+#    Écrit dans prix/ : prix_laureats_disciplines.parquet,
+#          prix_effectifs_disciplines.parquet, prix_disciplines_meta.json
+# ---------------------------------------------------------------------------
+    compute_prix_disciplines()
+
+# ---------------------------------------------------------------------------
+# 6 quinquies. Viviers de chercheurs : chercheurs actifs par pays (France + pays des comparaisons
+#    ERC et bibliométrique, après compute_erc() et compute_indicators()), par établissement
+#    français et par discipline
+#    Lit : viviers/auteurs/ (étape 6 ter), top10/, disciplines/, institutions.parquet, inst_lineage.parquet,
+#          indicateurs/erc_entites.parquet
+#    Écrit dans viviers/ : viviers_chercheurs.parquet,
+#          viviers_effectifs.parquet, viviers_meta.json
+#    Période : VIVIER_ANNEE_DEBUT-VIVIER_ANNEE_FIN (2021-2025), propre aux viviers ; les
+#    publications ne sont extraites que depuis son début : l'avancer relit les works.
+#    Seuils (chercheur actif, top 10 %) : VIVIER_* dans config.py ; les changer ne demande
+#    que compute_viviers().
+# ---------------------------------------------------------------------------
+    compute_viviers()
 
 # ---------------------------------------------------------------------------
 # 6 bis. Copublications (10 à 30 min ; plus si beaucoup de grandes collaborations,
@@ -179,7 +204,7 @@ def create_task_compute(args: dict) -> None:
 #    Écrit dans publication/erc/ : entites, biblio_disciplines, biblio_effectifs,
 #          biblio_copublications (si PUBLIER_COPUBLICATIONS), biblio_revues_tete, biblio_seuils_top10, biblio_meta,
 #          erc_effectifs, erc_meta, prix_effectifs, prix_catalogue, prix_laureats, prix_meta,
-#          prix_effectifs_disciplines
+#          prix_effectifs_disciplines, viviers_effectifs, viviers_chercheurs, viviers_meta
 #          (.jsonl.gz pour Mongo, .parquet), et manifest.json
 # ---------------------------------------------------------------------------
     publish()

@@ -300,6 +300,45 @@ PRIX_DISC_FENETRE = 10             # années de publications jusqu'au prix (ann�
 PRIX_DISC_MIN_PUBLICATIONS = 3     # moins de publications dans la fenêtre : toutes celles lues
 PRIX_DISC_NOMS = True              # sans ORCID : appariement par nom + établissement du lauréat
 
+# --- Viviers de chercheurs (viviers.py) ----------------------------------------------
+# Chercheurs « actifs » par pays, par établissement français et par discipline, d'après leurs
+# publications OpenAlex (auteurs OpenAlex qui signent dans l'un des pays lus). Sert de
+# dénominateur aux ERC, aux projets (Horizon Europe, ANR...) et aux prix : candidats ou
+# lauréats rapportés au vivier. L'extraction relit les works du snapshot (long, comme l'étape 1).
+# Sorties dans <DATA_DIR>/viviers/.
+VIVIERS_DIR = f"{DATA_DIR}/viviers"
+# Pays lus : None = FR + pays de la comparaison ERC (erc_meta.pays_compares) + pays de la
+# comparaison bibliométrique (biblio_meta.pays_compares, dont États-Unis, Chine...) : lancer
+# compute_erc() et compute_indicators() avant l'extraction ; ou liste imposée de codes ISO
+# (FR toujours ajouté). Changer la liste relit les works.
+VIVIER_PAYS = None
+VIVIER_PERIMETRE = PERIMETRE       # articles retenus = fichier top10 de ce périmètre (étape 4)
+# Période d'activité du vivier, propre aux viviers (indépendante de ANNEE_MIN / ANNEE_MAX) :
+# à changer explicitement quand on veut faire glisser le vivier (relit les works).
+VIVIER_ANNEE_DEBUT = 2021
+VIVIER_ANNEE_FIN = 2025
+# Publications extraites depuis le début de la période. Abaisser pour tester d'autres
+# périodes sans relire les works.
+VIVIER_PUB_ANNEE_MIN = VIVIER_ANNEE_DEBUT
+# Chercheur actif : au moins VIVIER_MIN_ARTICLES articles dans la fenêtre, dont au moins
+# VIVIER_MIN_ARTICLES_RECENTS dans les VIVIER_ANNEES_RECENTES dernières années.
+VIVIER_MIN_ARTICLES = 3
+VIVIER_ANNEES_RECENTES = 2
+VIVIER_MIN_ARTICLES_RECENTS = 1
+VIVIER_MAX_AUTEURS_PAR_ARTICLE = 100   # articles à plus d'auteurs (grandes collaborations) ignorés
+                                       # pour tous les calculs du vivier ; None = tous
+# Rattachement : un chercheur compte pour un établissement si au moins cette part de ses
+# articles récents (VIVIER_ANNEES_RECENTES, signatures des pays lus) y est affiliée
+# (lignée comprise : UMR -> université et CNRS). 0.5 = établissement principal.
+VIVIER_PART_MIN_ETABLISSEMENT = 0.5
+VIVIER_PART_MIN_PAYS = 0.5          # idem pour le pays (même règle pour tous les pays, France comprise)
+# Top 10 % : un article compte comme « dans le top 10 % » si sa fraction_top10_cites (étape 4)
+# atteint ce seuil (1 = nettement au-dessus du seuil de citations, < 1 = ex aequo au seuil).
+VIVIER_SEUIL_FRACTION_TOP10 = 0.5
+VIVIER_MIN_TOP10 = 1               # articles du top 10 % pour être « chercheur top 10 % »
+VIVIER_MIN_AUTEUR_PRINCIPAL = 1    # articles en premier ou dernier auteur, ou correspondant
+VIVIER_PUBLIER_CHERCHEURS = True   # collection viviers_chercheurs (liste nominative)
+
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)
 DUCKDB_THREADS = None         # None = tous les cœurs

@@ -31,3 +31,6 @@ dist
 doc
 doc/out.*
 doc/bso.tex
+
+# Présentations internes (ne pas publier)
+prez/

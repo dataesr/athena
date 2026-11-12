@@ -28,7 +28,9 @@ dans [CONTRAT_DONNEES.md](CONTRAT_DONNEES.md).
 | 6b | `copublications.compute_copublications()` | partenaires de chaque pays et établissement |
 | 6c | `erc.compute_erc()` | bourses ERC (participations Horizon Europe de l'open data ESR, lues par `horizon.py`) : candidatures et lauréats par établissement, pays et panel |
 | 6d | `prix.compute_prix()` | prix et distinctions (lauréats recensés dans Paysage : IUF, médailles du CNRS…) par établissement, année et prix |
-| 6e | `prix_disciplines.extraire_publications_laureats()`, `compute_prix_disciplines()` | panel ERC des lauréats par leurs publications OpenAlex (ORCID, sinon nom + établissement ; relit les works du snapshot) |
+| 6e | `publications_auteurs.extraire_publications()` | une seule relecture des works du snapshot pour les deux étapes suivantes : publications des lauréats de prix et signatures des viviers (reprise séparée pour chacune) |
+| 6f | `prix_disciplines.compute_prix_disciplines()` | panel ERC des lauréats par leurs publications OpenAlex (ORCID, sinon nom + établissement) |
+| 6g | `viviers.compute_viviers()` | viviers de chercheurs actifs par pays (France + pays des comparaisons ERC et bibliométrique), établissement et discipline (auteurs OpenAlex), avec indicateur top 10 % : taux de candidature ERC de la France comparé aux autres pays. Discipline : même règle et même code que les prix (`poids_disciplines`) |
 | 7 | `publish.publish()` / `publish.publish_mongo()` | fichiers de publication, puis chargement dans MongoDB |
 | 8 | `export_dashboard.build_dashboard()` | aperçu HTML autonome |
 

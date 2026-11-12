@@ -19,6 +19,8 @@ Deux étapes, après prix.compute_prix() (qui écrit prix/prix_personnes.parquet
      work_id, year, topic_id, author_id, orcid, cle_nom, inst_ids
    et prix/publications_cibles.parquet (ORCID et noms cherchés). Si de nouveaux lauréats
    apparaissent, tout est relu (sinon les fichiers déjà lus sont sautés).
+   Lecture partagée avec les viviers : publications_auteurs.extraire_publications() écrit
+   les deux sorties en une seule lecture des works (voir pipeline, étape "publications").
 
 2. compute_prix_disciplines()          (quelques minutes, local)
    Appariement lauréat -> auteurs OpenAlex :
@@ -28,9 +30,9 @@ Deux étapes, après prix.compute_prix() (qui écrit prix/prix_personnes.parquet
      non_classe       : sinon.
    Publications retenues : celles des PRIX_DISC_FENETRE années jusqu'à l'année du prix
    incluse ; moins de PRIX_DISC_MIN_PUBLICATIONS -> toutes celles du snapshot.
-   Discipline : part des publications par discipline (topic principal -> panel) ;
-   discipline_code = la plus fréquente (à égalité : code le plus petit), domaine_code = son
-   domaine (LS, PE, SH).
+   Discipline : publications_auteurs.poids_disciplines(), règle commune avec les viviers :
+   part des publications par discipline (topic principal -> panel) ; discipline_code = la
+   plus fréquente (à égalité : code le plus petit), domaine_code = son domaine (LS, PE, SH).
    Écrit dans prix/ :
      prix_laureats_disciplines.parquet  laureat_id, discipline_code, domaine_code,
                                         disciplines [{discipline_code, poids}],
@@ -51,8 +53,6 @@ Exemple :
 import datetime as dt
 import json
 import re
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import duckdb
@@ -60,20 +60,11 @@ import pandas as pd
 
 from .config import (CLASSEMENT, DATA_DIR, PRIX_DIR, PRIX_DISC_FENETRE, PRIX_DISC_MIN_PUBLICATIONS,
                      PRIX_DISC_NOMS, PRIX_PUB_ANNEE_MIN)
+from .publications_auteurs import (ORCID_SQL, TYPES, _cle_sql, _nom_fichier, _short,  # noqa: F401
+                                   extraire_publications, poids_disciplines)
 
 ORCID_RE = re.compile(r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])")
-ORCID_SQL = r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])"
 COLS_PUB = ["work_id", "year", "topic_id", "author_id", "orcid", "cle_nom", "inst_ids"]
-
-
-def _cle_sql(expr: str) -> str:
-    """Nom normalisé, même règle pour les lauréats et les auteurs OpenAlex (toujours en SQL) :
-    'Jean-Éric  DUPONT' -> 'jean eric dupont'."""
-    return f"trim(regexp_replace(lower(strip_accents(coalesce({expr}, ''))), '[^a-z]+', ' ', 'g'))"
-
-
-def _short(expr: str) -> str:
-    return f"regexp_extract({expr}, '[^/]+$')"
 
 
 def _orcid(v):
@@ -109,143 +100,16 @@ def cibles(prix_dir: str = PRIX_DIR, noms: bool = PRIX_DISC_NOMS) -> tuple:
 
 # --- 1. Extraction ---------------------------------------------------------------------------
 
-def _sql_publications(url: str, annee_min: int, types: tuple) -> str:
-    types_sql = ", ".join(f"'{t}'" for t in types)
-    # Comme l'étape 1 : on ne cite que des sous-champs précis des auteurs (list_transform),
-    # pour que DuckDB ne lise que ces colonnes du Parquet distant ; puis une ligne par auteur
-    # (unnest), gardée si son ORCID ou son nom est cherché (jointures sur les petites tables
-    # c_orcid et c_noms).
-    return f"""
-    WITH w AS (
-        SELECT {_short('id')} AS work_id, publication_year::SMALLINT AS year,
-               {_short('primary_topic.id')} AS topic_id,
-               unnest(list_transform(authorships, a -> {{
-                   'author_id': {_short('a.author.id')},
-                   'orcid': regexp_extract(upper(coalesce(a.author.orcid::VARCHAR, '')), '{ORCID_SQL}', 1),
-                   'nom': a.author.display_name,
-                   'inst_ids': list_filter(list_transform(a.institutions, i -> {_short('i.id')}),
-                                           x -> x IS NOT NULL AND x <> '')
-               }})) AS au
-        FROM read_parquet('{url}')
-        WHERE publication_year >= {int(annee_min)}
-          AND type IN ({types_sql})
-          AND NOT coalesce(is_retracted, false)
-          AND NOT coalesce(is_paratext, false)
-          AND primary_topic.id IS NOT NULL
-    ), a AS (
-        SELECT work_id, year, topic_id, au.author_id AS author_id, nullif(au.orcid, '') AS orcid,
-               {_cle_sql('au.nom')} AS cle_nom, au.inst_ids AS inst_ids
-        FROM w
-    )
-    SELECT * FROM a
-    WHERE orcid IN (SELECT orcid FROM c_orcid) OR cle_nom IN (SELECT cle_nom FROM c_noms)
-    """
-
-
-def _connexion(url: str):
-    from .openalex_s3 import connect_for
-    return connect_for(url)
-
-
-def _nom_fichier(url: str) -> str:
-    parts = url.split("/")
-    return f"{parts[-2]}__{parts[-1]}"
-
-
-def _extraire_un(url: str, out_dir: Path, c_orcid: pd.DataFrame, c_noms: pd.DataFrame,
-                 annee_min: int, types: tuple, retries: int = 3) -> tuple:
-    from .openalex_s3 import readable_url
-    f = out_dir / _nom_fichier(url)
-    if f.exists():
-        return f.name, -1, 0.0
-    for essai in range(1, retries + 1):
-        try:
-            t0 = time.time()
-            con = _connexion(url)
-            con.register("c_orcid", c_orcid)
-            con.register("c_noms", c_noms)
-            tmp = f.with_suffix(".tmp")
-            con.execute(f"COPY ({_sql_publications(readable_url(url), annee_min, types)}) "
-                        f"TO '{tmp}' (FORMAT parquet, COMPRESSION zstd)")
-            n = con.execute(f"SELECT count(*) FROM read_parquet('{tmp}')").fetchone()[0]
-            con.close()
-            tmp.rename(f)
-            return f.name, n, time.time() - t0
-        except Exception as e:  # réseau, timeout S3...
-            if essai == retries:
-                raise RuntimeError(f"{f.name} : échec après {retries} essais : {e}") from e
-            time.sleep(5 * essai)
-
-
 def extraire_publications_laureats(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR,
                                    annee_min: int = PRIX_PUB_ANNEE_MIN, noms: bool = PRIX_DISC_NOMS,
-                                   types: tuple = ("article", "review"), workers: int = 8,
+                                   types: tuple = TYPES, workers: int = 8,
                                    urls: list = None, verbose: bool = True) -> dict:
     """Publications OpenAlex des lauréats possibles -> <prix_dir>/publications/ (voir l'en-tête).
-    urls : fichiers works à lire (défaut : ceux de <data_dir>/works_manifest.json)."""
-    out = Path(prix_dir) / "publications"
-    out.mkdir(parents=True, exist_ok=True)
-    c_orcid, c_noms = cibles(prix_dir, noms)
-    if urls is None:
-        man = Path(data_dir) / "works_manifest.json"
-        if not man.exists():
-            raise FileNotFoundError(f"{man} absent : extraire le snapshot d'abord (extract_snapshot)")
-        urls = [f["url"] for f in json.loads(man.read_text())["files"]]
-
-    # Nouvelles cibles depuis la dernière extraction : tout relire (les fichiers déjà lus
-    # ne contiennent pas leurs publications)
-    f_cib = Path(prix_dir) / "publications_cibles.parquet"
-    params = {"annee_min": int(annee_min), "types": list(types)}
-    f_par = out / "params.json"
-    if f_cib.exists() and f_par.exists():
-        old = duckdb.sql(f"SELECT * FROM read_parquet('{f_cib}')").df()
-        nouveaux = (set(c_orcid["orcid"]) - set(old.loc[old["type"] == "orcid", "valeur"])) | \
-                   (set(c_noms["cle_nom"]) - set(old.loc[old["type"] == "nom", "valeur"]))
-        if nouveaux or json.loads(f_par.read_text()) != params:
-            if verbose:
-                print(f"{len(nouveaux):,} nouvelles cibles ou paramètres changés : publications relues")
-            for p in out.glob("*.parquet"):
-                p.unlink()
-    for p in out.glob("*.tmp"):
-        p.unlink()
-    cib = pd.concat([pd.DataFrame({"type": "orcid", "valeur": c_orcid["orcid"]}),
-                     pd.DataFrame({"type": "nom", "valeur": c_noms["cle_nom"]})], ignore_index=True)
-    with duckdb.connect() as con:
-        con.register("cib", cib)
-        con.execute(f"COPY cib TO '{f_cib}' (FORMAT parquet)")
-    f_par.write_text(json.dumps(params))
-
-    if verbose:
-        faits = sum((out / _nom_fichier(u)).exists() for u in urls)
-        print(f"Publications des lauréats : {len(c_orcid):,} ORCID, {len(c_noms):,} noms cherchés ; "
-              f"{len(urls)} fichiers works, {faits} déjà lus")
-    if urls and str(urls[0]).startswith("s3://"):
-        from .openalex_s3 import connect
-        connect(install=True).close()     # httpfs installé une fois, avant les threads
-    t0 = time.time()
-    res = {"fichiers": len(urls), "lus": 0, "deja_faits": 0, "lignes": 0, "erreurs": []}
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futs = [pool.submit(_extraire_un, u, out, c_orcid, c_noms, annee_min, tuple(types)) for u in urls]
-        for k, fut in enumerate(as_completed(futs), 1):
-            try:
-                nom, n, sec = fut.result()
-                if n < 0:
-                    res["deja_faits"] += 1
-                    msg = "déjà lu"
-                else:
-                    res["lus"] += 1
-                    res["lignes"] += n
-                    msg = f"{n:>8,} lignes en {sec:5.1f} s"
-            except Exception as e:
-                res["erreurs"].append(str(e))
-                nom, msg = "", f"ERREUR {e}"
-            if verbose:
-                print(f"[{k}/{len(urls)}] {nom}  {msg}")
-    res["minutes"] = round((time.time() - t0) / 60, 1)
-    if verbose:
-        print(f"Terminé en {res['minutes']} min — {res['lus']} lus, {res['deja_faits']} déjà faits, "
-              f"{len(res['erreurs'])} erreur(s)")
-    return res
+    Seule : relit les works pour les prix uniquement ; publications_auteurs.extraire_publications()
+    fait prix et viviers en une lecture."""
+    return extraire_publications(prix=True, viviers=False, prix_dir=prix_dir, data_dir=data_dir,
+                                 prix_annee_min=annee_min, noms=noms, types=types, workers=workers,
+                                 urls=urls, verbose=verbose)
 
 
 # --- 2. Calcul -------------------------------------------------------------------------------
@@ -320,14 +184,8 @@ def compute_prix_disciplines(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR,
         SELECT w.* FROM w JOIN n USING (laureat_id)
         WHERE w.dans_fenetre OR n.n_f < {int(min_publications)}
     """)
-    poids = con.execute("""
-        WITH c AS (SELECT laureat_id, discipline_code, any_value(domaine_code) AS domaine_code,
-                          count(DISTINCT work_id) AS n FROM w_ok GROUP BY 1, 2)
-        SELECT laureat_id, discipline_code, domaine_code,
-               n / sum(n) OVER (PARTITION BY laureat_id) AS poids,
-               sum(n) OVER (PARTITION BY laureat_id) AS nb_publications
-        FROM c
-    """).df()
+    poids_disciplines(con, "w_ok", "laureat_id", f_disc)
+    poids = con.execute("SELECT * FROM poids").df()
     meth = con.execute("""SELECT laureat_id, CASE WHEN bool_or(methode = 'orcid') THEN 'orcid'
                                  ELSE 'nom_affiliation' END AS methode_discipline,
                                  list(DISTINCT author_id ORDER BY author_id) AS auteurs_openalex
@@ -335,8 +193,7 @@ def compute_prix_disciplines(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR,
 
     # Une ligne par lauréat
     poids = poids.sort_values(["laureat_id", "poids", "discipline_code"], ascending=[True, False, True])
-    princ = poids.drop_duplicates("laureat_id")[["laureat_id", "discipline_code", "domaine_code",
-                                                 "nb_publications"]]
+    princ = poids[poids["principale"]][["laureat_id", "discipline_code", "domaine_code", "nb_publications"]]
     listes = (poids.assign(poids=poids["poids"].round(4))
               .groupby("laureat_id")[["discipline_code", "poids"]]
               .apply(lambda g: g.to_dict("records")).rename("disciplines"))
