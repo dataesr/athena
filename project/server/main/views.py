@@ -4,7 +4,8 @@ import redis
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 from rq import Connection, Queue
-from project.server.main.tasks import create_task_compute, create_task_projects
+from project.server.main.tasks import (ETAPES, HORS_DEFAUT, PAR_DEFAUT, create_task_compute,
+                                       create_task_projects, etapes_choisies)
 from project.server.main.logger import get_logger
 
 default_timeout = 4320000
@@ -22,14 +23,26 @@ def home():
     return render_template("home.html")
 
 
+@main_blueprint.route("/compute", methods=["GET"])
+def list_steps_compute():
+    """Étapes disponibles pour POST /compute (voir tasks.ETAPES)."""
+    return jsonify({"etapes": ETAPES, "par_defaut": PAR_DEFAUT, "hors_defaut": HORS_DEFAUT})
+
+
 @main_blueprint.route("/compute", methods=["POST"])
 def run_task_compute():
-    args = request.get_json(force=True)
+    """Corps JSON : {} (chaîne complète), {"steps": [...]}, {"start": ..., "end": ...},
+    "params": {étape: {argument: valeur}} (voir tasks.py)."""
+    args = request.get_json(force=True, silent=True) or {}
+    try:
+        etapes = etapes_choisies(args)
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
 
     with Connection(redis.from_url(current_app.config["REDIS_URL"])):
         q = Queue(name="athena", default_timeout=default_timeout)
         task = q.enqueue(create_task_compute, args)
-    response_object = {"status": "success", "data": {"task_id": task.get_id()}}
+    response_object = {"status": "success", "data": {"task_id": task.get_id(), "etapes": etapes}}
     return jsonify(response_object), 202
 
 

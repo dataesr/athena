@@ -34,9 +34,9 @@ dans [CONTRAT_DONNEES.md](CONTRAT_DONNEES.md).
 | 7 | `publish.publish()` / `publish.publish_mongo()` | fichiers de publication, puis chargement dans MongoDB |
 | 8 | `export_dashboard.build_dashboard()` | aperçu HTML autonome |
 
-Les étapes lancées par `POST /compute` sont choisies dans
-`project/server/main/tasks.py` (`create_task_compute`). `pipeline.py` permet de
-les enchaîner ou de n'en relancer qu'une partie (voir sa docstring).
+Les étapes lancées par `POST /compute` se choisissent dans le corps JSON (liste et
+ordre : `ETAPES` dans `project/server/main/tasks.py`, ou `GET /compute`). `pipeline.py`
+reste utilisable en Python (voir sa docstring).
 
 ## Variables d'environnement
 
@@ -66,7 +66,12 @@ python manage.py run_worker    # worker RQ (Redis attendu sur redis://redis:6379
 Lancer un calcul et suivre son état :
 
 ```bash
-curl -X POST http://<hôte>/compute -d '{}'
+curl http://<hôte>/compute                     # étapes disponibles
+curl -X POST http://<hôte>/compute -d '{}'     # toute la chaîne (sans contrôles ni Mongo)
+curl -X POST http://<hôte>/compute -d '{"steps": ["publications", "prix_disciplines", "viviers", "publish"]}'
+curl -X POST http://<hôte>/compute -d '{"start": "indicators", "end": "publish"}'
+curl -X POST http://<hôte>/compute -d '{"steps": ["viviers"], "params": {"viviers": {"annee_debut": 2016, "out_suffix": "_2016"}}}'
+curl -X POST http://<hôte>/compute -d '{"steps": ["publish_mongo"]}'
 curl http://<hôte>/tasks/<task_id>
 ```
 
