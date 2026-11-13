@@ -69,10 +69,8 @@ import datetime as dt
 import json
 from pathlib import Path
 
-import duckdb
-
-from .common import connect
-from .config import (CLASSEMENT, DATA_DIR, ERC_DIR, ETAB_COUNTRIES, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR,
+from .common import PAYS_NOMS, connect
+from .config import (CLASSEMENT, DATA_DIR, ERC_DIR, ETAB_COUNTRIES, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR, SNAPSHOT,
                      VIVIER_ANNEE_FIN, VIVIER_PART_MIN_PAYS, VIVIER_PAYS, VIVIER_ANNEES_RECENTES, VIVIER_ANNEE_DEBUT,
                      VIVIER_MAX_AUTEURS_PAR_ARTICLE, VIVIER_MIN_ARTICLES, VIVIER_MIN_ARTICLES_RECENTS,
                      VIVIER_MIN_AUTEUR_PRINCIPAL, VIVIER_MIN_TOP10, VIVIER_PART_MIN_ETABLISSEMENT,
@@ -304,7 +302,11 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
                (SELECT count(*) FROM ratt_pays WHERE pays_code = 'FR') AS nb_chercheurs_france,
                (SELECT count(DISTINCT author_id) FROM ratt_pays) AS nb_chercheurs_rattaches_pays,
                (SELECT count(DISTINCT author_id) FROM ratt) AS nb_chercheurs_rattaches,
-               (SELECT count(DISTINCT entite_id) FROM ratt) AS nb_etablissements
+               (SELECT count(DISTINCT entite_id) FROM ratt) AS nb_etablissements,
+               (SELECT count(*) FROM art) AS nb_articles_perimetre,
+               (SELECT count(DISTINCT work_id) FROM sig) AS nb_articles_signes_pays_lus,
+               (SELECT count(DISTINCT work_id) FROM sig_tout) - (SELECT count(DISTINCT work_id) FROM sig)
+                   AS nb_articles_grandes_collaborations
     """).df().iloc[0].to_dict()
     ctrl = {k: int(v) for k, v in ctrl.items()}
     ctrl["part_rattaches"] = round(ctrl["nb_chercheurs_rattaches"] / ctrl["nb_chercheurs_france"], 4) \
@@ -327,10 +329,53 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         provisoires = [a for a in range(debut, int(annee_fin) + 1) if a + int(W) >= int(years[1])]
     grandes = (f"Les articles à plus de {max_auteurs} auteurs (grandes collaborations) sont ignorés."
                if max_auteurs else "Tous les articles comptent, quel que soit leur nombre d'auteurs.")
+    # Publications : description explicite pour les consommateurs (tableaux), d'après les
+    # paramètres réellement utilisés pour le fichier top10 (étape 4)
+    libelles = {"toutes_revues_openalex": "tous les articles de revues d'OpenAlex",
+                "revues_sjr": "articles des revues indexées dans SJR (Scimago, comparable à Scopus)"}
+    work_types = params10.get("work_types") or []
+    publications = {
+        "source": "OpenAlex",
+        "snapshot": SNAPSHOT,
+        "perimetre": perimetre,
+        "perimetre_libelle": libelles.get(perimetre, perimetre),
+        "revues_sjr_seulement": perimetre == "revues_sjr",
+        "types_documents": work_types,
+        "types_sources": params10.get("source_types") or [],
+        "annee_debut": debut,
+        "annee_fin": int(annee_fin),
+        "max_auteurs_par_article": max_auteurs,
+        "classement_disciplines": classement,
+        "discipline_article": "topic principal OpenAlex -> panel ERC ; articles sans panel exclus",
+        "exclusions": ["documents rétractés", "paratexte (éditoriaux, sommaires...)",
+                       "sans topic principal ou topic hors classement"]
+                      + ([f"plus de {max_auteurs} auteurs (grandes collaborations)"] if max_auteurs else []),
+        "signatures_lues": "seules les signatures avec une affiliation dans les pays lus (champ pays) ; "
+                           "les articles d'un chercheur publiés depuis un autre pays ne comptent pas",
+        "meme_base_que": f"indicateurs bibliométriques du périmètre {perimetre} (effectifs d'articles, "
+                         "top 10 %) : mêmes articles, mêmes disciplines",
+        "top10": {
+            "role": "indicateur (chercheurs top 10 %), pas un filtre : le vivier compte tous les "
+                    "chercheurs actifs, top 10 % ou non",
+            "part": params10.get("top_share"),
+            "reference": "articles les plus cités de la même discipline et de la même année, dans le "
+                         "périmètre",
+            "fenetre_citation_annees": params10.get("citation_window"),
+            "non_cites_exclus": params10.get("exclude_uncited"),
+            "seuil_fraction_article": seuil_fraction_top10,
+            "min_articles_top10_chercheur": int(min_top10),
+            "annees_provisoires": provisoires,
+        },
+        "nb_articles_perimetre": ctrl["nb_articles_perimetre"],
+        "nb_articles_signes_pays_lus": ctrl["nb_articles_signes_pays_lus"],
+    }
+    types_txt = " et ".join({"article": "articles", "review": "revues de littérature"}.get(t, t)
+                            for t in work_types) or "tous types de documents"
     meta = {
         "date_calcul": dt.date.today().isoformat(),
         "classement": classement,
         "perimetre": perimetre,
+        "publications": publications,
         "pays": params_extraction.get("pays") or ["FR"],
         "periode": {"annee_debut": debut, "annee_fin": int(annee_fin), "annee_debut_recente": debut_recent},
         "annees_influence_provisoire": provisoires,
@@ -345,10 +390,15 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         },
         "controles": ctrl,
         "methode": [
+            f"Publications : {publications['perimetre_libelle']} ({types_txt}, {debut}-{annee_fin}, "
+            f"snapshot OpenAlex {SNAPSHOT}), chacune classée dans un panel ERC par son topic principal ; "
+            "documents rétractés et paratexte exclus. Mêmes articles que les indicateurs "
+            "bibliométriques de ce périmètre. Toutes les publications du périmètre comptent, pas "
+            "seulement celles du top 10 %.",
             "Vivier : auteurs OpenAlex qui signent avec une affiliation en France ou dans un pays des "
-            f"comparaisons ERC et bibliométrique (articles de revues, {debut}-{annee_fin}, chaque article classé dans "
-            "un panel ERC). Seules les signatures dans ces pays sont lues ; la qualité dépend de la "
-            "désambiguïsation des auteurs par OpenAlex. Ordres de grandeur, pas des effectifs RH.",
+            "comparaisons ERC et bibliométrique. Seules les signatures dans ces pays sont lues ; la "
+            "qualité dépend de la désambiguïsation des auteurs par OpenAlex. Ordres de grandeur, pas "
+            "des effectifs RH.",
             f"Chercheur actif : au moins {min_articles} articles sur {debut}-{annee_fin}, dont au moins "
             f"{min_articles_recents} sur {debut_recent}-{annee_fin}. {grandes}",
             f"Pays : un chercheur compte pour un pays si au moins {round(100 * part_min_pays)} % de ses "
@@ -367,6 +417,34 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
             f"{min_auteur_principal} article(s) de la période.",
         ],
     }
+    meta["pays_noms"] = {p: PAYS_NOMS.get(p, p) for p in meta["pays"]}
+    meta["lecture"] = [
+        "Non additif entre établissements : un chercheur d'UMR compte pour l'UMR, ses universités et "
+        "ses organismes ; un chercheur peut aussi compter pour plusieurs établissements.",
+        "Non additif entre pays : un chercheur partagé (au moins 50 % de ses articles récents dans "
+        "chacun de deux pays) compte pour les deux.",
+        "La somme des établissements n'est pas la France : les chercheurs français sans établissement "
+        "atteignant le seuil comptent pour la France seulement.",
+        "Pas d'année : le vivier porte sur toute la période ; rapporter des candidatures ou lauréats "
+        "de la même période, divisés par le nombre d'années pour un taux annuel.",
+        "Discipline principale (nb_chercheurs) et fractionnaire (nb_chercheurs_fractionnaire) ne se "
+        "mélangent pas ; un domaine (LS, PE, SH) = somme de ses panels.",
+    ]
+    meta["limites"] = [
+        "Seuls les chercheurs qui publient des articles de revues sont vus : pas de personnels "
+        "sans publication, ni d'effectifs RH.",
+        "Sciences humaines et sociales sous-estimées : livres, chapitres et revues peu couvertes par "
+        "OpenAlex ne comptent pas ; les taux (candidatures ou lauréats / vivier) y sont donc "
+        "surestimés et à comparer avec prudence aux autres domaines.",
+        "Désambiguïsation OpenAlex : un chercheur scindé en plusieurs identifiants peut compter "
+        "plusieurs fois ou passer sous le seuil d'activité ; deux homonymes fusionnés comptent une fois.",
+        "Affiliations : une affiliation absente dans OpenAlex fait perdre la signature ; la "
+        "couverture varie selon les pays et les établissements.",
+        "Pas d'âge académique : le vivier ne distingue pas les étapes de carrière (ERC Starting, "
+        "Consolidator, Advanced).",
+        "Pays hors ERC (ex. États-Unis, Chine) : vivier utile pour comparer des tailles ou des parts "
+        "top 10 %, pas pour un taux de candidature ERC.",
+    ]
     (viviers_dir / f"viviers_meta{out_suffix}.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     if verbose:

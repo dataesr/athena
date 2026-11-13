@@ -60,8 +60,7 @@ import pandas as pd
 
 from .config import (CLASSEMENT, DATA_DIR, PRIX_DIR, PRIX_DISC_FENETRE, PRIX_DISC_MIN_PUBLICATIONS,
                      PRIX_DISC_NOMS, PRIX_PUB_ANNEE_MIN)
-from .publications_auteurs import (ORCID_SQL, TYPES, _cle_sql, _nom_fichier, _short,  # noqa: F401
-                                   extraire_publications, poids_disciplines)
+from .publications_auteurs import TYPES, _cle_sql, extraire_publications, poids_disciplines
 
 ORCID_RE = re.compile(r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])")
 COLS_PUB = ["work_id", "year", "topic_id", "author_id", "orcid", "cle_nom", "inst_ids"]

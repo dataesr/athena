@@ -416,7 +416,32 @@ d'extraction), `controles` (`nb_auteurs_fenetre`, `nb_signatures_fenetre`,
 `nb_signatures_grandes_collaborations`, `nb_chercheurs_actifs` (tous pays), `nb_chercheurs_france`,
 `nb_chercheurs_rattaches_pays`, `par_pays`, `nb_chercheurs_top10`,
 `nb_chercheurs_auteur_principal`, `nb_chercheurs_avec_orcid`, `nb_chercheurs_rattaches`,
-`part_rattaches`, `nb_etablissements`, `par_domaine`), `methode` (textes à afficher tels quels).
+`part_rattaches`, `nb_etablissements`, `nb_articles_perimetre`, `nb_articles_signes_pays_lus`,
+`nb_articles_grandes_collaborations`, `par_domaine`), `methode` (textes à afficher tels quels ;
+le premier décrit les publications).
+`pays_noms` (code → nom français), `lecture` (règles de lecture à afficher : non-additivité
+entre établissements et entre pays, somme des établissements ≠ France, pas d'année,
+principal / fractionnaire), `limites` (textes à afficher : seuls les publiants, SHS
+sous-estimées, désambiguïsation et affiliations OpenAlex, pas d'étape de carrière, pays hors
+ERC).
+
+`publications` : sur quelles publications le vivier est calculé, à afficher ou à reprendre en
+note de méthode dans tableaux :
+
+| Champ | Contenu |
+|---|---|
+| `source`, `snapshot` | `OpenAlex` et date du snapshot |
+| `perimetre`, `perimetre_libelle` | `toutes_revues_openalex` (tous les articles de revues d'OpenAlex, défaut) ou `revues_sjr` (revues indexées dans SJR) |
+| `revues_sjr_seulement` | booléen |
+| `types_documents`, `types_sources` | ex. `["article"]` (reviews exclues), `["journal"]` |
+| `annee_debut`, `annee_fin` | période des publications (= `periode`) |
+| `max_auteurs_par_article` | au-delà, article ignoré (grandes collaborations) |
+| `classement_disciplines`, `discipline_article` | topic principal OpenAlex → panel ERC ; articles sans panel exclus |
+| `exclusions` | liste lisible des exclusions (rétractés, paratexte, sans panel, grandes collaborations) |
+| `signatures_lues` | seules les affiliations dans les pays lus comptent |
+| `meme_base_que` | mêmes articles et disciplines que les indicateurs bibliométriques du périmètre |
+| `top10` | `role` (indicateur, **pas un filtre** : le vivier compte toutes les publications du périmètre), `part` (0,1), `reference`, `fenetre_citation_annees`, `non_cites_exclus`, `seuil_fraction_article`, `min_articles_top10_chercheur`, `annees_provisoires` |
+| `nb_articles_perimetre`, `nb_articles_signes_pays_lus` | articles du périmètre sur la période (monde) et ceux signés dans les pays lus |
 
 ## 3. Indicateurs
 
