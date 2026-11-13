@@ -30,7 +30,7 @@ dans [CONTRAT_DONNEES.md](CONTRAT_DONNEES.md).
 | 6d | `prix.compute_prix()` | prix et distinctions (lauréats recensés dans Paysage : IUF, médailles du CNRS…) par établissement, année et prix |
 | 6e | `publications_auteurs.extraire_publications()` | une seule relecture des works du snapshot pour les deux étapes suivantes : publications des lauréats de prix et signatures des viviers (reprise séparée pour chacune) |
 | 6f | `prix_disciplines.compute_prix_disciplines()` | panel ERC des lauréats par leurs publications OpenAlex (ORCID, sinon nom + établissement) |
-| 6g | `viviers.compute_viviers()` | viviers de chercheurs actifs par pays (France + pays des comparaisons ERC et bibliométrique), établissement et discipline (auteurs OpenAlex), avec indicateur top 10 % : taux de candidature ERC de la France comparé aux autres pays. Discipline : même règle et même code que les prix (`poids_disciplines`) |
+| 6g | `viviers.compute_viviers()` | viviers de chercheurs actifs par pays (France + pays des comparaisons ERC et bibliométrique), établissement et discipline (auteurs OpenAlex ; articles de revues, plus livres et chapitres en SHS), avec indicateur top 10 % : taux de candidature ERC de la France comparé aux autres pays. Discipline : même règle et même code que les prix (`poids_disciplines`) |
 | 7 | `publish.publish()` / `publish.publish_mongo()` | fichiers de publication, puis chargement dans MongoDB |
 | 8 | `export_dashboard.build_dashboard()` | aperçu HTML autonome |
 

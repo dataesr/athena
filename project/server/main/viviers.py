@@ -16,12 +16,13 @@ Deux étapes, après l'étape 4 (top10/) et de préférence l'étape 6 (indicate
 1. extraire_auteurs()   (long : relit les works du snapshot sur S3, de l'ordre de l'étape 1 ;
    reprise possible, fichier par fichier)
    Une ligne par (article, auteur) dont l'auteur a sur l'article une institution d'un des pays
-   lus. Mêmes filtres que l'étape 1 (types article et review, ni rétracté ni paratexte, avec un
+   lus. Mêmes filtres que l'étape 1 (types VIVIER_PUB_TYPES : articles, reviews, livres et
+   chapitres ; ni rétracté ni paratexte, avec un
    topic), depuis VIVIER_PUB_ANNEE_MIN. Écrit viviers/auteurs/<fichier>.parquet :
-     work_id, year, nb_auteurs, author_id, orcid, nom, position_auteur, correspondant,
+     work_id, year, type, topic_id, nb_auteurs, author_id, orcid, nom, position_auteur, correspondant,
      pays (pays lus de ses institutions, outre-mer sous FR),
      inst_ids (toutes ses institutions sur l'article ; seulement si FR est dans pays, sinon null)
-   Si la liste des pays change (nouveau calcul ERC), tout est relu.
+   Si la liste des pays ou des types change, tout est relu.
    Lecture partagée avec les prix : publications_auteurs.extraire_publications() écrit les
    deux sorties en une seule lecture des works (voir pipeline, étape "publications").
 
@@ -30,8 +31,10 @@ Deux étapes, après l'étape 4 (top10/) et de préférence l'étape 6 (indicate
    avec discipline et fraction_top10_cites), publiés dans la fenêtre
    [VIVIER_ANNEE_DEBUT, VIVIER_ANNEE_FIN], à au plus
    VIVIER_MAX_AUTEURS_PAR_ARTICLE auteurs.
-   Chercheur actif : au moins VIVIER_MIN_ARTICLES articles dans la fenêtre, dont au moins
-   VIVIER_MIN_ARTICLES_RECENTS dans les VIVIER_ANNEES_RECENTES dernières années.
+   Livres et chapitres (VIVIER_LIVRES_TYPES) dont le panel est dans VIVIER_LIVRES_DOMAINES (SHS
+   par défaut) s'ajoutent comme publications ; jamais top 10 %.
+   Chercheur actif : au moins VIVIER_MIN_PUBLICATIONS publications dans la fenêtre, dont au moins
+   VIVIER_MIN_PUBLICATIONS_RECENTES dans les VIVIER_ANNEES_RECENTES dernières années.
    Activité et parts se calculent sur toutes ses signatures lues (tous pays lus confondus).
    Pays : ceux où sont affiliés au moins VIVIER_PART_MIN_PAYS de ses articles récents ; même
    règle pour tous les pays, France comprise.
@@ -44,13 +47,16 @@ Deux étapes, après l'étape 4 (top10/) et de préférence l'étape 6 (indicate
    Top 10 % : articles dont fraction_top10_cites >= VIVIER_SEUIL_FRACTION_TOP10 ; chercheur
    « top 10 % » s'il en a au moins VIVIER_MIN_TOP10 dans la fenêtre.
    Auteur principal : premier ou dernier auteur, ou auteur correspondant.
+   Clinicien (marqué, pas exclu) : au moins VIVIER_PART_MIN_CLINIQUE de ses publications de la période
+   n'ont que des affiliations hospitalières (institutions de type healthcare) ; effectifs
+   nb_chercheurs_hors_cliniciens.
    Écrit dans viviers/ :
      viviers_chercheurs.parquet  un document par chercheur actif rattaché à la France ou à un
                                  établissement français (voir CONTRAT_DONNEES.md)
      viviers_effectifs.parquet   entite_type x entite_id x discipline_code : nb_chercheurs
                                  (discipline principale), nb_chercheurs_fractionnaire,
                                  nb_chercheurs_top10, nb_chercheurs_top10_fractionnaire,
-                                 nb_chercheurs_auteur_principal
+                                 nb_chercheurs_auteur_principal, nb_chercheurs_hors_cliniciens(_fractionnaire)
      viviers_meta.json           période, paramètres, contrôles, textes de méthode
 
 Limites : seules les signatures dans les pays lus sont vues (un article d'un chercheur publié
@@ -72,10 +78,11 @@ from pathlib import Path
 from .common import PAYS_NOMS, connect
 from .config import (CLASSEMENT, DATA_DIR, ERC_DIR, ETAB_COUNTRIES, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR, SNAPSHOT,
                      VIVIER_ANNEE_FIN, VIVIER_PART_MIN_PAYS, VIVIER_PAYS, VIVIER_ANNEES_RECENTES, VIVIER_ANNEE_DEBUT,
-                     VIVIER_MAX_AUTEURS_PAR_ARTICLE, VIVIER_MIN_ARTICLES, VIVIER_MIN_ARTICLES_RECENTS,
+                     VIVIER_LIVRES_DOMAINES, VIVIER_LIVRES_TYPES, VIVIER_MAX_AUTEURS_PAR_ARTICLE, VIVIER_MIN_PUBLICATIONS,
+                     VIVIER_MIN_PUBLICATIONS_RECENTES, VIVIER_PART_MIN_CLINIQUE, VIVIER_PUB_TYPES,
                      VIVIER_MIN_AUTEUR_PRINCIPAL, VIVIER_MIN_TOP10, VIVIER_PART_MIN_ETABLISSEMENT,
                      VIVIER_PERIMETRE, VIVIER_PUB_ANNEE_MIN, VIVIER_SEUIL_FRACTION_TOP10, VIVIERS_DIR)
-from .publications_auteurs import TYPES, extraire_publications, poids_disciplines
+from .publications_auteurs import extraire_publications, poids_disciplines
 
 
 def pays_viviers(erc_dir: str = ERC_DIR, pays=VIVIER_PAYS, data_dir: str = DATA_DIR,
@@ -101,7 +108,7 @@ def pays_viviers(erc_dir: str = ERC_DIR, pays=VIVIER_PAYS, data_dir: str = DATA_
 # --- 1. Extraction ---------------------------------------------------------------------------
 
 def extraire_auteurs(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
-                     annee_min: int = VIVIER_PUB_ANNEE_MIN, types: tuple = TYPES, pays=None,
+                     annee_min: int = VIVIER_PUB_ANNEE_MIN, types: tuple = VIVIER_PUB_TYPES, pays=None,
                      erc_dir: str = ERC_DIR, workers: int = 8, urls: list = None,
                      verbose: bool = True) -> dict:
     """Signatures des pays lus -> <viviers_dir>/auteurs/ (voir l'en-tête).
@@ -109,7 +116,7 @@ def extraire_auteurs(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
     fait prix et viviers en une lecture.
     pays : défaut pays_viviers() (VIVIER_PAYS, sinon FR + pays ERC + pays bibliométrie)."""
     return extraire_publications(prix=False, viviers=True, viviers_dir=viviers_dir, data_dir=data_dir,
-                                 erc_dir=erc_dir, vivier_annee_min=annee_min, pays=pays, types=types,
+                                 erc_dir=erc_dir, vivier_annee_min=annee_min, pays=pays, vivier_types=types,
                                  workers=workers, urls=urls, verbose=verbose)
 
 
@@ -118,15 +125,17 @@ def extraire_auteurs(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
 def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
                     classement: str = CLASSEMENT, perimetre: str = VIVIER_PERIMETRE,
                     annee_debut: int = VIVIER_ANNEE_DEBUT, annee_fin: int = VIVIER_ANNEE_FIN,
-                    min_articles: int = VIVIER_MIN_ARTICLES,
+                    min_publications: int = VIVIER_MIN_PUBLICATIONS,
                     annees_recentes: int = VIVIER_ANNEES_RECENTES,
-                    min_articles_recents: int = VIVIER_MIN_ARTICLES_RECENTS,
+                    min_publications_recentes: int = VIVIER_MIN_PUBLICATIONS_RECENTES,
                     max_auteurs: int = VIVIER_MAX_AUTEURS_PAR_ARTICLE,
                     part_min_etablissement: float = VIVIER_PART_MIN_ETABLISSEMENT,
                     part_min_pays: float = VIVIER_PART_MIN_PAYS,
                     seuil_fraction_top10: float = VIVIER_SEUIL_FRACTION_TOP10,
                     min_top10: int = VIVIER_MIN_TOP10,
                     min_auteur_principal: int = VIVIER_MIN_AUTEUR_PRINCIPAL,
+                    livres_types=VIVIER_LIVRES_TYPES, livres_domaines=VIVIER_LIVRES_DOMAINES,
+                    part_min_clinique: float = VIVIER_PART_MIN_CLINIQUE,
                     etab_countries=ETAB_COUNTRIES, lineage_cuts=LINEAGE_CUTS, etab_exclude=ETAB_EXCLUDE,
                     out_suffix: str = "", verbose: bool = True) -> dict:
     """Chercheurs actifs et effectifs des viviers (voir l'en-tête).
@@ -147,14 +156,34 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
     if params_extraction["annee_min"] > debut:
         raise ValueError(f"fenêtre {debut}-{annee_fin} : signatures extraites seulement depuis "
                          f"{params_extraction['annee_min']} (relancer extraire_auteurs(annee_min={debut}))")
+    livres_types = list(livres_types or []) if livres_domaines else []
+    manque = set(livres_types) - set(params_extraction.get("types") or [])
+    if manque or params_extraction.get("version", 1) < 2:
+        raise ValueError(f"extraction ancienne (types {sorted(manque)} absents ou colonnes manquantes) : "
+                         f"relancer extraire_publications()")
 
     con = connect(str(data_dir))
-    # Articles du périmètre dans la fenêtre
+    # Publications retenues dans la période : articles du périmètre (fichier top10, avec la
+    # fraction top 10 %), plus livres et chapitres dont le panel est dans livres_domaines
+    # (topic principal -> panel, même table ; pas de fraction top 10 %)
+    livres_sql = ""
+    if livres_types:
+        livres_sql = f"""
+        UNION ALL
+        SELECT s.work_id, any_value(s.year)::SMALLINT, any_value(d.discipline_code), NULL::DOUBLE, 'livre'
+        FROM read_parquet('{auteurs}/*.parquet') s
+        JOIN read_parquet('{f_disc}') d ON upper(s.topic_id) = d.topic_id
+        WHERE s.type IN ({", ".join(f"'{t}'" for t in livres_types)})
+          AND s.year BETWEEN {debut} AND {int(annee_fin)}
+          AND d.discipline_code IS NOT NULL
+          AND d.domaine_code IN ({", ".join(f"'{x}'" for x in livres_domaines)})
+        GROUP BY s.work_id"""
     con.execute(f"""
         CREATE TEMP TABLE art AS
-        SELECT work_id, annee_publication, discipline_code, fraction_top10_cites
+        SELECT work_id, annee_publication, discipline_code, fraction_top10_cites, 'article' AS nature
         FROM read_parquet('{f_top10}')
         WHERE annee_publication BETWEEN {debut} AND {int(annee_fin)}
+        {livres_sql}
     """)
     # Signatures : une ligne par (chercheur, article) ; un auteur listé deux fois sur un même
     # article (doublon OpenAlex) ne compte qu'une fois
@@ -165,6 +194,7 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
                bool_or(s.position_auteur IN ('first', 'last') OR s.correspondant) AS auteur_principal,
                list_distinct(flatten(list(s.pays))) AS pays,
                list_distinct(flatten(list(coalesce(s.inst_ids, [])))) AS inst_ids,
+               bool_and(s.hospitalier_seul) AS hospitalier_seul,
                any_value(s.nom) AS nom, max(s.orcid) AS orcid
         FROM read_parquet('{auteurs}/*.parquet') s
         WHERE s.work_id IN (SELECT work_id FROM art)
@@ -172,7 +202,7 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
     """)
     con.execute(f"""
         CREATE TEMP TABLE sig AS
-        SELECT s.*, a.annee_publication AS annee, a.discipline_code, a.fraction_top10_cites
+        SELECT s.*, a.annee_publication AS annee, a.discipline_code, a.fraction_top10_cites, a.nature
         FROM sig_tout s JOIN art a USING (work_id)
         WHERE {max_aut}
     """)
@@ -183,9 +213,11 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         SELECT author_id,
                arg_max(nom, annee) AS nom,
                arg_max(orcid, annee) FILTER (WHERE orcid IS NOT NULL) AS orcid,
-               count(*)::INTEGER AS nb_articles,
-               count(*) FILTER (WHERE annee >= {debut_recent})::INTEGER AS nb_articles_recents,
-               count(*) FILTER (WHERE auteur_principal)::INTEGER AS nb_articles_auteur_principal,
+               count(*)::INTEGER AS nb_publications,
+               count(*) FILTER (WHERE annee >= {debut_recent})::INTEGER AS nb_publications_recentes,
+               count(*) FILTER (WHERE nature = 'livre')::INTEGER AS nb_livres_chapitres,
+               count(*) FILTER (WHERE hospitalier_seul)::INTEGER AS nb_publications_hospitalieres,
+               count(*) FILTER (WHERE auteur_principal)::INTEGER AS nb_publications_auteur_principal,
                round(sum(fraction_top10_cites), 4)::DOUBLE AS nb_articles_top10_cites,
                count(*) FILTER (WHERE fraction_top10_cites >= {float(seuil_fraction_top10)})::INTEGER
                    AS nb_articles_top10,
@@ -196,9 +228,11 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
     con.execute(f"""
         CREATE TEMP TABLE actifs AS
         SELECT *, nb_articles_top10 >= {int(min_top10)} AS top10,
-               nb_articles_auteur_principal >= {int(min_auteur_principal)} AS auteur_principal
+               nb_publications_auteur_principal >= {int(min_auteur_principal)} AS auteur_principal,
+               {f"nb_publications_hospitalieres >= {float(part_min_clinique)} * nb_publications"
+                if part_min_clinique else "FALSE"} AS clinicien
         FROM aut
-        WHERE nb_articles >= {int(min_articles)} AND nb_articles_recents >= {int(min_articles_recents)}
+        WHERE nb_publications >= {int(min_publications)} AND nb_publications_recentes >= {int(min_publications_recentes)}
     """)
 
     # Rattachement aux pays : part des articles récents avec une affiliation dans le pays
@@ -210,10 +244,10 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
             WHERE s.annee >= {debut_recent}
         )
         SELECT sp.author_id, sp.pays_code, count(DISTINCT sp.work_id) AS n,
-               count(DISTINCT sp.work_id) / any_value(a.nb_articles_recents) AS part
+               count(DISTINCT sp.work_id) / any_value(a.nb_publications_recentes) AS part
         FROM sp JOIN actifs a USING (author_id)
         GROUP BY 1, 2
-        HAVING count(DISTINCT sp.work_id) / any_value(a.nb_articles_recents) >= {float(part_min_pays)}
+        HAVING count(DISTINCT sp.work_id) / any_value(a.nb_publications_recentes) >= {float(part_min_pays)}
     """)
 
     # Rattachement aux établissements : part des articles récents affiliés à l'établissement
@@ -237,10 +271,10 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
             FROM si JOIN cible c USING (inst_id)
             WHERE c.entite_id IN (SELECT entite_id FROM etabs)
         )
-        SELECT se.author_id, se.entite_id, count(*) AS n, count(*) / any_value(a.nb_articles_recents) AS part
+        SELECT se.author_id, se.entite_id, count(*) AS n, count(*) / any_value(a.nb_publications_recentes) AS part
         FROM se JOIN actifs a USING (author_id)
         GROUP BY 1, 2
-        HAVING count(*) / any_value(a.nb_articles_recents) >= {float(part_min_etablissement)}
+        HAVING count(*) / any_value(a.nb_publications_recentes) >= {float(part_min_etablissement)}
     """)
 
     # Disciplines : part des articles de la fenêtre par panel
@@ -261,7 +295,9 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         SELECT a.author_id AS chercheur_id, a.nom, a.orcid, coalesce(pa.pays, []) AS pays,
                coalesce(e.entites, []) AS entites,
                p.discipline_code, p.domaine_code, coalesce(p.disciplines, []) AS disciplines,
-               a.nb_articles, a.nb_articles_recents, a.nb_articles_auteur_principal, a.auteur_principal,
+               a.nb_publications, a.nb_publications_recentes, a.nb_livres_chapitres,
+               a.nb_publications_auteur_principal, a.auteur_principal,
+               a.nb_publications_hospitalieres, a.clinicien,
                a.nb_articles_top10, a.nb_articles_top10_cites, a.top10,
                a.annee_premiere_publication, a.annee_derniere_publication
         FROM actifs a LEFT JOIN e USING (author_id) LEFT JOIN pa USING (author_id)
@@ -283,7 +319,10 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
                round(coalesce(sum(p.poids) FILTER (WHERE a.top10), 0), 4)::DOUBLE
                    AS nb_chercheurs_top10_fractionnaire,
                count(*) FILTER (WHERE p.principale AND a.auteur_principal)::BIGINT
-                   AS nb_chercheurs_auteur_principal
+                   AS nb_chercheurs_auteur_principal,
+               count(*) FILTER (WHERE p.principale AND NOT a.clinicien)::BIGINT AS nb_chercheurs_hors_cliniciens,
+               round(coalesce(sum(p.poids) FILTER (WHERE NOT a.clinicien), 0), 4)::DOUBLE
+                   AS nb_chercheurs_hors_cliniciens_fractionnaire
         FROM ea JOIN poids p USING (author_id) JOIN actifs a USING (author_id)
         GROUP BY 1, 2, 3
         ORDER BY CASE ea.entite_type WHEN 'pays' THEN 0 ELSE 1 END, 2, 3
@@ -298,12 +337,15 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
                (SELECT count(*) FROM actifs) AS nb_chercheurs_actifs,
                (SELECT count(*) FROM actifs WHERE top10) AS nb_chercheurs_top10,
                (SELECT count(*) FROM actifs WHERE auteur_principal) AS nb_chercheurs_auteur_principal,
+               (SELECT count(*) FROM actifs WHERE clinicien) AS nb_chercheurs_cliniciens,
                (SELECT count(*) FROM actifs WHERE orcid IS NOT NULL) AS nb_chercheurs_avec_orcid,
                (SELECT count(*) FROM ratt_pays WHERE pays_code = 'FR') AS nb_chercheurs_france,
                (SELECT count(DISTINCT author_id) FROM ratt_pays) AS nb_chercheurs_rattaches_pays,
                (SELECT count(DISTINCT author_id) FROM ratt) AS nb_chercheurs_rattaches,
                (SELECT count(DISTINCT entite_id) FROM ratt) AS nb_etablissements,
-               (SELECT count(*) FROM art) AS nb_articles_perimetre,
+               (SELECT count(*) FROM art WHERE nature = 'article') AS nb_articles_perimetre,
+               (SELECT count(*) FROM art WHERE nature = 'livre') AS nb_livres_chapitres,
+               (SELECT count(*) FROM actifs WHERE nb_livres_chapitres > 0) AS nb_chercheurs_avec_livres,
                (SELECT count(DISTINCT work_id) FROM sig) AS nb_articles_signes_pays_lus,
                (SELECT count(DISTINCT work_id) FROM sig_tout) - (SELECT count(DISTINCT work_id) FROM sig)
                    AS nb_articles_grandes_collaborations
@@ -314,6 +356,13 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
     ctrl["par_pays"] = {r[0]: int(r[1]) for r in con.execute(
         "SELECT pays_code, count(*) FROM ratt_pays GROUP BY 1 ORDER BY 2 DESC").fetchall()}
     ctrl["par_domaine"] = chercheurs["domaine_code"].fillna("(non classé)").value_counts().to_dict()
+    # Part de cliniciens parmi les chercheurs actifs, par domaine (France) et par pays
+    ctrl["part_cliniciens_par_domaine_france"] = (
+        chercheurs[chercheurs["pays"].map(lambda v: "FR" in list(v))]
+        .groupby(chercheurs["domaine_code"].fillna("(non classé)"))["clinicien"].mean().round(4).to_dict())
+    ctrl["part_cliniciens_par_pays"] = {r[0]: round(float(r[1]), 4) for r in con.execute(
+        "SELECT rp.pays_code, avg(a.clinicien::INTEGER) FROM ratt_pays rp JOIN actifs a USING (author_id) "
+        "GROUP BY 1 ORDER BY 1").fetchall()}
 
     viviers_dir.mkdir(parents=True, exist_ok=True)
     for nom, t in (("viviers_chercheurs", chercheurs), ("viviers_effectifs", effectifs)):
@@ -327,8 +376,11 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
     W, years = params10.get("citation_window"), params10.get("counts_years") or [None, None]
     if W is not None and years[1] is not None:
         provisoires = [a for a in range(debut, int(annee_fin) + 1) if a + int(W) >= int(years[1])]
-    grandes = (f"Les articles à plus de {max_auteurs} auteurs (grandes collaborations) sont ignorés."
-               if max_auteurs else "Tous les articles comptent, quel que soit leur nombre d'auteurs.")
+    grandes = (f"Les publications à plus de {max_auteurs} auteurs (grandes collaborations) sont ignorées."
+               if max_auteurs else "Toutes les publications comptent, quel que soit leur nombre d'auteurs.")
+    noms_types = {"book": "livres", "book-chapter": "chapitres d'ouvrages"}
+    livres_txt = " et ".join(noms_types.get(t, t) for t in livres_types)
+    domaines_txt = ", ".join(livres_domaines or [])
     # Publications : description explicite pour les consommateurs (tableaux), d'après les
     # paramètres réellement utilisés pour le fichier top10 (étape 4)
     libelles = {"toutes_revues_openalex": "tous les articles de revues d'OpenAlex",
@@ -353,7 +405,22 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         "signatures_lues": "seules les signatures avec une affiliation dans les pays lus (champ pays) ; "
                            "les articles d'un chercheur publiés depuis un autre pays ne comptent pas",
         "meme_base_que": f"indicateurs bibliométriques du périmètre {perimetre} (effectifs d'articles, "
-                         "top 10 %) : mêmes articles, mêmes disciplines",
+                         "top 10 %) : mêmes articles, mêmes disciplines"
+                         + (" ; les livres et chapitres s'y ajoutent (hors bibliométrie)" if livres_types else ""),
+        "livres_chapitres": {
+            "inclus": bool(livres_types),
+            "types_documents": livres_types,
+            "domaines": list(livres_domaines or []) if livres_types else [],
+            "role": "comptent comme des publications (activité, discipline, rattachements aux pays et "
+                    "établissements), une publication chacun ; jamais « top 10 % » (pas de référence "
+                    "de citations)",
+            "pourquoi_shs_seulement": "hors SHS, OpenAlex classe beaucoup d'actes de conférence en "
+                                      "chapitres (ex. Springer LNCS en informatique), ce qui gonflerait "
+                                      "les viviers des autres domaines",
+            "discipline": "topic principal OpenAlex -> panel ERC, même table que les articles",
+            "nb_periode": ctrl["nb_livres_chapitres"],
+            "nb_chercheurs_actifs_avec_livres": ctrl["nb_chercheurs_avec_livres"],
+        },
         "top10": {
             "role": "indicateur (chercheurs top 10 %), pas un filtre : le vivier compte tous les "
                     "chercheurs actifs, top 10 % ou non",
@@ -369,6 +436,9 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         "nb_articles_perimetre": ctrl["nb_articles_perimetre"],
         "nb_articles_signes_pays_lus": ctrl["nb_articles_signes_pays_lus"],
     }
+    if livres_types:
+        publications["perimetre_libelle"] += (f", plus les {livres_txt} des domaines {domaines_txt} "
+                                              "(sciences humaines et sociales)")
     types_txt = " et ".join({"article": "articles", "review": "revues de littérature"}.get(t, t)
                             for t in work_types) or "tous types de documents"
     meta = {
@@ -380,48 +450,80 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         "periode": {"annee_debut": debut, "annee_fin": int(annee_fin), "annee_debut_recente": debut_recent},
         "annees_influence_provisoire": provisoires,
         "parametres": {
-            "annee_debut": debut, "annee_fin": int(annee_fin), "min_articles": int(min_articles),
-            "annees_recentes": int(annees_recentes), "min_articles_recents": int(min_articles_recents),
+            "annee_debut": debut, "annee_fin": int(annee_fin), "min_publications": int(min_publications),
+            "annees_recentes": int(annees_recentes), "min_publications_recentes": int(min_publications_recentes),
             "max_auteurs_par_article": max_auteurs, "part_min_etablissement": part_min_etablissement,
             "part_min_pays": part_min_pays,
             "seuil_fraction_top10": seuil_fraction_top10, "min_top10": int(min_top10),
             "min_auteur_principal": int(min_auteur_principal),
+            "part_min_clinique": part_min_clinique,
+            "livres_types": livres_types, "livres_domaines": list(livres_domaines or []),
             "extraction": params_extraction,
         },
         "controles": ctrl,
         "methode": [
-            f"Publications : {publications['perimetre_libelle']} ({types_txt}, {debut}-{annee_fin}, "
+            f"Publications : {libelles.get(perimetre, perimetre)} ({types_txt}, {debut}-{annee_fin}, "
             f"snapshot OpenAlex {SNAPSHOT}), chacune classée dans un panel ERC par son topic principal ; "
             "documents rétractés et paratexte exclus. Mêmes articles que les indicateurs "
-            "bibliométriques de ce périmètre. Toutes les publications du périmètre comptent, pas "
-            "seulement celles du top 10 %.",
+            "bibliométriques de ce périmètre"
+            + (f", plus les {livres_txt} classés en {domaines_txt} (sciences humaines et sociales), "
+               "qui comptent chacun comme une publication mais jamais dans le top 10 %. Hors SHS, "
+               "livres et chapitres ne comptent pas (beaucoup d'actes de conférence y sont classés)"
+               if livres_types else "")
+            + ". Toutes les publications comptent, pas seulement celles du top 10 %.",
             "Vivier : auteurs OpenAlex qui signent avec une affiliation en France ou dans un pays des "
             "comparaisons ERC et bibliométrique. Seules les signatures dans ces pays sont lues ; la "
             "qualité dépend de la désambiguïsation des auteurs par OpenAlex. Ordres de grandeur, pas "
             "des effectifs RH.",
-            f"Chercheur actif : au moins {min_articles} articles sur {debut}-{annee_fin}, dont au moins "
-            f"{min_articles_recents} sur {debut_recent}-{annee_fin}. {grandes}",
+            f"Chercheur actif : au moins {min_publications} publications sur {debut}-{annee_fin}, dont au moins "
+            f"{min_publications_recentes} sur {debut_recent}-{annee_fin}. {grandes}",
             f"Pays : un chercheur compte pour un pays si au moins {round(100 * part_min_pays)} % de ses "
-            f"articles {debut_recent}-{annee_fin} y ont une affiliation ; même règle pour tous les pays.",
+            f"publications {debut_recent}-{annee_fin} y ont une affiliation ; même règle pour tous les pays.",
             f"Établissement : un chercheur compte pour un établissement si au moins "
-            f"{round(100 * part_min_etablissement)} % de ses articles {debut_recent}-{annee_fin} y sont "
+            f"{round(100 * part_min_etablissement)} % de ses publications {debut_recent}-{annee_fin} y sont "
             "affiliés (structure ou l'une de ses tutelles : un chercheur d'UMR compte pour l'UMR, ses "
             "universités et organismes). Il peut donc compter pour plusieurs établissements.",
-            "Discipline : panel ERC le plus fréquent dans ses articles de la période (effectifs "
+            "Discipline : panel ERC le plus fréquent dans ses publications de la période (effectifs "
             "fractionnaires : part de chaque panel).",
             f"Chercheur « top 10 % » : au moins {min_top10} article(s) parmi les 10 % les plus cités de "
             f"sa discipline et de son année (fraction dans le top au moins {seuil_fraction_top10})"
             + (f" ; années {', '.join(map(str, provisoires))} : fenêtre de citation pas encore close."
                if provisoires else "."),
             "Auteur principal : premier ou dernier auteur, ou auteur correspondant, d'au moins "
-            f"{min_auteur_principal} article(s) de la période.",
-        ],
+            f"{min_auteur_principal} publication(s) de la période.",
+        ] + ([
+            f"Clinicien : chercheur dont au moins {round(100 * part_min_clinique)} % des publications "
+            f"{debut}-{annee_fin} n'ont que des affiliations hospitalières (CHU, hôpitaux : "
+            "institutions de type « healthcare » dans ROR), sans université, organisme ni laboratoire. "
+            "Un hospitalo-universitaire qui signe aussi avec son université ou son unité de recherche "
+            "n'est pas clinicien. Les cliniciens restent dans le vivier ; nb_chercheurs_hors_cliniciens "
+            "les retire."] if part_min_clinique else []),
     }
+    if part_min_clinique:
+        meta["cliniciens"] = {
+            "role": "marquage, pas un filtre : nb_chercheurs les compte, nb_chercheurs_hors_cliniciens "
+                    "(et sa version fractionnaire) les retire",
+            "regle": f"au moins {part_min_clinique} de ses publications de la période ({debut}-{annee_fin}) "
+                     "avec seulement des affiliations hospitalières",
+            "affiliation_hospitaliere": "institution OpenAlex de type « healthcare » (typage ROR, le même "
+                                        "dans tous les pays) : CHU, hôpitaux, cliniques",
+            "non_cliniciens": "signature mêlant hôpital et université, organisme ou unité de recherche "
+                              "(hospitalo-universitaires, unités Inserm en CHU)",
+            "pourquoi": "en sciences de la vie, beaucoup de praticiens hospitaliers co-signent des études "
+                        "cliniques sans être des candidats plausibles aux ERC ou aux appels à projets de "
+                        "recherche ; ils gonflent le dénominateur et font baisser les taux",
+            "usage": "taux de candidature ou de succès en LS : afficher les deux dénominateurs, ou "
+                     "préférer nb_chercheurs_hors_cliniciens ; peu d'effet attendu en PE et SH",
+            "part_min_clinique": part_min_clinique,
+            "nb_chercheurs_cliniciens": ctrl["nb_chercheurs_cliniciens"],
+            "part_par_domaine_france": ctrl["part_cliniciens_par_domaine_france"],
+            "part_par_pays": ctrl["part_cliniciens_par_pays"],
+        }
     meta["pays_noms"] = {p: PAYS_NOMS.get(p, p) for p in meta["pays"]}
     meta["lecture"] = [
         "Non additif entre établissements : un chercheur d'UMR compte pour l'UMR, ses universités et "
         "ses organismes ; un chercheur peut aussi compter pour plusieurs établissements.",
-        "Non additif entre pays : un chercheur partagé (au moins 50 % de ses articles récents dans "
+        "Non additif entre pays : un chercheur partagé (au moins 50 % de ses publications récentes dans "
         "chacun de deux pays) compte pour les deux.",
         "La somme des établissements n'est pas la France : les chercheurs français sans établissement "
         "atteignant le seuil comptent pour la France seulement.",
@@ -429,13 +531,20 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         "de la même période, divisés par le nombre d'années pour un taux annuel.",
         "Discipline principale (nb_chercheurs) et fractionnaire (nb_chercheurs_fractionnaire) ne se "
         "mélangent pas ; un domaine (LS, PE, SH) = somme de ses panels.",
-    ]
+    ] + (["Cliniciens : nb_chercheurs les inclut ; nb_chercheurs_hors_cliniciens les retire "
+          "(dénominateur à privilégier ou à afficher en regard en sciences de la vie)."]
+         if part_min_clinique else [])
     meta["limites"] = [
         "Seuls les chercheurs qui publient des articles de revues sont vus : pas de personnels "
         "sans publication, ni d'effectifs RH.",
-        "Sciences humaines et sociales sous-estimées : livres, chapitres et revues peu couvertes par "
-        "OpenAlex ne comptent pas ; les taux (candidatures ou lauréats / vivier) y sont donc "
-        "surestimés et à comparer avec prudence aux autres domaines.",
+        ("Sciences humaines et sociales : livres et chapitres sont comptés, mais la couverture "
+         "d'OpenAlex reste incomplète (ouvrages sans DOI, éditeurs et revues francophones moins "
+         "présents) ; le vivier SHS reste sans doute sous-estimé et les taux (candidatures ou "
+         "lauréats / vivier) surestimés : à comparer avec prudence aux autres domaines."
+         if livres_types else
+         "Sciences humaines et sociales sous-estimées : livres, chapitres et revues peu couvertes par "
+         "OpenAlex ne comptent pas ; les taux (candidatures ou lauréats / vivier) y sont donc "
+         "surestimés et à comparer avec prudence aux autres domaines."),
         "Désambiguïsation OpenAlex : un chercheur scindé en plusieurs identifiants peut compter "
         "plusieurs fois ou passer sous le seuil d'activité ; deux homonymes fusionnés comptent une fois.",
         "Affiliations : une affiliation absente dans OpenAlex fait perdre la signature ; la "
@@ -444,7 +553,10 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         "Consolidator, Advanced).",
         "Pays hors ERC (ex. États-Unis, Chine) : vivier utile pour comparer des tailles ou des parts "
         "top 10 %, pas pour un taux de candidature ERC.",
-    ]
+    ] + (["Cliniciens repérés par les affiliations : un praticien qui signe aussi avec une université "
+          "n'est pas repéré, un chercheur dont l'unité n'apparaît pas dans OpenAlex (seul l'hôpital "
+          "est saisi) l'est à tort ; le typage « healthcare » des institutions vient de ROR et peut "
+          "varier selon les pays."] if part_min_clinique else [])
     (viviers_dir / f"viviers_meta{out_suffix}.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     if verbose:

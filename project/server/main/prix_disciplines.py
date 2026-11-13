@@ -107,7 +107,7 @@ def extraire_publications_laureats(prix_dir: str = PRIX_DIR, data_dir: str = DAT
     Seule : relit les works pour les prix uniquement ; publications_auteurs.extraire_publications()
     fait prix et viviers en une lecture."""
     return extraire_publications(prix=True, viviers=False, prix_dir=prix_dir, data_dir=data_dir,
-                                 prix_annee_min=annee_min, noms=noms, types=types, workers=workers,
+                                 prix_annee_min=annee_min, noms=noms, prix_types=types, workers=workers,
                                  urls=urls, verbose=verbose)
 
 

@@ -313,6 +313,7 @@ VIVIERS_DIR = f"{DATA_DIR}/viviers"
 # (FR toujours ajouté). Changer la liste relit les works.
 VIVIER_PAYS = None
 VIVIER_PERIMETRE = PERIMETRE       # articles retenus = fichier top10 de ce périmètre (étape 4)
+                                   # (+ livres et chapitres SHS, voir plus bas)
 # Période d'activité du vivier, propre aux viviers (indépendante de ANNEE_MIN / ANNEE_MAX) :
 # à changer explicitement quand on veut faire glisser le vivier (relit les works).
 VIVIER_ANNEE_DEBUT = 2021
@@ -320,12 +321,20 @@ VIVIER_ANNEE_FIN = 2025
 # Publications extraites depuis le début de la période. Abaisser pour tester d'autres
 # périodes sans relire les works.
 VIVIER_PUB_ANNEE_MIN = VIVIER_ANNEE_DEBUT
-# Chercheur actif : au moins VIVIER_MIN_ARTICLES articles dans la fenêtre, dont au moins
-# VIVIER_MIN_ARTICLES_RECENTS dans les VIVIER_ANNEES_RECENTES dernières années.
-VIVIER_MIN_ARTICLES = 3
+# Livres et chapitres : comptent comme des publications (activité, discipline, rattachements)
+# quand leur panel est dans VIVIER_LIVRES_DOMAINES (SHS par défaut : hors SHS, OpenAlex classe
+# beaucoup d'actes de conférence en book-chapter, ex. Springer LNCS). Jamais « top 10 % » (pas
+# de référence de citations). None ou () : articles seuls.
+VIVIER_LIVRES_TYPES = ("book", "book-chapter")
+VIVIER_LIVRES_DOMAINES = ("SH",)
+VIVIER_PUB_TYPES = ("article", "review") + tuple(VIVIER_LIVRES_TYPES or ())   # types extraits
+# Chercheur actif : au moins VIVIER_MIN_PUBLICATIONS publications (articles du périmètre, plus
+# livres et chapitres SHS) dans la période, dont au moins VIVIER_MIN_PUBLICATIONS_RECENTES
+# dans les VIVIER_ANNEES_RECENTES dernières années.
+VIVIER_MIN_PUBLICATIONS = 3
 VIVIER_ANNEES_RECENTES = 2
-VIVIER_MIN_ARTICLES_RECENTS = 1
-VIVIER_MAX_AUTEURS_PAR_ARTICLE = 100   # articles à plus d'auteurs (grandes collaborations) ignorés
+VIVIER_MIN_PUBLICATIONS_RECENTES = 1
+VIVIER_MAX_AUTEURS_PAR_ARTICLE = 100   # publications à plus d'auteurs (grandes collaborations) ignorées
                                        # pour tous les calculs du vivier ; None = tous
 # Rattachement : un chercheur compte pour un établissement si au moins cette part de ses
 # articles récents (VIVIER_ANNEES_RECENTES, signatures des pays lus) y est affiliée
@@ -337,6 +346,11 @@ VIVIER_PART_MIN_PAYS = 0.5          # idem pour le pays (même règle pour tous 
 VIVIER_SEUIL_FRACTION_TOP10 = 0.5
 VIVIER_MIN_TOP10 = 1               # articles du top 10 % pour être « chercheur top 10 % »
 VIVIER_MIN_AUTEUR_PRINCIPAL = 1    # articles en premier ou dernier auteur, ou correspondant
+# Cliniciens (marqués, pas exclus) : chercheur dont au moins cette part des publications
+# de la période (toute la période : plus stable que les seules années récentes) n'a QUE des affiliations hospitalières (institutions de type healthcare : CHU,
+# hôpitaux ; un hospitalo-universitaire qui signe aussi avec son université ou son unité n'est
+# pas marqué). Effectifs nb_chercheurs_hors_cliniciens. None : pas de marquage.
+VIVIER_PART_MIN_CLINIQUE = 0.5
 VIVIER_PUBLIER_CHERCHEURS = True   # collection viviers_chercheurs (liste nominative)
 
 # --- DuckDB ---------------------------------------------------------------------
