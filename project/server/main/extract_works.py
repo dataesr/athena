@@ -45,16 +45,13 @@ Puis, dans config.py : SNAPSHOT = "<date>", et relancer les étapes 3 à 6.
 
 import json
 import os
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import duckdb
 
 from .config import DATA_DIR, DATA_ROOT, PAYS_FR, SNAPSHOT_SOURCE
-from .openalex_s3 import connect, connect_for, list_daily_snapshots, readable_url, snapshot_manifest
-
-
+from .openalex_s3 import (extract_file, list_daily_snapshots, out_name as _out_name, readable_url,
+                          run_files, short_id as _short, snapshot_manifest)
 
 
 def fetch_manifest(manifest_path: str = None, source: str = SNAPSHOT_SOURCE,
@@ -70,13 +67,8 @@ def fetch_manifest(manifest_path: str = None, source: str = SNAPSHOT_SOURCE,
     return manifest
 
 
-def _short(expr: str) -> str:
-    """'https://openalex.org/W123' -> 'W123' (robuste si déjà court)."""
-    return f"regexp_extract({expr}, '[^/]+$')"
-
-
 def _sql_extract(url: str, annee_min: int, types: tuple) -> str:
-    """Une seule lecture du fichier distant -> table temporaire t.
+    """SELECT sur le fichier distant (une seule lecture ; extract_file le met en table t).
     On ne cite que des sous-champs précis pour que DuckDB ne lise que ces
     colonnes 'feuilles' du Parquet."""
     types_sql = ", ".join(f"'{t}'" for t in types)
@@ -102,7 +94,6 @@ def _sql_extract(url: str, annee_min: int, types: tuple) -> str:
     # On ne cite que des sous-champs précis : DuckDB ne lit que ces colonnes du
     # Parquet distant (environ 4 % du volume du fichier).
     return f"""
-    CREATE OR REPLACE TEMP TABLE t AS
     SELECT
         {_short('id')}                                  AS work_id,
         publication_year::SMALLINT                      AS year,
@@ -140,46 +131,22 @@ def _sql_extract(url: str, annee_min: int, types: tuple) -> str:
     """
 
 
-def _out_name(s3_url: str) -> str:
-    # .../works/updated_date=2026-06-24/part_0000.parquet -> updated_date=2026-06-24__part_0000.parquet
-    parts = s3_url.split("/")
-    return f"{parts[-2]}__{parts[-1]}"
-
-
 def extract_one(s3_url: str, out_works: Path, out_inst: Path,
                 annee_min: int = 2015, types: tuple = ("article", "review"),
-                retries: int = 3) -> tuple:
-    """Extrait un fichier du snapshot. Renvoie (nom, nb_lignes, secondes);
-    nb_lignes = -1 si le fichier était déjà extrait."""
+                retries: int = 3) -> dict:
+    """Extrait un fichier du snapshot. Renvoie {'works': n, 'work_inst': n},
+    ou {} si le fichier était déjà extrait."""
     name = _out_name(s3_url)
     f_works, f_inst = Path(out_works) / name, Path(out_inst) / name
     if f_works.exists() and f_inst.exists():
-        return name, -1, 0.0
-
-    url = readable_url(s3_url)
-    for attempt in range(1, retries + 1):
-        try:
-            t0 = time.time()
-            con = connect_for(s3_url)
-            con.execute(_sql_extract(url, annee_min, types))
-            n = con.execute("SELECT count(*) FROM t").fetchone()[0]
-            # écriture atomique : .tmp puis renommage
-            tmp_w, tmp_i = f_works.with_suffix(".tmp"), f_inst.with_suffix(".tmp")
-            # Deux sorties : works/ (une ligne par article, sans la liste d'institutions)
-            # et work_inst/ (une ligne par article x institution : unnest « déplie »
-            # la liste, W1 [I1, I2] -> (W1, I1), (W1, I2))
-            con.execute(f"COPY (SELECT * EXCLUDE (inst_ids) FROM t) "
-                        f"TO '{tmp_w}' (FORMAT parquet, COMPRESSION zstd)")
-            con.execute(f"COPY (SELECT work_id, unnest(inst_ids) AS inst_id FROM t) "
-                        f"TO '{tmp_i}' (FORMAT parquet, COMPRESSION zstd)")
-            con.close()
-            tmp_w.rename(f_works)
-            tmp_i.rename(f_inst)
-            return name, n, time.time() - t0
-        except Exception as e:  # réseau, timeout S3...
-            if attempt == retries:
-                raise RuntimeError(f"{name} : échec après {retries} essais : {e}") from e
-            time.sleep(5 * attempt)
+        return {}
+    # Deux sorties : works/ (une ligne par article, sans la liste d'institutions)
+    # et work_inst/ (une ligne par article x institution : unnest « déplie »
+    # la liste, W1 [I1, I2] -> (W1, I1), (W1, I2))
+    return extract_file(s3_url, _sql_extract(readable_url(s3_url), annee_min, types), {
+        f_works: "SELECT * EXCLUDE (inst_ids) FROM t",
+        f_inst: "SELECT work_id, unnest(inst_ids) AS inst_id FROM t",
+    }, retries=retries)
 
 
 def extract_works(annee_min: int = 2015,
@@ -210,7 +177,6 @@ def extract_works(annee_min: int = 2015,
     out_works, out_inst = data_dir / "works", data_dir / "work_inst"
     out_works.mkdir(parents=True, exist_ok=True)
     out_inst.mkdir(parents=True, exist_ok=True)
-    connect(install=True).close()  # installe httpfs une fois, avant les threads
 
     manifest_path = Path(manifest_path) if manifest_path else data_dir / "works_manifest.json"
     deja = list(out_works.glob("*.parquet"))
@@ -243,32 +209,10 @@ def extract_works(annee_min: int = 2015,
               f"{len(urls)} fichiers, {complets} déjà extraits, {len(urls) - complets} à lire sur S3"
               + (f" (dont {partiels} extraits à moitié, interrompus en cours d'écriture)" if partiels else ""))
 
-    t_start = time.time()
-    res = {"fichiers": len(urls), "extraits": 0, "deja_faits": 0, "lignes": 0, "erreurs": []}
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(extract_one, u, out_works, out_inst, annee_min, tuple(types))
-                   for u in urls]
-        for k, fut in enumerate(as_completed(futures), 1):
-            try:
-                name, n, dt = fut.result()
-                if n < 0:
-                    res["deja_faits"] += 1
-                    msg = "déjà extrait"
-                else:
-                    res["extraits"] += 1
-                    res["lignes"] += n
-                    msg = f"{n:>8,} lignes en {dt:5.1f} s"
-            except Exception as e:
-                res["erreurs"].append(str(e))
-                name, msg = "", f"ERREUR {e}"
-            if verbose:
-                print(f"[{k}/{len(urls)}] {name}  {msg}")
-
-    res["minutes"] = round((time.time() - t_start) / 60, 1)
-    if verbose:
-        print(f"Terminé en {res['minutes']} min — {res['extraits']} extraits, "
-              f"{res['deja_faits']} déjà faits, {len(res['erreurs'])} erreur(s).")
-    return res
+    r = run_files(urls, lambda u: extract_one(u, out_works, out_inst, annee_min, tuple(types)),
+                  workers=workers, verbose=verbose)
+    return {"fichiers": r["fichiers"], "extraits": r["traites"], "deja_faits": r["deja_faits"],
+            "lignes": r["lignes"].get("works", 0), "erreurs": r["erreurs"], "minutes": r["minutes"]}
 
 
 def check_duplicates(data_dir: str = DATA_DIR) -> dict:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import duckdb
 
-from .config import DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS
+from .config import DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS, PAYS_FR
 
 
 def connect(data_dir: str, memory_limit: str = DUCKDB_MEMORY_LIMIT,
@@ -81,6 +81,13 @@ def perimeter_where(work_types=None, source_types=None, annee_min=None,
 def pays_list_sql(pays) -> str:
     """Liste SQL de codes pays : ('FR','GP',...) -> 'FR', 'GP', ..."""
     return _sql_in(pays)
+
+
+def pays_sql(expr: str) -> str:
+    """SQL : code pays OpenAlex -> code de l'entité pays ; outre-mer regroupé sous FR
+    (PAYS_FR : 'RE' -> 'FR', 'GP' -> 'FR'...), autres codes inchangés. Même règle partout
+    (articles, signatures des viviers, financeurs des awards...)."""
+    return f"CASE WHEN {expr} IN ({_sql_in(PAYS_FR)}) THEN 'FR' ELSE {expr} END"
 
 
 # Noms français des pays (codes ISO 3166-1 alpha-2 utilisés par OpenAlex)

@@ -15,6 +15,12 @@ Toutes les fonctions renvoient des « manifests » au même format :
     {"date": ..., "source": ..., "files": [{"url": "s3://...", "meta": {...}}]}
 pour que l'extraction ne dépende pas de la source.
 
+Outils d'extraction communs (works, awards, publications des auteurs...), en fin de
+fichier : short_id() (URL OpenAlex -> identifiant court), out_name() (nom du fichier
+local), snapshot_of() / entity_manifest() (même snapshot que les works extraits),
+extract_file() (lecture d'un fichier distant, écriture atomique, nouvel essai en cas
+d'erreur réseau) et run_files() (fichiers en parallèle, reprise, progression).
+
 Exemples :
     from project.server.main.openalex_s3 import list_daily_snapshots, snapshot_manifest
     list_daily_snapshots()                        # dates disponibles (offre payante)
@@ -25,8 +31,11 @@ Exemples :
 import datetime as dt
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from urllib.parse import urlparse
 
 import duckdb
@@ -293,3 +302,115 @@ def snapshot_manifest(entity: str = "works", source: str = SNAPSHOT_SOURCE,
     if source == "daily":
         return _daily_manifest(entity, date or list_daily_snapshots()[-1])
     raise ValueError(f"source inconnue : {source!r} (attendu : 'public' ou 'daily')")
+
+
+# --- Outils d'extraction communs ------------------------------------------------------
+
+def short_id(expr: str) -> str:
+    """SQL : 'https://openalex.org/W123' -> 'W123' (robuste si déjà court)."""
+    return f"regexp_extract({expr}, '[^/]+$')"
+
+
+def out_name(url: str) -> str:
+    """Nom du fichier local extrait d'un fichier du snapshot :
+    .../works/updated_date=2026-06-24/part_0000.parquet -> updated_date=2026-06-24__part_0000.parquet"""
+    parts = str(url).split("/")
+    return f"{parts[-2]}__{parts[-1]}"
+
+
+def snapshot_of(data_dir: str) -> tuple:
+    """(source, date) du snapshot extrait dans data_dir (lu dans works_manifest.json),
+    pour lire les autres entités (revues, institutions, awards...) dans le MÊME snapshot
+    que les articles. Sans works_manifest.json : (SNAPSHOT_SOURCE, None)."""
+    m = Path(data_dir) / "works_manifest.json"
+    if not m.exists():
+        return SNAPSHOT_SOURCE, None
+    man = json.loads(m.read_text())
+    return man.get("source", "public"), man.get("date")
+
+
+def latest_snapshot_date(source: str = SNAPSHOT_SOURCE) -> str:
+    """Date du snapshot le plus récent : dernier snapshot quotidien (offre payante, clé
+    OPENALEX_API_KEY) ou snapshot public actuel."""
+    if source == "daily":
+        return list_daily_snapshots()[-1]
+    return str(_public_manifest("works").get("date"))
+
+
+def entity_manifest(entity: str, data_dir: str = None, source: str = None, date: str = None) -> dict:
+    """Manifest d'une entité. Par défaut, dans le snapshot des works de data_dir (voir
+    snapshot_of) ; source / date imposés sinon (ex. awards d'un snapshot plus récent)."""
+    if source is None:
+        source, date = snapshot_of(data_dir)
+    man = snapshot_manifest(entity, source=source, date=date if source == "daily" else None)
+    if date and str(man.get("date")) != str(date):
+        raise ValueError(f"{entity} : snapshot {man.get('date')} disponible, différent de celui des "
+                         f"works extraits dans {data_dir} ({date})")
+    return man
+
+
+def extract_file(url: str, sql: str, outputs: dict, prepare=None, retries: int = 3) -> dict:
+    """Lit UN fichier du snapshot et écrit une ou plusieurs sorties locales.
+
+    sql     : SELECT sur le fichier distant (readable_url(url) déjà appliqué par l'appelant) ;
+              son résultat est mis en table temporaire t.
+    outputs : {chemin de sortie: SELECT sur t} ; écriture atomique (.tmp puis renommage).
+    prepare : fonction(con) appelée avant la lecture (ex. con.register(...)).
+    Renvoie {nom du dossier de sortie: nb de lignes écrites}. Nouvel essai en cas d'erreur
+    (réseau, timeout S3...), avec une nouvelle connexion (identifiants renouvelés)."""
+    for attempt in range(1, retries + 1):
+        try:
+            con = connect_for(url)
+            if prepare:
+                prepare(con)
+            con.execute(f"CREATE OR REPLACE TEMP TABLE t AS {sql}")
+            lignes, tmps = {}, []
+            for f, select in outputs.items():
+                f = Path(f)
+                tmp = f.with_suffix(".tmp")
+                con.execute(f"COPY ({select}) TO '{tmp}' (FORMAT parquet, COMPRESSION zstd)")
+                lignes[f.parent.name] = con.execute(
+                    f"SELECT count(*) FROM read_parquet('{tmp}')").fetchone()[0]
+                tmps.append((tmp, f))
+            con.close()
+            for tmp, f in tmps:        # renommage seulement quand toutes les sorties sont écrites
+                tmp.rename(f)
+            return lignes
+        except Exception as e:
+            if attempt == retries:
+                raise RuntimeError(f"{out_name(url)} : échec après {retries} essais : {e}") from e
+            time.sleep(5 * attempt)
+
+
+def run_files(urls: list, task, workers: int = 8, verbose: bool = True) -> dict:
+    """Applique task(url) -> {sortie: nb lignes} à chaque fichier, en parallèle.
+    task renvoie {} si le fichier était déjà extrait (reprise).
+    Renvoie {'fichiers', 'traites', 'deja_faits', 'lignes': {sortie: n}, 'erreurs', 'minutes'}."""
+    if any(str(u).startswith("s3://") for u in urls):
+        connect(install=True).close()     # httpfs installé une fois, avant les threads
+    t_start = time.time()
+    res = {"fichiers": len(urls), "traites": 0, "deja_faits": 0, "lignes": {}, "erreurs": []}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(task, u): u for u in urls}
+        for k, fut in enumerate(as_completed(futures), 1):
+            name = out_name(futures[fut])
+            try:
+                lignes = fut.result()
+                if not lignes:
+                    res["deja_faits"] += 1
+                    msg = "déjà extrait"
+                else:
+                    res["traites"] += 1
+                    for s, n in lignes.items():
+                        res["lignes"][s] = res["lignes"].get(s, 0) + n
+                    msg = ", ".join(f"{s} {n:>9,}" for s, n in lignes.items()) + " lignes"
+            except Exception as e:
+                res["erreurs"].append(str(e))
+                msg = f"ERREUR {e}"
+            if verbose:
+                print(f"[{k}/{len(urls)}] {name}  {msg}")
+    res["minutes"] = round((time.time() - t_start) / 60, 1)
+    if verbose:
+        print(f"Terminé en {res['minutes']} min — {res['traites']} extraits, "
+              f"{res['deja_faits']} déjà faits, {len(res['erreurs'])} erreur(s).")
+    return res

@@ -28,37 +28,27 @@ Exemple :
 """
 
 import json
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
-from .common import pays_list_sql
-from .config import (DATA_DIR, ERC_DIR, PAYS_FR, PRIX_DIR, PRIX_DISC_NOMS, PRIX_PUB_ANNEE_MIN,
+from .common import pays_list_sql, pays_sql
+from .config import (DATA_DIR, ERC_DIR, PRIX_DIR, PRIX_DISC_NOMS, PRIX_PUB_ANNEE_MIN,
                      VIVIER_PAYS, VIVIER_PUB_ANNEE_MIN, VIVIER_PUB_TYPES, VIVIERS_DIR)
+from .openalex_s3 import extract_file, out_name as _nom_fichier, readable_url, run_files, short_id as _short
 
 TYPES = ("article", "review")      # types lus pour les prix
 # Version du schéma de viviers/auteurs : l'augmenter quand des colonnes changent (relecture
-# des works pour les viviers). 2 : type, topic_id, hospitalier_seul.
+# des works pour les viviers). 2 : type, topic_id.
 VERSION_VIVIERS = 2
 ORCID_SQL = r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])"
-
-
-def _short(expr: str) -> str:
-    return f"regexp_extract({expr}, '[^/]+$')"
 
 
 def _cle_sql(expr: str) -> str:
     """Nom normalisé, même règle pour les lauréats et les auteurs OpenAlex (toujours en SQL) :
     'Jean-Éric  DUPONT' -> 'jean eric dupont'."""
     return f"trim(regexp_replace(lower(strip_accents(coalesce({expr}, ''))), '[^a-z]+', ' ', 'g'))"
-
-
-def _nom_fichier(url: str) -> str:
-    parts = url.split("/")
-    return f"{parts[-2]}__{parts[-1]}"
 
 
 # --- Règle de discipline -----------------------------------------------------------------------
@@ -99,22 +89,17 @@ def _sql_signatures(url: str, types: tuple, annee_min: int, prix: bool, viviers:
               f"'inst_ids': list_filter(list_transform(a.institutions, i -> {_short('i.id')}), "
               "x -> x IS NOT NULL AND x <> '')"]
     if viviers:
-        fr = pays_list_sql(PAYS_FR)
         lus = pays_list_sql(sorted(set(pays) - {"FR"}) or ["--"])
         champs += ["'position_auteur': a.author_position",
                    "'correspondant': a.is_corresponding",
                    f"""'pays': list_distinct(list_filter(list_transform(a.institutions, i ->
-                           CASE WHEN i.country_code IN ({fr}) THEN 'FR' ELSE i.country_code END),
-                           c -> c = 'FR' OR c IN ({lus})))""",
-                   # signature uniquement hospitalière : toutes ses institutions de type
-                   # healthcare (ROR : CHU, hôpitaux), aucune université, organisme ou laboratoire
-                   """'hospitalier_seul': len(a.institutions) > 0 AND len(list_filter(a.institutions,
-                           i -> i.type IS DISTINCT FROM 'healthcare')) = 0"""]
+                           {pays_sql('i.country_code')}),
+                           c -> c = 'FR' OR c IN ({lus})))"""]
         en_plus = ("au.position_auteur AS position_auteur, coalesce(au.correspondant, false) AS correspondant, "
-                   "au.pays AS pays, coalesce(au.hospitalier_seul, false) AS hospitalier_seul")
+                   "au.pays AS pays")
     else:
         en_plus = ("NULL::VARCHAR AS position_auteur, false AS correspondant, "
-                   "[]::VARCHAR[] AS pays, false AS hospitalier_seul")
+                   "[]::VARCHAR[] AS pays")
     return f"""
     WITH w AS (
         SELECT {_short('id')} AS work_id, publication_year::SMALLINT AS year, type,
@@ -151,46 +136,37 @@ def _cond_viviers(c: dict) -> str:
 SELECT_PRIX = "work_id, year, topic_id, author_id, orcid, cle_nom, inst_ids"
 # Institutions gardées seulement pour les signatures françaises (établissements)
 SELECT_VIVIERS = ("work_id, year, type, topic_id, nb_auteurs, author_id, orcid, nom, position_auteur, correspondant, "
-                  "pays, hospitalier_seul, "
+                  "pays, "
                   "CASE WHEN list_contains(pays, 'FR') THEN inst_ids END AS inst_ids")
 
 
-def _extraire_un(url: str, cotes: dict, retries: int = 3) -> tuple:
-    """Lit un fichier works une fois et écrit les sorties manquantes (cotes : nom -> réglages)."""
-    from .openalex_s3 import connect_for, readable_url
+def _extraire_un(url: str, cotes: dict, retries: int = 3) -> dict:
+    """Lit un fichier works une fois et écrit les sorties manquantes (cotes : nom -> réglages).
+    Renvoie {sortie: nb lignes}, {} si rien ne manquait."""
     manquants = {k: c for k, c in cotes.items() if not (c["out"] / _nom_fichier(url)).exists()}
     if not manquants:
-        return _nom_fichier(url), {}, 0.0
+        return {}
     p, v = manquants.get("prix"), manquants.get("viviers")
     annee_min = min(c["annee_min"] for c in manquants.values())
     types = tuple(sorted({t for c in manquants.values() for t in c["types"]}))
     conds = [f"({_cond_prix(p)})"] if p else []
     conds += [f"({_cond_viviers(v)})"] if v else []
-    for essai in range(1, retries + 1):
-        try:
-            t0 = time.time()
-            con = connect_for(url)
-            if p:
-                con.register("c_orcid", p["c_orcid"])
-                con.register("c_noms", p["c_noms"])
-            sql = _sql_signatures(readable_url(url), types, annee_min, bool(p), bool(v),
-                                  v["pays"] if v else None)
-            con.execute(f"CREATE TEMP TABLE s AS SELECT * FROM ({sql}) WHERE {' OR '.join(conds)}")
-            lignes = {}
-            for k, c in manquants.items():
-                f = c["out"] / _nom_fichier(url)
-                tmp = f.with_suffix(".tmp")
-                sel, cond = (SELECT_PRIX, _cond_prix(c)) if k == "prix" else (SELECT_VIVIERS, _cond_viviers(c))
-                con.execute(f"COPY (SELECT {sel} FROM s WHERE {cond}) TO '{tmp}' "
-                            f"(FORMAT parquet, COMPRESSION zstd)")
-                lignes[k] = con.execute(f"SELECT count(*) FROM read_parquet('{tmp}')").fetchone()[0]
-                tmp.rename(f)
-            con.close()
-            return _nom_fichier(url), lignes, time.time() - t0
-        except Exception as e:  # réseau, timeout S3...
-            if essai == retries:
-                raise RuntimeError(f"{_nom_fichier(url)} : échec après {retries} essais : {e}") from e
-            time.sleep(5 * essai)
+
+    def prepare(con):
+        if p:
+            con.register("c_orcid", p["c_orcid"])
+            con.register("c_noms", p["c_noms"])
+
+    sql = _sql_signatures(readable_url(url), types, annee_min, bool(p), bool(v), v["pays"] if v else None)
+    outputs = {c["out"] / _nom_fichier(url):
+               f"SELECT {SELECT_PRIX if k == 'prix' else SELECT_VIVIERS} FROM t "
+               f"WHERE {_cond_prix(c) if k == 'prix' else _cond_viviers(c)}"
+               for k, c in manquants.items()}
+    lignes = extract_file(url, f"SELECT * FROM ({sql}) WHERE {' OR '.join(conds)}", outputs,
+                          prepare=prepare, retries=retries)
+    # sorties nommées comme les cotes (dossiers publications/ et auteurs/)
+    noms = {c["out"].name: k for k, c in manquants.items()}
+    return {noms[d]: n for d, n in lignes.items()}
 
 
 def _preparer_prix(prix_dir: Path, annee_min: int, noms: bool, types: tuple, verbose: bool) -> dict:
@@ -277,28 +253,8 @@ def extraire_publications(prix: bool = True, viviers: bool = True,
     a_lire = [u for u in urls if any(not (c["out"] / _nom_fichier(u)).exists() for c in cotes.values())]
     if verbose:
         print(f"{len(urls)} fichiers works, {len(urls) - len(a_lire)} déjà lus pour {' et '.join(cotes)}")
-    if a_lire and str(a_lire[0]).startswith("s3://"):
-        from .openalex_s3 import connect as s3_connect
-        s3_connect(install=True).close()     # httpfs installé une fois, avant les threads
-    t0 = time.time()
-    res = {"fichiers": len(urls), "lus": 0, "deja_faits": len(urls) - len(a_lire),
-           "lignes": {k: 0 for k in cotes}, "erreurs": []}
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futs = [pool.submit(_extraire_un, u, cotes) for u in a_lire]
-        for k, fut in enumerate(as_completed(futs), 1):
-            try:
-                nom, lignes, sec = fut.result()
-                res["lus"] += 1
-                for c, n in lignes.items():
-                    res["lignes"][c] += n
-                msg = ", ".join(f"{c} {n:>8,}" for c, n in lignes.items()) + f" lignes en {sec:5.1f} s"
-            except Exception as e:
-                res["erreurs"].append(str(e))
-                nom, msg = "", f"ERREUR {e}"
-            if verbose:
-                print(f"[{k}/{len(a_lire)}] {nom}  {msg}")
-    res["minutes"] = round((time.time() - t0) / 60, 1)
-    if verbose:
-        print(f"Terminé en {res['minutes']} min — {res['lus']} lus, {res['deja_faits']} déjà faits, "
-              f"{len(res['erreurs'])} erreur(s)")
+    r = run_files(a_lire, lambda u: _extraire_un(u, cotes), workers=workers, verbose=verbose)
+    res = {"fichiers": len(urls), "lus": r["traites"], "deja_faits": len(urls) - len(a_lire) + r["deja_faits"],
+           "lignes": {k: r["lignes"].get(k, 0) for k in cotes}, "erreurs": r["erreurs"],
+           "minutes": r["minutes"]}
     return res

@@ -31,43 +31,27 @@ Exemple :
     res["top_fr"]          # contrôle de la lignée (DataFrame)
 """
 
-import json
 from pathlib import Path
 
 import duckdb
 
-from .config import DATA_DIR, SNAPSHOT_SOURCE
-from .openalex_s3 import connect, readable_url, snapshot_manifest
-
-
-def _snapshot_of(data_dir: str) -> tuple:
-    """(source, date) du snapshot extrait dans data_dir (lu dans works_manifest.json),
-    pour lire les revues et institutions du MÊME snapshot que les articles."""
-    m = Path(data_dir) / "works_manifest.json"
-    if not m.exists():
-        return SNAPSHOT_SOURCE, None
-    man = json.loads(m.read_text())
-    return man.get("source", "public"), man.get("date")
+from .config import DATA_DIR
+from .openalex_s3 import connect, entity_manifest, readable_url, short_id as _short, snapshot_of as _snapshot_of
 
 
 def file_urls(entity: str, data_dir: str = DATA_DIR, verbose: bool = True) -> list:
     """Fichiers Parquet d'une entité, dans le snapshot correspondant à data_dir."""
-    source, date = _snapshot_of(data_dir)
-    man = snapshot_manifest(entity, source=source, date=date if source == "daily" else None)
+    man = entity_manifest(entity, data_dir)
     urls = [readable_url(f["url"]) for f in man["files"]]
     if verbose:
         n = sum(f["meta"].get("record_count") or 0 for f in man["files"])
-        print(f"{entity} ({source} {man.get('date')}) : {len(urls)} fichiers"
+        print(f"{entity} ({man.get('source')} {man.get('date')}) : {len(urls)} fichiers"
               + (f", {n:,} enregistrements" if n else ""))
     return urls
 
 
 def _sql_list(urls: list) -> str:
     return "[" + ", ".join(f"'{u}'" for u in urls) + "]"
-
-
-def _short(expr: str) -> str:
-    return f"regexp_extract({expr}, '[^/]+$')"
 
 
 def extract_sources(con, data_dir: str = DATA_DIR, verbose: bool = True):

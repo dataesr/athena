@@ -8,6 +8,7 @@ from project.server.main.prix_disciplines import compute_prix_disciplines
 from project.server.main.publications_auteurs import extraire_publications
 from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
+from project.server.main.pipeline import step_awards
 from project.server.main.indicators import compute_indicators
 from project.server.main.logger import get_logger
 from project.server.main.openalex_s3 import diagnose_daily
@@ -32,10 +33,10 @@ logger = get_logger(__name__)
 # Résultat de la tâche (GET /tasks/<id>) : durée en minutes de chaque étape lancée.
 ETAPES = ["diagnose_daily", "referentiel", "tutelles_rnsr", "extract_snapshot", "summary",
           "check_duplicates", "disciplines", "top_journals", "top10", "erc", "prix", "indicators",
-          "publications", "prix_disciplines", "viviers", "copublications", "publish", "publish_mongo",
-          "dashboard"]
+          "publications", "prix_disciplines", "viviers", "copublications", "awards",
+          "publish", "publish_mongo", "dashboard"]
 # Lancées seulement si demandées explicitement dans "steps" (contrôles, chargement en base)
-HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "publish_mongo"]
+HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "awards", "publish_mongo"]
 PAR_DEFAUT = [e for e in ETAPES if e not in HORS_DEFAUT]
 
 
@@ -55,6 +56,14 @@ def etapes_choisies(args: dict) -> list:
     if (start and start not in PAR_DEFAUT) or (end and end not in PAR_DEFAUT):
         raise ValueError(f"start / end parmi {PAR_DEFAUT} ; {HORS_DEFAUT} : par \"steps\"")
     return PAR_DEFAUT[i0:i1 + 1]
+
+
+def awards(**kw) -> dict:
+    """Étape awards (pipeline.step_awards) ; résultat réduit à des valeurs simples (résultat de tâche)."""
+    r = step_awards(**kw)
+    cov = r["couverture"].set_index("pays_code")
+    return {"snapshot_awards": r["snapshot_awards"], "fichiers": r["fichiers"], "topics_non_classes": len(r["non_classes"]),
+            "couverture_fr": cov.loc["FR"].to_dict() if "FR" in cov.index else None}
 
 
 def create_task_compute(args: dict) -> dict:
@@ -253,6 +262,17 @@ def create_task_compute(args: dict) -> dict:
 #    Écrit : indicateurs/erc_copublications.parquet (entité x partenaire x année x discipline)
 # ---------------------------------------------------------------------------
     etape("copublications", compute_copublications)
+
+# ---------------------------------------------------------------------------
+# 6c. Financements OpenAlex (awards) : seulement si demandé ({"steps": ["awards"]})
+#    Lit sur S3 : awards (sous-colonnes utiles) et funders du snapshot quotidien le plus récent
+#    (AWARDS_SNAPSHOT pour figer une date ; indépendant de SNAPSHOT, celui des works).
+#    Écrit dans /data/awards/<date>/ : extraits/*.parquet (une ligne par award), funders.parquet,
+#          erc_awards.parquet (award -> pays du financeur, panel), erc_pays_disciplines.parquet
+#    Pays du financeur : outre-mer regroupé sous FR (PAYS_FR) ; financeurs internationaux
+#    (AWARDS_FINANCEURS_INTERNATIONAUX) sous "INT". Reprise : seuls les fichiers manquants sont lus.
+# ---------------------------------------------------------------------------
+    etape("awards", awards)
 
 # ---------------------------------------------------------------------------
 # 7. Publication pour l'application tableaux (une à deux minutes)

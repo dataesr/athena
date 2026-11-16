@@ -22,6 +22,9 @@ Les étapes (chacune dépend des précédentes)
   "viviers"               compute_viviers               chercheurs actifs par pays, établissement
                                                         et discipline
   "copublications"        compute_copublications        partenaires de chaque entité
+  "awards"                extract_awards + compute_awards  financements OpenAlex par pays du
+                                                        financeur et panel ERC (relit les awards
+                                                        du snapshot ; reprise possible)
   "publish"               publish                       fichiers pour tableaux (publication/)
   (publish_mongo() n'est jamais lancé automatiquement : chargement en base à la main)
 
@@ -81,6 +84,7 @@ from .config import CLASSEMENT, DATA_DIR, PERIMETRES, TOPICS_PATH
 from .copublications import compute_copublications
 from .disciplines import build_disciplines
 from .erc import compute_erc
+from .extract_awards import compute_awards, extract_awards
 from .extract_sources_institutions import extract_sources_institutions
 from .indicators import compute_indicators
 from .prix import compute_prix
@@ -93,7 +97,7 @@ from .top_journals import compute_top_journals, top_journals_from_review
 from .viviers import compute_viviers
 
 STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc", "prix",
-         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "publish"]
+         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "awards", "publish"]
 
 
 # --- Étapes individuelles ------------------------------------------------------
@@ -179,6 +183,15 @@ def step_viviers(data_dir: str = DATA_DIR, classement: str = CLASSEMENT):
     return compute_viviers(data_dir=data_dir, classement=classement)
 
 
+def step_awards(data_dir: str = DATA_DIR, classement: str = CLASSEMENT, **kw):
+    """Financements OpenAlex : extraction (seuls les fichiers manquants sont lus), puis
+    pays du financeur x panel ERC."""
+    res = extract_awards(**kw)          # snapshot le plus récent (AWARDS_SNAPSHOT), indépendant des works
+    if res["erreurs"]:
+        raise RuntimeError(f"{len(res['erreurs'])} fichier(s) awards non lus : relancer (reprise possible)")
+    return compute_awards(classement, date=res["snapshot"], data_dir=data_dir)
+
+
 def step_publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, **kw):
     """Étape 7 : fichiers de publication (le chargement Mongo reste manuel : publish_mongo())."""
     return publish(classement, data_dir=data_dir, **kw)
@@ -235,6 +248,7 @@ def run(steps=None, start: str = None, end: str = None,
         "publications": lambda: step_publications(data_dir),
         "prix_disciplines": lambda: step_prix_disciplines(data_dir, classement),
         "viviers": lambda: step_viviers(data_dir, classement),
+        "awards": lambda: step_awards(data_dir, classement),
         "publish": lambda: step_publish(classement, data_dir),
     }
     if "review" in steps and not reviewed_csv:

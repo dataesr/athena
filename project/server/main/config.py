@@ -346,12 +346,34 @@ VIVIER_PART_MIN_PAYS = 0.5          # idem pour le pays (même règle pour tous 
 VIVIER_SEUIL_FRACTION_TOP10 = 0.5
 VIVIER_MIN_TOP10 = 1               # articles du top 10 % pour être « chercheur top 10 % »
 VIVIER_MIN_AUTEUR_PRINCIPAL = 1    # articles en premier ou dernier auteur, ou correspondant
-# Cliniciens (marqués, pas exclus) : chercheur dont au moins cette part des publications
-# de la période (toute la période : plus stable que les seules années récentes) n'a QUE des affiliations hospitalières (institutions de type healthcare : CHU,
-# hôpitaux ; un hospitalo-universitaire qui signe aussi avec son université ou son unité n'est
-# pas marqué). Effectifs nb_chercheurs_hors_cliniciens. None : pas de marquage.
-VIVIER_PART_MIN_CLINIQUE = 0.5
 VIVIER_PUBLIER_CHERCHEURS = True   # collection viviers_chercheurs (liste nominative)
+
+# --- Financements OpenAlex (awards, extract_awards.py) ----------------------------------
+# Awards (financements déclarés : ANR, NIH, DFG...) du snapshot, par pays du FINANCEUR
+# (country_code de l'entité funder ; outre-mer regroupé sous FR comme partout, PAYS_FR) et par
+# panel ERC (topic principal de l'award -> discipline, table de l'étape 3).
+# Snapshot des awards indépendant de celui des works (SNAPSHOT) : les financements sont lus
+# dans le snapshot le plus récent, de source SNAPSHOT_SOURCE ("daily" = offre payante, clé
+# OPENALEX_API_KEY). Le classement topic -> panel reste celui de DATA_DIR (étape 3).
+# Sorties dans <AWARDS_ROOT>/<date du snapshot des awards>/ (les anciens sont conservés).
+AWARDS_ROOT = f"{DATA_ROOT}/awards"
+AWARDS_SNAPSHOT = None             # None = dernier snapshot quotidien à l'extraction (puis, pour
+                                   # compute_awards, le plus récent extrait) ; "AAAA-MM-JJ" pour figer
+AWARDS_ANNEE_MIN = None            # ex. 2015 : awards dont start_year est antérieure écartés à
+                                   # l'extraction ; None = tous (y compris sans start_year)
+# Financeurs internationaux rattachés à un pays par OpenAlex (siège) : comptés sous le pays
+# AWARDS_PAYS_INTERNATIONAL au lieu de leur pays. [] = pays d'OpenAlex pour tous.
+AWARDS_PAYS_INTERNATIONAL = "INT"
+AWARDS_FINANCEURS_INTERNATIONAUX = [
+    "F4320320338", "F4320307846",  # Human Frontier Science Program (deux fiches)
+    "F4320320887",                 # European Synchrotron Radiation Facility
+    "F4320318240",                 # European Space Agency
+    "F4320320301",                 # European Science Foundation
+    "F4320338463",                 # CHIST-ERA
+    "F4320320885",                 # European Research Consortium for Informatics and Mathematics
+    "F4320308321",                 # UNESCO
+    "F4320310728",                 # Centre international de recherche sur le cancer
+]
 
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)

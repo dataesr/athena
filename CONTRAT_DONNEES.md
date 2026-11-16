@@ -369,8 +369,6 @@ publications à plus de `VIVIER_MAX_AUTEURS_PAR_ARTICLE` (100) auteurs sont igno
 | `nb_chercheurs_top10` | entier | dont chercheurs « top 10 % » (discipline principale) |
 | `nb_chercheurs_top10_fractionnaire` | décimal | idem, en fractionnaire |
 | `nb_chercheurs_auteur_principal` | entier | dont premier ou dernier auteur, ou correspondant, d'au moins une publication (discipline principale) |
-| `nb_chercheurs_hors_cliniciens` | entier | chercheurs actifs non cliniciens (discipline principale) : dénominateur à privilégier, ou à afficher en regard, en sciences de la vie |
-| `nb_chercheurs_hors_cliniciens_fractionnaire` | décimal | idem, en fractionnaire |
 
 Pays : un chercheur compte pour un pays si au moins `VIVIER_PART_MIN_PAYS` (50 %) de ses
 publications des années récentes y ont une affiliation ; **même règle pour tous les pays, France
@@ -387,14 +385,6 @@ les établissements ne s'additionnent pas.
 Chercheur « top 10 % » : au moins `VIVIER_MIN_TOP10` (1) article de la période dont la
 `fraction_top10_cites` (étape 4) atteint `VIVIER_SEUIL_FRACTION_TOP10` (0,5). Les années de
 `viviers_meta.annees_influence_provisoire` ont une fenêtre de citation pas encore close.
-
-Clinicien (marqué, pas exclu) : au moins `VIVIER_PART_MIN_CLINIQUE` (50 %) de ses publications
-de la période n'ont **que** des affiliations hospitalières (institutions OpenAlex de type
-`healthcare`, typage ROR identique dans tous les pays : CHU, hôpitaux). Un hospitalo-universitaire
-qui signe aussi avec son université ou son unité de recherche n'est pas clinicien. Raison : en LS,
-beaucoup de praticiens co-signent des études cliniques sans être des candidats plausibles aux ERC ;
-ils gonflent le dénominateur. `nb_chercheurs` les inclut, `nb_chercheurs_hors_cliniciens` les
-retire. Peu d'effet attendu en PE et SH.
 
 Les deux comptages (principal / fractionnaire) ne se mélangent pas. Sur une même entité,
 Σ `nb_chercheurs` = Σ `nb_chercheurs_fractionnaire` = chercheurs actifs de l'entité.
@@ -417,7 +407,6 @@ Liste nominative (données ouvertes OpenAlex) des chercheurs actifs rattachés �
 | `disciplines` | liste `{ discipline_code, poids }` (somme 1) |
 | `nb_publications`, `nb_publications_recentes` | publications de la période, des années récentes (articles + livres et chapitres SHS) |
 | `nb_livres_chapitres` | dont livres et chapitres (SHS) |
-| `nb_publications_hospitalieres`, `clinicien` | publications de la période avec seulement des affiliations hospitalières ; booléen (seuil `VIVIER_PART_MIN_CLINIQUE`) |
 | `nb_publications_auteur_principal`, `auteur_principal` | publications en premier ou dernier auteur ou correspondant ; booléen (seuil `VIVIER_MIN_AUTEUR_PRINCIPAL`) |
 | `nb_articles_top10`, `nb_articles_top10_cites`, `top10` | articles (seuls les articles ont une référence de citations) comptés dans le top 10 % (entier, seuil de fraction), somme des fractions (décimal), booléen « chercheur top 10 % » |
 | `annee_premiere_publication`, `annee_derniere_publication` | dans la période (pas un âge académique) |
@@ -433,18 +422,31 @@ d'extraction), `controles` (`nb_auteurs_fenetre`, `nb_signatures_fenetre`,
 `nb_chercheurs_rattaches_pays`, `par_pays`, `nb_chercheurs_top10`,
 `nb_chercheurs_auteur_principal`, `nb_chercheurs_avec_orcid`, `nb_chercheurs_rattaches`,
 `part_rattaches`, `nb_etablissements`, `nb_articles_perimetre`, `nb_articles_signes_pays_lus`,
-`nb_articles_grandes_collaborations`, `nb_livres_chapitres`, `nb_chercheurs_avec_livres`,
-`nb_chercheurs_cliniciens`, `part_cliniciens_par_domaine_france`, `part_cliniciens_par_pays`, `par_domaine`), `methode` (textes à afficher tels quels ;
-le premier décrit les publications).
-`cliniciens` (si `VIVIER_PART_MIN_CLINIQUE`) : `role` (marquage, pas filtre), `regle`,
-`affiliation_hospitaliere`, `non_cliniciens`, `pourquoi`, `usage`, `part_min_clinique`,
-`nb_chercheurs_cliniciens`, `part_par_domaine_france`, `part_par_pays` (part de cliniciens
-parmi les chercheurs actifs de chaque pays : à vérifier avant de comparer les pays en LS).
-`pays_noms` (code → nom français), `lecture` (règles de lecture à afficher : non-additivité
-entre établissements et entre pays, somme des établissements ≠ France, pas d'année,
-principal / fractionnaire), `limites` (textes à afficher : seuls les publiants, SHS
-encore sous-estimées malgré les livres et chapitres, désambiguïsation et affiliations OpenAlex, pas d'étape de carrière, pays hors
-ERC).
+`nb_articles_grandes_collaborations`, `nb_livres_chapitres`, `nb_chercheurs_avec_livres`, `par_domaine`).
+`pays_noms` (code → nom français), `pays_sans_comparaison_erc` (pays du vivier absents de
+`erc_meta.pays_compares` : pas de taux de candidature ERC pour eux).
+
+**Textes pour le public**, à afficher tels quels : une liste de paragraphes courts, sans nom de
+champ, avec les seuils et années tirés de la configuration du calcul.
+
+| Clé | Contenu | Quand l'afficher |
+|---|---|---|
+| `methode` | liste : publications (le premier), vivier, chercheur actif, pays, établissement, discipline, top 10 %, auteur principal | note de méthode du vivier |
+| `lecture` | liste : non-additivité entre établissements et entre pays, total des établissements ≠ France, pas de chiffre par année | partout où le vivier est affiché |
+| `limites` | liste des limites **générales** : seuls les publiants, désambiguïsation des auteurs, affiliations | partout où le vivier est affiché |
+| `limites_par_usage` | objet `{ cle: [textes] }` : limites propres à un usage | seulement dans le contexte de la clé (voir `limites_usages`) |
+| `limites_usages` | objet `{ cle: contexte }` : quand afficher chaque groupe (texte pour les développeurs, pas pour le public) | — |
+
+Clés de `limites_par_usage` :
+
+| Clé | À afficher avec |
+|---|---|
+| `sciences_humaines_sociales` | des chiffres du domaine SH, ou toutes disciplines confondues |
+| `types_bourse_erc` | un taux par type de bourse ERC (Starting, Consolidator, Advanced) |
+| `pays_sans_comparaison_erc` | un pays de `pays_sans_comparaison_erc` |
+
+Les règles de calcul pour les développeurs (principal / fractionnaire sans mélange, domaine =
+somme des panels, taux annuel) ne figurent pas dans ces textes : voir `viviers_effectifs` et §3.
 
 `publications` : sur quelles publications le vivier est calculé, à afficher ou à reprendre en
 note de méthode dans tableaux :
@@ -523,9 +525,6 @@ rapportées aux chercheurs actifs de ce pays.
 - Disciplines : même `discipline_code` (ou mêmes panels sommés) au numérateur et au
   dénominateur ; `nb_chercheurs` (discipline principale) par défaut, ou
   `nb_chercheurs_fractionnaire`, sans les mélanger.
-- Cliniciens : en LS, afficher aussi (ou préférer) le taux sur `nb_chercheurs_hors_cliniciens`,
-  et vérifier `viviers_meta.cliniciens.part_par_pays` (part de cliniciens comparable entre pays ?)
-  avant de comparer la France aux autres pays.
 - Variante « excellence » : dénominateur `nb_chercheurs_top10` (chercheurs ayant au moins un
   article du top 10 %), plus proche de la population visée par l'ERC.
 - Référence : l'ensemble des pays comparés (sommer candidatures et chercheurs de
