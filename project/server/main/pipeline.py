@@ -92,12 +92,28 @@ from .prix_disciplines import compute_prix_disciplines
 from .publications_auteurs import extraire_publications
 from .publish import publish
 from .referentiel import build_referentiel
+from .startups import compute_startups
 from .top10_citations import compute_top10
 from .top_journals import compute_top_journals, top_journals_from_review
 from .viviers import compute_viviers
 
-STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc", "prix",
-         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "awards", "publish"]
+STEPS = [
+    "referentiel",
+    "sources_institutions",
+    "disciplines",
+    "top_journals",
+    "top10",
+    "erc",
+    "prix",
+    "indicators",
+    "publications",
+    "prix_disciplines",
+    "viviers",
+    "copublications",
+    "awards",
+    "startups",
+    "publish",
+]
 
 
 # --- Étapes individuelles ------------------------------------------------------
@@ -192,6 +208,11 @@ def step_awards(data_dir: str = DATA_DIR, classement: str = CLASSEMENT, **kw):
     return compute_awards(classement, date=res["snapshot"], data_dir=data_dir)
 
 
+def step_startups(data_dir: str = DATA_DIR, **kw):
+    """startups ESR : créations par année et ROR."""
+    return compute_startups(data_dir=data_dir, **kw)
+
+
 def step_publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, **kw):
     """Étape 7 : fichiers de publication (le chargement Mongo reste manuel : publish_mongo())."""
     return publish(classement, data_dir=data_dir, **kw)
@@ -228,6 +249,8 @@ def run(steps=None, start: str = None, end: str = None,
         i0 = STEPS.index(start) if start else 0
         i1 = STEPS.index(end) if end else len(STEPS) - 1
         steps = STEPS[i0:i1 + 1]
+        if not start and not end:
+            steps = [step for step in steps if step != "startups"]
     inconnues = set(steps) - set(STEPS) - {"review"}
     if inconnues:
         raise ValueError(f"étapes inconnues : {sorted(inconnues)} ; disponibles : {STEPS + ['review']}")
@@ -249,6 +272,7 @@ def run(steps=None, start: str = None, end: str = None,
         "prix_disciplines": lambda: step_prix_disciplines(data_dir, classement),
         "viviers": lambda: step_viviers(data_dir, classement),
         "awards": lambda: step_awards(data_dir, classement),
+        "startups": lambda: step_startups(data_dir),
         "publish": lambda: step_publish(classement, data_dir),
     }
     if "review" in steps and not reviewed_csv:

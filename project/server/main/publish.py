@@ -32,6 +32,9 @@ CONTRAT_DONNEES.md. Résumé :
                            a été lancé)
   viviers_chercheurs       un document par chercheur actif (si VIVIER_PUBLIER_CHERCHEURS)
   viviers_meta             un document : période, paramètres, contrôles, textes de méthode
+  innovation_effectifs     créations de startups par entité x année (si le pilote a été lancé)
+  innovation_entites       ROR résolus depuis les structures liées des startups
+  innovation_meta          un document : source, années, méthode et contrôles
 
 1. publish()          écrit <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz
                       (+ .parquet) et manifest.json. Aucune base nécessaire.
@@ -63,39 +66,63 @@ from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_
                      TABLEAUX_BOARD_ID, VIVIER_PUBLIER_CHERCHEURS, VIVIERS_DIR)
 from .entites import construire_entites
 
-COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copublications",
-               "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta", "erc_effectifs", "erc_meta",
-               "prix_effectifs", "prix_catalogue", "prix_laureats", "prix_meta",
-               "prix_effectifs_disciplines", "viviers_effectifs", "viviers_chercheurs", "viviers_meta"]
+COLLECTIONS = [
+    "entites",
+    "biblio_disciplines",
+    "biblio_effectifs",
+    "biblio_copublications",
+    "biblio_revues_tete",
+    "biblio_seuils_top10",
+    "biblio_meta",
+    "erc_effectifs",
+    "erc_meta",
+    "prix_effectifs",
+    "prix_catalogue",
+    "prix_laureats",
+    "prix_meta",
+    "prix_effectifs_disciplines",
+    "viviers_effectifs",
+    "viviers_chercheurs",
+    "viviers_meta",
+    "innovation_effectifs",
+    "innovation_entites",
+    "innovation_meta",
+]
 
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
 INDEX = {
     "entites": [[("entite_id", 1)], [("selecteur", 1), ("ordre_selecteur", 1)], [("entite_type", 1)]],
     "biblio_disciplines": [[("classement", 1), ("discipline_code", 1)]],
-    "biblio_effectifs": [[("entite_id", 1), ("perimetre", 1), ("classement", 1),
-                          ("annee_publication", 1), ("discipline_code", 1)],
-                         [("entite_type", 1), ("perimetre", 1), ("annee_publication", 1)]],
-    "biblio_copublications": [[("entite_id", 1), ("partenaire_type", 1), ("perimetre", 1),
-                               ("annee_publication", 1)],
-                              [("partenaire_id", 1)]],
+    "biblio_effectifs": [
+        [("entite_id", 1), ("perimetre", 1), ("classement", 1), ("annee_publication", 1), ("discipline_code", 1)],
+        [("entite_type", 1), ("perimetre", 1), ("annee_publication", 1)],
+    ],
+    "biblio_copublications": [
+        [("entite_id", 1), ("partenaire_type", 1), ("perimetre", 1), ("annee_publication", 1)],
+        [("partenaire_id", 1)],
+    ],
     "biblio_revues_tete": [[("classement", 1), ("discipline_code", 1), ("categorie", 1), ("rang", 1)]],
-    "biblio_seuils_top10": [[("perimetre", 1), ("classement", 1), ("discipline_code", 1),
-                             ("annee_publication", 1)]],
+    "biblio_seuils_top10": [[("perimetre", 1), ("classement", 1), ("discipline_code", 1), ("annee_publication", 1)]],
     "biblio_meta": [],
-    "erc_effectifs": [[("entite_id", 1), ("annee_appel", 1), ("discipline_code", 1), ("type_bourse", 1)],
-                      [("entite_type", 1), ("annee_appel", 1)]],
+    "erc_effectifs": [
+        [("entite_id", 1), ("annee_appel", 1), ("discipline_code", 1), ("type_bourse", 1)],
+        [("entite_type", 1), ("annee_appel", 1)],
+    ],
     "erc_meta": [],
-    "prix_effectifs": [[("entite_id", 1), ("annee", 1), ("prix_id", 1)],
-                       [("prix_id", 1), ("entite_type", 1), ("annee", 1)]],
+    "prix_effectifs": [[("entite_id", 1), ("annee", 1), ("prix_id", 1)], [("prix_id", 1), ("entite_type", 1), ("annee", 1)]],
     "prix_catalogue": [[("prix_id", 1)], [("groupes", 1)]],
-    "prix_laureats": [[("entites", 1), ("prix_id", 1), ("annee", 1)], [("prix_id", 1), ("annee", 1)],
-                      [("laureat_id", 1)]],
+    "prix_laureats": [[("entites", 1), ("prix_id", 1), ("annee", 1)], [("prix_id", 1), ("annee", 1)], [("laureat_id", 1)]],
     "prix_meta": [],
-    "prix_effectifs_disciplines": [[("entite_id", 1), ("annee", 1), ("prix_id", 1), ("discipline_code", 1)],
-                                   [("prix_id", 1), ("entite_type", 1), ("discipline_code", 1)]],
+    "prix_effectifs_disciplines": [
+        [("entite_id", 1), ("annee", 1), ("prix_id", 1), ("discipline_code", 1)],
+        [("prix_id", 1), ("entite_type", 1), ("discipline_code", 1)],
+    ],
     "viviers_effectifs": [[("entite_id", 1), ("discipline_code", 1)], [("entite_type", 1), ("discipline_code", 1)]],
     "viviers_chercheurs": [[("entites", 1), ("discipline_code", 1)], [("chercheur_id", 1)], [("orcid", 1)]],
     "viviers_meta": [],
+    "innovation_effectifs": [[("indicateur_id", 1), ("entite_id", 1), ("annee", 1)], [("entite_type", 1), ("annee", 1)]],
+    "innovation_entites": [[("entite_id", 1)]],
+    "innovation_meta": [],
 }
 
 
@@ -267,6 +294,22 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
         tables["viviers_meta"] = _json(viv / "viviers_meta.json")
     elif verbose:
         print(f"{viviers_dir}/viviers_effectifs.parquet absent : viviers non publiés (lancer compute_viviers())")
+    innovation = data_dir / "innovation"
+    f_innovation = innovation / "startups_effectifs.parquet"
+    if f_innovation.exists():
+        attendus = [
+            f_innovation,
+            innovation / "startups_entites.parquet",
+            innovation / "startups_meta.json",
+        ]
+        absents = [path for path in attendus if not path.exists()]
+        if absents:
+            raise FileNotFoundError("Sorties startups incomplètes : " + ", ".join(str(path) for path in absents))
+        tables["innovation_effectifs"] = sql(f"SELECT * FROM read_parquet('{f_innovation}')")
+        tables["innovation_entites"] = sql(f"SELECT * FROM read_parquet('{innovation / 'startups_entites.parquet'}')")
+        tables["innovation_meta"] = _json(innovation / "startups_meta.json")
+    elif verbose:
+        print(f"{f_innovation} absent : volet Innovation non publié (lancer startups())")
     return tables
 
 

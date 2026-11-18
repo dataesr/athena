@@ -1,4 +1,4 @@
-# Contrat de données — bibliométrie, bourses ERC, prix et viviers (application tableaux)
+# Contrat de données — bibliométrie, bourses ERC, prix, viviers et innovation (application tableaux)
 
 Ce document décrit les données produites par la chaîne Python (`project/server/main/`)
 pour l'application [tableaux](https://github.com/dataesr/tableaux). Il fait foi pour
@@ -288,6 +288,40 @@ Lauréats sans année : écartés (`prix_meta.controles.nb_laureats_sans_annee`)
 | `nb_laureats`, `nb_laureats_femmes`, `nb_laureats_hommes` | lauréats, toutes années (`FR`) |
 | `annee_min`, `annee_max` | première et dernière année présentes |
 | `groupes` | codes des groupes de `prix_meta.groupes` auxquels le prix appartient |
+
+### `innovation_effectifs` — créations annuelles de startups (pilote)
+
+Publiée uniquement après l'étape facultative `startups`. Le jeu ESR
+est identifié par SIREN ; les organisations liées sont résolues par SIRET dans
+le dump scanR `organizations-v2`. Les documents individuels de startups ne sont
+pas publiés.
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `indicateur_id` | texte | `INN-STU-01` : SIREN distincts créés dans l'année |
+| `entite_type`, `entite_id` | | `pays` / `FR`, ou `etablissement` / ROR court |
+| `annee` | entier | année de création du SIREN |
+| `discipline_code` | null | non classé par panel ERC ; indicateur toutes disciplines |
+| `nb_startups` | entier | SIREN distincts créés, une fois par ROR si un SIRET lié a un ROR unique |
+| `unite` | texte | `nombre` |
+| `statut` | texte | `disponible` ou `provisoire` |
+
+France compte tous les SIREN valides, même sans structure liée ; les nombres
+par établissement ne sont pas additifs, car une startup peut être liée à
+plusieurs ROR. Les identifiants SIRET résolus vers plusieurs ROR sont exclus
+du rattachement établissement. La couverture du recensement est incomplète :
+un zéro observé n'est pas une preuve d'absence de création.
+
+`innovation_entites` contient seulement les ROR avec au moins une startup
+rattachée sans ambiguïté, avec les champs `entite_id`, `entite_type`, `nom`,
+`sigle`, `ville` et `recherche`. Cette liste alimente le sélecteur propre à
+l'onglet Innovation sans élargir les sélecteurs des autres onglets.
+
+`innovation_meta` est un document. Il décrit `annees`, `annees_provisoires`,
+`methode`, la source ODS (jeu, licence, date d'extraction, date d'observation,
+empreinte) et les contrôles de qualité. `startups_brut.parquet`,
+`startups_non_rattaches.parquet` et les autres sorties de contrôle restent dans
+le dossier Athena et ne sont pas publiés.
 
 ### `prix_laureats` — un document par lauréat
 
@@ -619,4 +653,5 @@ db.prix_effectifs_<version>.aggregate([
 | Prix | `prix.compute_prix()` | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv`, `prix_personnes.parquet` (interne) |
 | Prix : disciplines | `publications_auteurs.extraire_publications()` (lecture commune avec les viviers) puis `prix_disciplines.compute_prix_disciplines()` | `prix/publications/`, `prix_laureats_disciplines.parquet`, `prix_effectifs_disciplines.parquet`, `prix_disciplines_meta.json` |
 | Viviers | `publications_auteurs.extraire_publications()` (lecture commune avec les prix) puis `viviers.compute_viviers()` | `viviers/auteurs/`, `viviers_chercheurs.parquet`, `viviers_effectifs.parquet`, `viviers_meta.json` |
+| Innovation : startups | `startups.compute_startups()` (étape facultative) | `innovation/startups_effectifs.parquet`, `startups_entites.parquet`, `startups_meta.json`, contrôles locaux |
 | 7 | `publish.publish()` puis `publish.publish_mongo()` | `publication/erc/*.jsonl.gz` puis MongoDB |
