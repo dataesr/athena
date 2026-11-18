@@ -1,3 +1,9 @@
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
 import time
 
 from project.server.main.copublications import compute_copublications
@@ -8,13 +14,13 @@ from project.server.main.prix_disciplines import compute_prix_disciplines
 from project.server.main.publications_auteurs import extraire_publications
 from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
-from project.server.main.pipeline import step_awards
+from project.server.main.pipeline import step_anr, step_awards, step_horizon_topics, step_projets_scanr
 from project.server.main.indicators import compute_indicators
 from project.server.main.logger import get_logger
 from project.server.main.openalex_s3 import diagnose_daily
 from project.server.main.projects import generate_projects
 from project.server.main.publish import publish, publish_mongo
-from project.server.main.config import PERIMETRES, SNAPSHOT
+from project.server.main.config import AWARDS_SNAPSHOT, PERIMETRES, SNAPSHOT
 from project.server.main.referentiel import build_referentiel, build_tutelles_rnsr
 from project.server.main.top_journals import compute_top_journals, top_journals_from_review
 from project.server.main.top10_citations import compute_top10
@@ -29,14 +35,19 @@ logger = get_logger(__name__)
 #   {"start": "publications", "end": "publish"} plage des étapes PAR_DEFAUT (bornes incluses)
 #   {"steps": [...], "params": {"viviers": {"annee_debut": 2016, "out_suffix": "_2016"}}}
 #                                               arguments passés à la fonction d'une étape
+#   {"snapshot": "2026-11-16", "snapshot_awards": "2026-11-16", "steps": [...]}
+#                                               dates des snapshots OpenAlex, au premier niveau :
+#                                               "snapshot" (works ; tous les chemins en dépendent,
+#                                               /data/snapshots/<date>/), "snapshot_awards" (awards et
+#                                               projets scanR, /data/awards/<date>/) ; absentes : config.py
 #   GET /compute                                liste des étapes (sans rien lancer)
 # Résultat de la tâche (GET /tasks/<id>) : durée en minutes de chaque étape lancée.
 ETAPES = ["diagnose_daily", "referentiel", "tutelles_rnsr", "extract_snapshot", "summary",
           "check_duplicates", "disciplines", "top_journals", "top10", "erc", "prix", "indicators",
           "publications", "prix_disciplines", "viviers", "copublications", "awards",
-          "publish", "publish_mongo", "dashboard"]
+          "projets_scanr", "horizon_topics", "anr", "publish", "publish_mongo", "dashboard"]
 # Lancées seulement si demandées explicitement dans "steps" (contrôles, chargement en base)
-HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "awards", "publish_mongo"]
+HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "awards", "projets_scanr", "horizon_topics", "anr", "publish_mongo"]
 PAR_DEFAUT = [e for e in ETAPES if e not in HORS_DEFAUT]
 
 
@@ -66,15 +77,75 @@ def awards(**kw) -> dict:
             "couverture_fr": cov.loc["FR"].to_dict() if "FR" in cov.index else None}
 
 
+def projets_scanr(**kw) -> dict:
+    """Étape projets_scanr ; résultat réduit à des valeurs simples (résultat de tâche)."""
+    r = step_projets_scanr(**kw)
+    return {"snapshot_awards": r["snapshot_awards"], "fichiers": r["fichiers"],
+            "couverture": r["couverture"].astype(object).where(r["couverture"].notna(), None).to_dict("records")}
+
+
+# Dates de snapshot imposables par /compute, au premier niveau du JSON :
+#   clé JSON -> (variable d'environnement lue par config.py, valeur chargée)
+SNAPSHOTS = {
+    "snapshot": ("ATHENA_SNAPSHOT", SNAPSHOT),                       # works (et tous les chemins)
+    "snapshot_awards": ("ATHENA_SNAPSHOT_AWARDS", AWARDS_SNAPSHOT),  # awards et projets scanR
+}
+
+
+def snapshots_choisis(args: dict) -> dict:
+    """{clé: date} des snapshots demandés par /compute (clés absentes : valeurs de config.py)."""
+    out = {}
+    for k in SNAPSHOTS:
+        s = (args or {}).get(k)
+        if s is None:
+            continue
+        if not isinstance(s, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+            raise ValueError(f"{k} invalide : {s!r} (attendu : \"AAAA-MM-JJ\")")
+        out[k] = s
+    return out
+
+
+def snapshots_effectifs(args: dict) -> dict:
+    """Dates utilisées pour la tâche : demandées, sinon celles de config.py (None : le plus récent)."""
+    return {k: snapshots_choisis(args).get(k, v) for k, (_, v) in SNAPSHOTS.items()}
+
+
 def create_task_compute(args: dict) -> dict:
+    """Tâche /compute. Si une date demandée ("snapshot", "snapshot_awards") diffère de celle
+    chargée, le calcul est relancé dans un processus Python séparé avec les variables
+    d'environnement correspondantes (ATHENA_SNAPSHOT, ATHENA_SNAPSHOT_AWARDS) : les modules y
+    relisent config.py, donc DATA_DIR, ERC_DIR, PRIX_DIR, VIVIERS_DIR... pointent vers ce snapshot."""
+    args = dict(args or {})
+    demandes = snapshots_choisis(args)
+    env = {SNAPSHOTS[k][0]: d for k, d in demandes.items() if d != SNAPSHOTS[k][1]}
+    if not env:
+        return _compute(args)
+    logger.info(f"Snapshots demandés {demandes} (chargés : "
+                f"{ {k: v for k, (_, v) in SNAPSHOTS.items()} }) : calcul dans un processus séparé")
+    with tempfile.TemporaryDirectory() as tmp:
+        f_args, f_res = os.path.join(tmp, "args.json"), os.path.join(tmp, "res.json")
+        with open(f_args, "w") as f:
+            json.dump(args, f)
+        code = ("import json, sys; from project.server.main.tasks import _compute; "
+                "r = _compute(json.load(open(sys.argv[1]))); "
+                "json.dump(r, open(sys.argv[2], 'w'), default=str)")
+        p = subprocess.run([sys.executable, "-c", code, f_args, f_res], cwd=os.getcwd(),
+                           env={**os.environ, **env})
+        if p.returncode != 0:
+            raise RuntimeError(f"calcul sur les snapshots {demandes} en échec (code {p.returncode}) : voir les logs")
+        with open(f_res) as f:
+            return json.load(f)
+
+
+def _compute(args: dict) -> dict:
     # Tous les chemins se règlent dans config.py : DATA_ROOT = /data, SNAPSHOT = "2026-10-15"
     # -> DATA_DIR = /data/snapshots/2026-10-15. Les noms de variables des fichiers
     # produits sont décrits dans CONTRAT_DONNEES.md.
     args = args or {}
     choix = etapes_choisies(args)
     params = args.get("params") or {}
-    res = {}
-    logger.info(f"Étapes lancées : {choix}")
+    res = {"snapshot": SNAPSHOT, "snapshot_awards": AWARDS_SNAPSHOT or "dernier disponible"}
+    logger.info(f"Snapshots {res} ; étapes lancées : {choix}")
 
     def etape(nom, fn, *a, **kw):
         if nom not in choix:
@@ -140,7 +211,7 @@ def create_task_compute(args: dict) -> dict:
 # ---------------------------------------------------------------------------
 # 3. Classer les topics en disciplines (quelques minutes)
 #    Lit : topics/openalex_topics_erc_panels.json (dans /src) et works/
-#    Écrit : disciplines/erc.parquet (topic_id -> discipline_code, discipline_nom, domaine_code)
+#    Écrit : disciplines/panel_erc.parquet (topic_id -> discipline_code, discipline_nom, domaine_code)
 #    Attendu : "Articles classés : … (100.0 %)"
 # ---------------------------------------------------------------------------
     etape("disciplines", build_disciplines)
@@ -151,7 +222,7 @@ def create_task_compute(args: dict) -> dict:
 #    Écrit dans revues_tete/ :
 #      sources_sjr.parquet             correspondance revues OpenAlex <-> SJR (par ISSN)
 #      erc.parquet                     revues de tête par discipline (+ multidisciplinaires)
-#      erc_relecture.csv               candidates par discipline, à relire dans un tableur
+#      panel_erc_relecture.csv               candidates par discipline, à relire dans un tableur
 #      erc_multidisciplinaires.csv     candidates multidisciplinaires, à relire
 #      erc_params.json                 paramètres utilisés
 #    À passer AVANT l'étape 5 : le périmètre "revues_sjr" a besoin de sources_sjr.parquet.
@@ -160,15 +231,15 @@ def create_task_compute(args: dict) -> dict:
 
 # 4 bis (facultatif). Réappliquer votre liste corrigée à la main.
 #    Enregistrez le CSV relu sous un autre nom dans le dossier du snapshot, puis :
-#    Lit : le CSV relu (colonne "retenue"). Écrit : revues_tete/erc.parquet (remplacé)
-# top_journals_from_review("/data/snapshots/2026-10-15/revues_tete/erc_relecture_validee.csv",
-#                          out_name="erc")
+#    Lit : le CSV relu (colonne "retenue"). Écrit : revues_tete/panel_erc.parquet (remplacé)
+# top_journals_from_review("/data/snapshots/2026-10-15/revues_tete/panel_erc_relecture_validee.csv",
+#                          out_name="panel_erc")
 
 # ---------------------------------------------------------------------------
 # 5. Top 10 % des articles les plus cités, une fois par périmètre (10 à 30 min chacun)
 #    Lit : works/, disciplines/, revues_tete/sources_sjr.parquet (périmètre "revues_sjr")
 #    Écrit dans top10/ :
-#      erc_toutes_revues_openalex.parquet / erc_revues_sjr.parquet
+#      panel_erc_toutes_revues_openalex.parquet / panel_erc_revues_sjr.parquet
 #                                      fraction_top10_cites de chaque article
 #      *_seuils.parquet                seuil de citations et ex aequo par discipline x année
 #      *_params.json                   paramètres (fenêtre de citation, années couvertes)
@@ -266,19 +337,56 @@ def create_task_compute(args: dict) -> dict:
 # ---------------------------------------------------------------------------
 # 6c. Financements OpenAlex (awards) : seulement si demandé ({"steps": ["awards"]})
 #    Lit sur S3 : awards (sous-colonnes utiles) et funders du snapshot quotidien le plus récent
-#    (AWARDS_SNAPSHOT pour figer une date ; indépendant de SNAPSHOT, celui des works).
+#    (date imposée : "snapshot_awards" au premier niveau du JSON, comme "snapshot" pour les works).
 #    Écrit dans /data/awards/<date>/ : extraits/*.parquet (une ligne par award), funders.parquet,
-#          erc_awards.parquet (award -> pays du financeur, panel), erc_pays_disciplines.parquet
+#          awards_panel_erc.parquet (award -> pays du financeur, panel),
+#          awards_pays_panel_erc.parquet (pays x année x panel)
 #    Pays du financeur : outre-mer regroupé sous FR (PAYS_FR) ; financeurs internationaux
 #    (AWARDS_FINANCEURS_INTERNATIONAUX) sous "INT". Reprise : seuls les fichiers manquants sont lus.
 # ---------------------------------------------------------------------------
     etape("awards", awards)
 
 # ---------------------------------------------------------------------------
+# 6d. Projets scanR enrichis : seulement si demandé ({"steps": ["awards", "projets_scanr"]})
+#    Télécharge (si absente) : projects_denormalized.jsonl.gz de scanR -> /data/projets/scanr/
+#    Lit : awards du snapshot AWARDS_SNAPSHOT (le plus récent extrait), disciplines/panel_erc.parquet
+#    Écrit dans /data/projets/ : projets_scanr_panel_erc.parquet (une ligne par projet :
+#          topic, panel ERC), projects_denormalized_panel_erc.jsonl.gz (base scanR complète
+#          + champ discipline)
+#    Appariement id scanR = funder_award_id OpenAlex (PROJETS_GROUPES : ANR, UE, INCa, ANSES).
+#    POST /projects charge ensuite la base enrichie dans Mongo (biblio_projects).
+# ---------------------------------------------------------------------------
+    etape("projets_scanr", projets_scanr)
+
+# ---------------------------------------------------------------------------
+# 6e bis. Projets Horizon hors ERC : seulement si demandé ({"steps": ["horizon_topics"]})
+#    Lit : jeux Horizon soumis et lauréats (ODS, clé ODS_API_KEY ; titre et résumé conservés)
+#    Appelle aboutness OpenAlex : un texte par projet (proposition), 0,01 $ par texte, 1 req/s,
+#          plafond ABOUTNESS_BUDGET_USD par lancement ; RELANCER jusqu'à "complet": true
+#          (le cache /data/aboutness/ évite de repayer). Estimation sans appel :
+#          horizon_topics.estimer_horizon_topics()
+#    Écrit : horizon/horizon_topics_panel_erc.parquet (topic, panel ERC par projet)
+# ---------------------------------------------------------------------------
+    etape("horizon_topics", step_horizon_topics)
+
+# ---------------------------------------------------------------------------
+# 6e. ANR : seulement si demandé ({"steps": ["anr"]})
+#    Lit : base scanR des projets et participations (/data/projets/scanr/), référentiel (Paysage ->
+#          ROR, SIRET/UAI, tutelles), lignée OpenAlex du snapshot
+#    Appelle aboutness OpenAlex pour TOUS les projets (titre + résumé ; 0,01 $ par texte, 1 req/s,
+#          plafond ABOUTNESS_BUDGET_USD par lancement, cache /data/aboutness/) : RELANCER jusqu'à
+#          "complet": true
+#    Contrôle : participants comparés aux participations de scanR (alerte, anr_controle_scanr.csv)
+#    Écrit dans anr/ : anr_projets, anr_participations, anr_effectifs, anr_entites (.parquet),
+#          anr_non_rattaches.csv, anr_controle_scanr.csv, anr_meta.json
+# ---------------------------------------------------------------------------
+    etape("anr", step_anr)
+
+# ---------------------------------------------------------------------------
 # 7. Publication pour l'application tableaux (une à deux minutes)
 #    Lit : indicateurs/, revues_tete/, top10/*_seuils, disciplines/, le référentiel,
 #          config/etablissements_dashboard.csv (corrections, facultatif)
-#    Écrit dans publication/erc/ : entites, biblio_disciplines, biblio_effectifs,
+#    Écrit dans publication/panel_erc/ : entites, biblio_disciplines, biblio_effectifs,
 #          biblio_copublications (si PUBLIER_COPUBLICATIONS), biblio_revues_tete, biblio_seuils_top10, biblio_meta,
 #          erc_effectifs, erc_meta, prix_effectifs, prix_catalogue, prix_laureats, prix_meta,
 #          prix_effectifs_disciplines, viviers_effectifs, viviers_chercheurs, viviers_meta

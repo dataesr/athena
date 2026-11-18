@@ -59,14 +59,14 @@ Exemple :
 
 import datetime as dt
 import gzip
-import io
 import json
+from functools import partial
 from pathlib import Path
 
 import duckdb
 import pandas as pd
-import requests
 
+from .common import telecharger, texte
 from .config import (GROUPES_ETABLISSEMENTS_REGLES, PAYSAGE_DUMP_URL, REFERENTIEL_CATEGORIES,
                      REFERENTIEL_DIR, REFERENTIEL_SOURCE, SCANR_ORGANIZATIONS_URL)
 
@@ -82,6 +82,10 @@ def correspondance_paysage_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
     return Path(ref_dir) / "paysage_ror.parquet"
 
 
+def siret_paysage_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
+    return Path(ref_dir) / "paysage_siret.parquet"
+
+
 def successeurs_paysage_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
     return Path(ref_dir) / "paysage_successeurs.parquet"
 
@@ -90,27 +94,22 @@ def tutelles_rnsr_path(ref_dir: str = REFERENTIEL_DIR) -> Path:
     return Path(ref_dir) / "rnsr_tutelles.parquet"
 
 
-def _lignes_jsonl_gz(url_ou_fichier: str):
-    """Lit un .jsonl.gz ligne par ligne (URL ou fichier local), sans tout charger
-    en mémoire : organizations-v2 contient aussi des statistiques et pèse lourd."""
-    if str(url_ou_fichier).startswith("http"):
-        with requests.get(url_ou_fichier, stream=True, timeout=600) as r:
-            r.raise_for_status()
-            r.raw.decode_content = False
-            with gzip.GzipFile(fileobj=r.raw) as gz:
-                for ligne in io.TextIOWrapper(gz, encoding="utf-8"):
-                    if ligne.strip():
-                        yield json.loads(ligne)
-    else:
-        ouvrir = gzip.open if str(url_ou_fichier).endswith(".gz") else open
-        with ouvrir(url_ou_fichier, "rt", encoding="utf-8") as f:
-            for ligne in f:
-                if ligne.strip():
-                    yield json.loads(ligne)
+def _lignes_jsonl_gz(url_ou_fichier: str, ref_dir: str = REFERENTIEL_DIR):
+    """Lit un .jsonl.gz ligne par ligne, sans tout charger en mémoire (organizations-v2 pèse
+    lourd). Une URL est d'abord copiée (à jour) dans <ref_dir>/sources/ (common.telecharger,
+    même mécanisme que les fichiers de scanR des projets)."""
+    f = str(url_ou_fichier)
+    if f.startswith("http"):
+        f = telecharger(f, Path(ref_dir) / "sources" / f.rsplit("/", 1)[-1], refresh=True)
+    ouvrir = gzip.open if str(f).endswith(".gz") else open
+    with ouvrir(f, "rt", encoding="utf-8") as fh:
+        for ligne in fh:
+            if ligne.strip():
+                yield json.loads(ligne)
 
 
-def _texte(v):
-    return v.strip() if isinstance(v, str) and v.strip() else None
+# Valeurs lues dans les JSON de Paysage / scanR : seules les chaînes comptent (common.texte strict)
+_texte = partial(texte, strict=True)
 
 
 # --- Paysage -----------------------------------------------------------------------
@@ -148,6 +147,26 @@ def _correspondance_paysage(e: dict):
     return (e["id"], ror, nom, _texte((e.get("currentLocalisation") or {}).get("iso3")))
 
 
+def _siret_paysage(e: dict) -> list:
+    """[(type, valeur, paysage_id, tete)] : identifiants SIRET (14 chiffres), UAI (7 chiffres +
+    lettre) et PIC (Commission européenne, 9 chiffres) de la structure, pour retrouver les partenaires identifiés ainsi (scanR, Horizon) ;
+    tete : structure de tête (sert à choisir entre les structures d'un même SIREN)."""
+    out, tete = [], est_structure_de_tete(e)
+    for k in e.get("identifiers") or []:
+        t, brut = k.get("type"), str(k.get("value") or "").strip().upper()
+        if not e.get("id"):
+            continue
+        if t == "siret":
+            v = "".join(ch for ch in brut if ch.isdigit())
+            if len(v) == 14:
+                out.append(("siret", v, e["id"], tete))
+        elif t == "uai" and len(brut) == 8 and brut[:7].isdigit() and brut[7].isalpha():
+            out.append(("uai", brut, e["id"], tete))
+        elif t == "pic" and brut.isdigit() and len(brut) == 9:
+            out.append(("pic", brut, e["id"], tete))
+    return out
+
+
 def _successeurs_paysage(e: dict) -> list:
     """[(paysage_id, successeur_id)] : relation « structure-predecesseur » dont e est
     le prédécesseur (relatedObjectId = e), la ressource étant le successeur (règle de
@@ -165,13 +184,16 @@ def _ecrire(df: pd.DataFrame, out: Path) -> Path:
     return out
 
 
-def _ecrire_correspondance(lignes: list, ref_dir: str, successeurs: list = None) -> Path:
+def _ecrire_correspondance(lignes: list, ref_dir: str, successeurs: list = None, sirets: list = None) -> Path:
     df = pd.DataFrame(lignes, columns=["referentiel_id", "ror", "nom", "pays_iso3"]).drop_duplicates(
         "referentiel_id")
     out = _ecrire(df, correspondance_paysage_path(ref_dir))
     if successeurs is not None:
         _ecrire(pd.DataFrame(successeurs, columns=["paysage_id", "successeur_id"]).drop_duplicates("paysage_id"),
                 successeurs_paysage_path(ref_dir))
+    if sirets is not None:
+        _ecrire(pd.DataFrame(sirets, columns=["type", "valeur", "paysage_id", "tete"]).drop_duplicates(),
+                siret_paysage_path(ref_dir))
     return out
 
 
@@ -180,13 +202,14 @@ def build_correspondance_paysage(url: str = PAYSAGE_DUMP_URL, ref_dir: str = REF
     """Écrit seulement <ref_dir>/paysage_ror.parquet (identifiant Paysage -> ROR) et
     paysage_successeurs.parquet. Inutile si build_referentiel() a été lancé avec la
     source Paysage, qui les écrit aussi."""
-    lignes, successeurs = [], []
-    for e in _lignes_jsonl_gz(url):
+    lignes, successeurs, sirets = [], [], []
+    for e in _lignes_jsonl_gz(url, ref_dir):
         c = _correspondance_paysage(e)
         if c:
             lignes.append(c)
         successeurs += _successeurs_paysage(e)
-    out = _ecrire_correspondance(lignes, ref_dir, successeurs)
+        sirets += _siret_paysage(e)
+    out = _ecrire_correspondance(lignes, ref_dir, successeurs, sirets)
     if verbose:
         print(f"Paysage -> ROR : {len(lignes):,} structures avec un ROR, {len(successeurs):,} "
               f"successeurs -> {out}")
@@ -216,6 +239,18 @@ def charger_successeurs_paysage(ref_dir: str = REFERENTIEL_DIR, construire: bool
     return dict(zip(df["paysage_id"], df["successeur_id"]))
 
 
+def charger_siret_paysage(ref_dir: str = REFERENTIEL_DIR, construire: bool = True) -> pd.DataFrame:
+    """Table (type siret | uai | pic, valeur, paysage_id, tete) des identifiants Paysage ; la
+    construit si elle manque ou si elle précède l'ajout des PIC (construire=True). Résolution :
+    affiliations.rattacher_structures."""
+    p = siret_paysage_path(ref_dir)
+    if not p.exists() or "pic" not in set(duckdb.sql(f"SELECT DISTINCT type FROM read_parquet('{p}')").df()["type"]):
+        if not construire:
+            return pd.DataFrame(columns=["type", "valeur", "paysage_id", "tete"])
+        build_correspondance_paysage(ref_dir=ref_dir)
+    return duckdb.sql(f"SELECT * FROM read_parquet('{p}')").df()
+
+
 def successeur_final(paysage_id, successeurs: dict):
     """Structure actuelle : suit les successeurs jusqu'au dernier (cycles ignorés),
     comme scanR (paysage.get_successeur)."""
@@ -229,12 +264,16 @@ def successeur_final(paysage_id, successeurs: dict):
 def build_tutelles_rnsr(url: str = SCANR_ORGANIZATIONS_URL, ref_dir: str = REFERENTIEL_DIR,
                         verbose: bool = True) -> str:
     """Écrit <ref_dir>/rnsr_tutelles.parquet : (rnsr, tutelle_id, tutelle_nom) pour chaque
-    structure du RNSR de scanR (organizations-v2) et chacune de ses institutions de type
-    « établissement tutelle » (identifiant Paysage), comme scanR (projects.py)."""
+    structure de scanR (organizations-v2) et chacune de ses institutions de type « établissement
+    tutelle » (identifiant Paysage), comme scanR (projects.get_participations_simple). La colonne
+    rnsr contient l'identifiant scanR de la structure (RNSR d'un laboratoire, ou Paysage : une
+    délégation régionale a le CNRS pour tutelle) et ses RNSR, tels quels et en majuscules."""
     lignes = []
-    for e in _lignes_jsonl_gz(url):
+    for e in _lignes_jsonl_gz(url, ref_dir):
         rnsrs = {_texte(k.get("id")) for k in e.get("externalIds") or [] if k.get("type") == "rnsr"}
+        rnsrs |= {_texte(e.get("id"))}
         rnsrs = {r for r in rnsrs if r}
+        rnsrs |= {r.upper() for r in rnsrs}
         if not rnsrs:
             continue
         for inst in e.get("institutions") or []:
@@ -251,10 +290,14 @@ def build_tutelles_rnsr(url: str = SCANR_ORGANIZATIONS_URL, ref_dir: str = REFER
     return str(out)
 
 
+# Table construite avant cette date : toutes les structures n'y étaient pas (RNSR seulement) -> reconstruite
+_VERSION_TUTELLES = dt.datetime(2026, 11, 17).timestamp()
+
+
 def charger_tutelles_rnsr(ref_dir: str = REFERENTIEL_DIR, construire: bool = True) -> pd.DataFrame:
     """Table (rnsr, tutelle_id, tutelle_nom) ; la construit si elle manque (construire=True)."""
     p = tutelles_rnsr_path(ref_dir)
-    if not p.exists():
+    if not p.exists() or p.stat().st_mtime < _VERSION_TUTELLES:
         if not construire:
             return pd.DataFrame(columns=["rnsr", "tutelle_id", "tutelle_nom"])
         build_tutelles_rnsr(ref_dir=ref_dir)
@@ -319,8 +362,8 @@ def build_referentiel(source: str = REFERENTIEL_SOURCE, url: str = None,
     url = url or (PAYSAGE_DUMP_URL if source == "paysage" else SCANR_ORGANIZATIONS_URL)
     lire = _ligne_paysage if source == "paysage" else _ligne_scanr
     cats = set(categories or [])
-    lignes, corresp, successeurs, total = [], [], [], 0
-    for e in _lignes_jsonl_gz(url):
+    lignes, corresp, successeurs, sirets, total = [], [], [], [], 0
+    for e in _lignes_jsonl_gz(url, ref_dir):
         total += 1
         ligne = lire(e, cats)
         if ligne["ror"]:
@@ -330,8 +373,9 @@ def build_referentiel(source: str = REFERENTIEL_SOURCE, url: str = None,
             if c:
                 corresp.append(c)
             successeurs += _successeurs_paysage(e)
+            sirets += _siret_paysage(e)
     if source == "paysage":
-        _ecrire_correspondance(corresp, ref_dir, successeurs)
+        _ecrire_correspondance(corresp, ref_dir, successeurs, sirets)
     df = pd.DataFrame(lignes, columns=COLONNES)
     # Un même ROR sur plusieurs structures (ancienne et nouvelle, par exemple) :
     # on garde en priorité celle du périmètre, puis une structure active.

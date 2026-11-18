@@ -3,7 +3,7 @@ export_dashboard.py
 ===================
 Aperçu HTML : une page autonome (DSFR) pour vérifier les résultats sans
 l'application tableaux. Même contrat de données que publish.py :
-  - effectifs : <data_dir>/indicateurs/<classement>_effectifs.parquet (étape 6)
+  - effectifs : <data_dir>/indicateurs/<nomenclature>_effectifs.parquet (étape 6)
   - entités   : entites.construire_entites() (noms, alias, sélecteur)
   - méthode   : publish.meta_bibliometrie()
 
@@ -30,9 +30,10 @@ import duckdb
 import pandas as pd
 
 from .common import MONDE_ID, PAYS_UE, REGIONS
-from .config import CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, REFERENTIEL_DIR, REFERENTIEL_SOURCE
+from .config import NOMENCLATURE_DISCIPLINAIRE, DASHBOARD_ETABS_PATH, DATA_DIR, REFERENTIEL_DIR, REFERENTIEL_SOURCE
 from .entites import construire_entites
 from .publish import _cle_code, meta_bibliometrie
+from .disciplines import disciplines_path
 
 TEMPLATE = Path(__file__).parent / "dashboard" / "index_template.html"
 DSFR_URL = "https://cdn.jsdelivr.net/npm/@gouvfr/dsfr@1.15.3"
@@ -41,7 +42,7 @@ CHAMPS = ["nb_articles", "nb_articles_top10_cites", "nb_articles_revues_tete_dis
           "nb_articles_revues_tete_multidisciplinaires"]
 
 
-def build_dashboard(classement: str = CLASSEMENT,
+def build_dashboard(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                     data_dir: str = DATA_DIR,
                     out_dir: str = None,
                     titre: str = "Indicateurs de la recherche",
@@ -58,21 +59,21 @@ def build_dashboard(classement: str = CLASSEMENT,
     data_dir = Path(data_dir)
     out_dir = Path(out_dir) if out_dir else data_dir / "apercu"
     out_dir.mkdir(parents=True, exist_ok=True)
-    f_eff = data_dir / "indicateurs" / f"{classement}_effectifs.parquet"
+    f_eff = data_dir / "indicateurs" / f"{nomenclature}_effectifs.parquet"
     if not f_eff.exists():
         raise FileNotFoundError(f"{f_eff} absent : lancer compute_indicators()")
 
-    meta = meta_bibliometrie(classement, data_dir)
+    meta = meta_bibliometrie(nomenclature, data_dir)
     perimetres = meta["perimetres"]
 
     disc = duckdb.sql(f"""SELECT DISTINCT discipline_code, discipline_nom
-                          FROM read_parquet('{data_dir}/disciplines/{classement}.parquet')
+                          FROM read_parquet('{disciplines_path(nomenclature, data_dir)}')
                           WHERE discipline_code IS NOT NULL""").fetchall()
     disc = sorted(disc, key=lambda r: _cle_code(r[0]))
     i_disc = {c: k for k, (c, _) in enumerate(disc)}
 
     # Entités (hors monde) : France, autres pays retenus, établissements français, étrangers
-    ent = construire_entites(classement, data_dir, etabs_path, referentiel_source, referentiel_dir,
+    ent = construire_entites(nomenclature, data_dir, etabs_path, referentiel_source, referentiel_dir,
                              verbose=verbose)
     ent = ent[(ent["entite_type"] == "etablissement") | ent["pays_compare"]].copy()
     ent["rang"] = [0 if i == "FR" else 1 if t == "pays" else 2 if p == "FR" else 3
@@ -85,7 +86,7 @@ def build_dashboard(classement: str = CLASSEMENT,
                 "ordre_selecteur": None if pd.isna(r.ordre_selecteur) else int(r.ordre_selecteur)}
                for r in ent.itertuples()]
 
-    eff = duckdb.sql(f"SELECT * FROM read_parquet('{f_eff}') WHERE classement = '{classement}'").df()
+    eff = duckdb.sql(f"SELECT * FROM read_parquet('{f_eff}') WHERE nomenclature_disciplinaire = '{nomenclature}'").df()
     eff["perimetre"] = eff["perimetre"].map({p: k for k, p in enumerate(perimetres)})
     eff["discipline"] = eff["discipline_code"].map(i_disc)
     eff["nb_articles_top10_cites"] = eff["nb_articles_top10_cites"].round(2)
@@ -101,7 +102,7 @@ def build_dashboard(classement: str = CLASSEMENT,
         "meta": {**{k: meta[k] for k in ("perimetres", "annees", "annees_influence_provisoire",
                                          "nb_revues_tete", "revues_multidisciplinaires",
                                          "methode", "sources", "snapshot_openalex", "date_calcul")},
-                 "classement": classement, "pays_ue": PAYS_UE,
+                 "nomenclature_disciplinaire": nomenclature, "pays_ue": PAYS_UE,
                  "regions": {c: r for r, codes in REGIONS.items() for c in codes}},
         "disciplines": [[c, n] for c, n in disc],
         "entites": entites,

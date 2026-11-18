@@ -9,7 +9,7 @@ Snapshot : celui des awards est INDÉPENDANT de celui des works. Par défaut
 (AWARDS_SNAPSHOT = None), le snapshot quotidien le plus récent de l'offre payante
 (SNAPSHOT_SOURCE = "daily", clé OPENALEX_API_KEY) ; awards et funders sont lus à la même date.
 Chaque snapshot d'awards a son dossier <AWARDS_ROOT>/<date>/ (AWARDS_DIR ci-dessous) ; seul
-le classement topic -> panel vient de DATA_DIR (étape 3, même fichier de correspondance).
+la nomenclature topic -> panel vient de DATA_DIR (étape 3, même fichier de correspondance).
 
 1. extract_awards()   lecture du snapshot (awards : ~230 fichiers ; funders : petite table)
      <AWARDS_DIR>/awards_manifest.json    fichiers awards du snapshot (reprise)
@@ -23,16 +23,16 @@ le classement topic -> panel vient de DATA_DIR (étape 3, même fichier de corre
    Aucun filtre sur le topic : les awards sans topic sont gardés (contrôle de couverture).
 
 2. compute_awards()   pays du financeur x panel ERC (lecture locale seulement)
-     <AWARDS_DIR>/<classement>_awards.parquet   une ligne par award, enrichie :
+     <AWARDS_DIR>/awards_<nomenclature>.parquet   une ligne par award, enrichie :
          award_id, financeur_id, financeur_nom, pays_code, annee_debut, topic_id,
          discipline_code, domaine_code, doute, montant, devise, funding_type
-     <AWARDS_DIR>/<classement>_pays_disciplines.parquet
+     <AWARDS_DIR>/awards_pays_<nomenclature>.parquet
          pays_code, annee_debut, discipline_code, domaine_code, nb_awards,
          nb_awards_avec_montant, devise_principale, montant_devise_principale
    Règles communes avec la bibliométrie :
      - pays : common.pays_sql (outre-mer -> FR, PAYS_FR) ; financeurs internationaux
        (AWARDS_FINANCEURS_INTERNATIONAUX) sous AWARDS_PAYS_INTERNATIONAL ;
-     - discipline : topic principal -> disciplines/<classement>.parquet (étape 3), un topic =
+     - discipline : topic principal -> disciplines/<nomenclature>.parquet (étape 3), un topic =
        un panel ; discipline_code NULL = award sans topic ou topic non classé.
    Les montants sont dans la devise du financeur (pas de conversion dans le snapshot) :
    ils ne sont sommés que dans la devise principale de chaque pays.
@@ -53,9 +53,10 @@ from pathlib import Path
 
 from .common import _sql_in, connect as local_connect, pays_sql
 from .config import (AWARDS_ANNEE_MIN, AWARDS_FINANCEURS_INTERNATIONAUX, AWARDS_PAYS_INTERNATIONAL,
-                     AWARDS_ROOT, AWARDS_SNAPSHOT, CLASSEMENT, DATA_DIR, SNAPSHOT_SOURCE)
+                     AWARDS_ROOT, AWARDS_SNAPSHOT, NOMENCLATURE_DISCIPLINAIRE, DATA_DIR, SNAPSHOT_SOURCE)
 from .openalex_s3 import (connect, entity_manifest, extract_file, latest_snapshot_date, out_name,
                           readable_url, run_files, short_id as _short)
+from .disciplines import disciplines_path
 
 
 def list_awards_snapshots(root: str = AWARDS_ROOT) -> list:
@@ -208,17 +209,17 @@ def _pays_financeur_sql(alias: str = "f") -> str:
     return expr
 
 
-def compute_awards(classement: str = CLASSEMENT, date: str = AWARDS_SNAPSHOT,
+def compute_awards(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, date: str = AWARDS_SNAPSHOT,
                    root: str = AWARDS_ROOT, data_dir: str = DATA_DIR, verbose: bool = True) -> dict:
     """Awards par pays du financeur et panel (voir l'en-tête), pour le snapshot d'awards
     `date` (None : le plus récent extrait). Renvoie les contrôles :
       couverture  DataFrame par pays : nb_awards, part avec topic, part classée, part avec montant
       financeurs  DataFrame : financeurs par pays, volume et part classée
-      non_classes topics des awards absents du classement (devrait être vide)"""
+      non_classes topics des awards absents de la nomenclature (devrait être vide)"""
     out_dir = awards_dir(date, root)
     if verbose:
-        print(f"Awards du snapshot {out_dir.name} ; classement {classement} de {data_dir}")
-    f_disc = Path(data_dir) / "disciplines" / f"{classement}.parquet"
+        print(f"Awards du snapshot {out_dir.name} ; nomenclature {nomenclature} de {data_dir}")
+    f_disc = disciplines_path(nomenclature, data_dir)
     for f in (f_disc, out_dir / "funders.parquet"):
         if not f.exists():
             raise FileNotFoundError(f"{f} absent : lancer "
@@ -236,12 +237,12 @@ def compute_awards(classement: str = CLASSEMENT, date: str = AWARDS_SNAPSHOT,
         LEFT JOIN (SELECT * FROM read_parquet('{f_disc}') WHERE discipline_code IS NOT NULL) d
                ON d.topic_id = upper(a.topic_id)
     """)
-    f_awards = out_dir / f"{classement}_awards.parquet"
+    f_awards = out_dir / f"awards_{nomenclature}.parquet"
     con.execute(f"COPY a TO '{f_awards}' (FORMAT parquet, COMPRESSION zstd)")
 
     # Montants : seulement dans la devise principale du pays (la plus fréquente parmi les
     # awards avec montant), les autres devises ne sont pas converties
-    f_agg = out_dir / f"{classement}_pays_disciplines.parquet"
+    f_agg = out_dir / f"awards_pays_{nomenclature}.parquet"
     con.execute(f"""
         COPY (
             WITH dev AS (
@@ -288,5 +289,5 @@ def compute_awards(classement: str = CLASSEMENT, date: str = AWARDS_SNAPSHOT,
         print("\nFinanceurs français :")
         print(res["financeurs"].query("pays_code == 'FR'").head(25).to_string(index=False))
         if len(res["non_classes"]):
-            print(f"\nATTENTION : {len(res['non_classes'])} topics absents du classement {classement}")
+            print(f"\nATTENTION : {len(res['non_classes'])} topics absents de la nomenclature {nomenclature}")
     return res

@@ -66,9 +66,9 @@ Conséquences à garder en tête :
 
 Relecture humaine
 -----------------
-Le fichier <classement>_relecture.csv liste, par discipline, les meilleures revues
+Le fichier <nomenclature>_relecture.csv liste, par discipline, les meilleures revues
 candidates (éligibles ou non, avec le motif d'exclusion), et une colonne
-`retenue` (1 = dans la liste). Le fichier <classement>_multidisciplinaires.csv fait
+`retenue` (1 = dans la liste). Le fichier <nomenclature>_multidisciplinaires.csv fait
 de même pour les revues multidisciplinaires. On peut modifier `retenue`
 dans un tableur puis appeler top_journals_from_review() pour en faire la
 liste officielle.
@@ -76,21 +76,21 @@ liste officielle.
 Sorties (dans <data_dir>/revues_tete/)
 --------------------------------------
   sources_sjr.parquet   source_id (OpenAlex) -> sjr_id, titre, sjr, quartile
-  <classement>.parquet  discipline_code, categorie, rang, sjr_id, titre, issn, sjr, quartile,
+  <nomenclature>.parquet  discipline_code, categorie, rang, sjr_id, titre, issn, sjr, quartile,
                         nb_articles_discipline, part_discipline   <- utilisé par l'étape 6
                         categorie = 'disciplinaire' (rang 1..TOP_JOURNALS_N)
                                   | 'multidisciplinaire' (rang 1..MULTIDISC_TOP_N,
                                     même liste répétée pour chaque discipline)
-  <classement>_relecture.csv           candidates par discipline, pour relecture
-  <classement>_multidisciplinaires.csv candidates multidisciplinaires, pour relecture
-  <classement>_params.json             paramètres utilisés
+  <nomenclature>_relecture.csv           candidates par discipline, pour relecture
+  <nomenclature>_multidisciplinaires.csv candidates multidisciplinaires, pour relecture
+  <nomenclature>_params.json             paramètres utilisés
 
 Exemples :
     from project.server.main.top_journals import compute_top_journals, top_journals_from_review
     res = compute_top_journals()
     res = compute_top_journals(min_share=0.10, out_name="erc_part10")
     # après relecture / modification du CSV :
-    top_journals_from_review("/data/revues_tete/erc_relecture_validee.csv", out_name="erc")
+    top_journals_from_review("/data/revues_tete/panel_erc_relecture_validee.csv", out_name="panel_erc")
 """
 
 import json
@@ -99,13 +99,14 @@ from pathlib import Path
 import pandas as pd
 
 from .common import connect, perimeter_where, sources_sjr_path
-from .config import (ANNEE_MAX, ANNEE_MIN, CLASSEMENT, DATA_DIR,
+from .config import (ANNEE_MAX, ANNEE_MIN, NOMENCLATURE_DISCIPLINAIRE, DATA_DIR,
                      JOURNAL_MAX_REFS_PER_DOC, JOURNAL_MAX_REVIEW_SHARE,
                      JOURNAL_MIN_ARTICLES, JOURNAL_MIN_SHARE,
                      JOURNAL_REF_YEARS, JOURNAL_REVIEW_TITLE_REGEX,
                      MULTIDISC_CATEGORY, MULTIDISC_MIN_ARTICLES, MULTIDISC_SJR_IDS,
                      MULTIDISC_TOP_N,
                      SJR_PATH, SJR_TYPES, SOURCE_TYPES, TOP_JOURNALS_N, WORK_TYPES)
+from .disciplines import disciplines_path
 
 
 def load_sjr(sjr_path: str = SJR_PATH, sjr_types=SJR_TYPES) -> tuple:
@@ -189,7 +190,7 @@ def build_sjr_sources(con, sjr_path: str = SJR_PATH, sjr_types=SJR_TYPES,
             "nb_sources_openalex_appariees": n_src}
 
 
-def compute_top_journals(classement: str = CLASSEMENT,
+def compute_top_journals(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                          sjr_path: str = SJR_PATH,
                          data_dir: str = DATA_DIR,
                          nb_revues_tete: int = TOP_JOURNALS_N,
@@ -223,7 +224,7 @@ def compute_top_journals(classement: str = CLASSEMENT,
     périmètre parus dans une revue SJR), 'disciplines_incompletes' et 'top'.
     """
     data_dir = Path(data_dir)
-    out_name = out_name or classement
+    out_name = out_name or nomenclature
     out_dir = data_dir / "revues_tete"
     out_dir.mkdir(parents=True, exist_ok=True)
     con = connect(data_dir)
@@ -241,7 +242,7 @@ def compute_top_journals(classement: str = CLASSEMENT,
         CREATE TEMP TABLE art AS
         SELECT w.year AS annee_publication, d.discipline_code, ss.sjr_id
         FROM read_parquet('{data_dir}/works/*.parquet') w
-        JOIN read_parquet('{data_dir}/disciplines/{classement}.parquet') d
+        JOIN read_parquet('{disciplines_path(nomenclature, data_dir)}') d
           ON upper(w.topic_id) = d.topic_id
         LEFT JOIN sjr_sources ss ON ss.source_id = w.source_id
         WHERE d.discipline_code IS NOT NULL AND {perim}
@@ -424,7 +425,7 @@ def compute_top_journals(classement: str = CLASSEMENT,
         LEFT JOIN (SELECT * FROM top WHERE categorie = 'disciplinaire') t
                USING (discipline_code, sjr_id)
         LEFT JOIN (SELECT DISTINCT discipline_code, discipline_nom
-                   FROM read_parquet('{data_dir}/disciplines/{classement}.parquet')) n
+                   FROM read_parquet('{disciplines_path(nomenclature, data_dir)}')) n
                USING (discipline_code)
         WHERE c.rang_sjr <= {int(n_review)}
         ORDER BY c.discipline_code, c.rang_sjr
@@ -432,7 +433,7 @@ def compute_top_journals(classement: str = CLASSEMENT,
     f_revue = out_dir / f"{out_name}_relecture.csv"
     revue.to_csv(f_revue, sep=";", decimal=",", index=False, encoding="utf-8-sig")
 
-    params = dict(classement=classement, sjr_path=str(sjr_path), nb_revues_tete=nb_revues_tete,
+    params = dict(nomenclature_disciplinaire=nomenclature, sjr_path=str(sjr_path), nb_revues_tete=nb_revues_tete,
                   min_articles=min_articles, min_share=min_share,
                   sjr_types=list(sjr_types or []), ref_years=[y0, y1],
                   max_review_share=max_review_share, review_title_regex=review_title_regex,
@@ -495,9 +496,9 @@ def top_journals_from_review(review_csv: str, out_name: str = None,
     """Fait de la liste relue la liste officielle <data_dir>/revues_tete/<out_name>.parquet
     utilisée par l'étape 6.
 
-    review_csv    : <classement>_relecture.csv relu (enregistré sous un autre nom, ex.
-                    erc_relecture_validee.csv) ; lignes `retenue` = 1 -> revues disciplinaires
-    multidisc_csv : <classement>_multidisciplinaires.csv relu ; ses lignes `retenue` = 1 sont
+    review_csv    : <nomenclature>_relecture.csv relu (enregistré sous un autre nom, ex.
+                    panel_erc_relecture_validee.csv) ; lignes `retenue` = 1 -> revues disciplinaires
+    multidisc_csv : <nomenclature>_multidisciplinaires.csv relu ; ses lignes `retenue` = 1 sont
                     ajoutées à toutes les disciplines. "auto" = le fichier voisin s'il
                     existe ; None = pas de revues multidisciplinaires.
     out_name      : défaut = nom du CSV avant « _relecture ».

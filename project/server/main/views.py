@@ -5,7 +5,7 @@ import redis
 from flask import Blueprint, current_app, jsonify, render_template, request
 from rq import Connection, Queue
 from project.server.main.tasks import (ETAPES, HORS_DEFAUT, PAR_DEFAUT, create_task_compute,
-                                       create_task_projects, etapes_choisies)
+                                       create_task_projects, etapes_choisies, snapshots_effectifs)
 from project.server.main.logger import get_logger
 
 default_timeout = 4320000
@@ -26,23 +26,26 @@ def home():
 @main_blueprint.route("/compute", methods=["GET"])
 def list_steps_compute():
     """Étapes disponibles pour POST /compute (voir tasks.ETAPES)."""
-    return jsonify({"etapes": ETAPES, "par_defaut": PAR_DEFAUT, "hors_defaut": HORS_DEFAUT})
+    return jsonify({"etapes": ETAPES, "par_defaut": PAR_DEFAUT, "hors_defaut": HORS_DEFAUT,
+                    "snapshots_defaut": snapshots_effectifs({})})
 
 
 @main_blueprint.route("/compute", methods=["POST"])
 def run_task_compute():
     """Corps JSON : {} (chaîne complète), {"steps": [...]}, {"start": ..., "end": ...},
-    "params": {étape: {argument: valeur}} (voir tasks.py)."""
+    "params": {étape: {argument: valeur}}, "snapshot" et "snapshot_awards": "AAAA-MM-JJ" (voir tasks.py)."""
     args = request.get_json(force=True, silent=True) or {}
     try:
         etapes = etapes_choisies(args)
+        snapshots = snapshots_effectifs(args)
     except ValueError as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
     with Connection(redis.from_url(current_app.config["REDIS_URL"])):
         q = Queue(name="athena", default_timeout=default_timeout)
         task = q.enqueue(create_task_compute, args)
-    response_object = {"status": "success", "data": {"task_id": task.get_id(), "etapes": etapes}}
+    response_object = {"status": "success", "data": {"task_id": task.get_id(), "etapes": etapes,
+                                                     "snapshots": snapshots}}
     return jsonify(response_object), 202
 
 

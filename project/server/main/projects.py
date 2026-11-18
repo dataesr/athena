@@ -3,7 +3,7 @@ from pymongo import MongoClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pymongo.errors import BulkWriteError
 
-from .config import (MONGO_DB, MONGO_URI)
+from .config import NOMENCLATURE_DISCIPLINAIRE, MONGO_DB, MONGO_URI, PROJETS_DIR
 
 debug = False
 
@@ -72,10 +72,17 @@ def insert_dataframe_parallel(df, collection, chunk_size=5000, max_workers=8):
     return total_inserted, errors
 
 
-def generate_projects():
+def generate_projects(source: str = None):
+  """source : base scanR à charger ; défaut : la base enrichie des panels ERC
+  (projets_scanr.build_projets_scanr, champ discipline) si elle existe, sinon scanR brut."""
+  if source is None:
+      from .projets_scanr import enrichi_path
+      enrichi = enrichi_path(NOMENCLATURE_DISCIPLINAIRE, PROJETS_DIR)
+      source = str(enrichi) if enrichi.exists() else PROJECTS_URL
+  print(f"Projets lus dans {source}")
   df_projects = pd.DataFrame()
   chunksize = 5 if debug else 1000
-  with pd.read_json(PROJECTS_URL, lines=True, chunksize=chunksize) as reader:
+  with pd.read_json(source, lines=True, chunksize=chunksize) as reader:
       index = 0
       for chunk in reader:
           if debug:

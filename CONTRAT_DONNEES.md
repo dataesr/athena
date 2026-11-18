@@ -18,7 +18,7 @@ MongoDB et dans le code du front.
 | `entite_id` | ROR court (`02feahw73`), code ISO du pays (`FR`), ou `MONDE` |
 | `entite_type` | `monde`, `pays` ou `etablissement` |
 | `perimetre` | ensemble d'articles de référence (« le monde ») : `toutes_revues_openalex` ou `revues_sjr` |
-| `classement` | classement des disciplines (`erc` aujourd'hui) |
+| `nomenclature_disciplinaire` | nomenclature des disciplines (topic OpenAlex → discipline) : `panel_erc` (panels ERC) aujourd'hui. « erc » seul désigne uniquement les données des bourses ERC |
 | `annee_publication` | année de parution de l'article |
 | `discipline_code` | `LS1`…`LS9`, `PE1`…`PE11`, `SH1`…`SH8` |
 | `domaine_code` | `LS`, `PE`, `SH` |
@@ -31,7 +31,7 @@ Dans Mongo, chaque collection est chargée sous le nom `<collection>_<horodatage
 `data[].id = <collection>`). `publish_mongo()` ajoute la version à `data[].versions` sans
 changer la version active : elle s'active dans l'administration du tableau
 (`/admin/suivi-recherche`).
-Fichiers : `<DATA_DIR>/publication/erc/<collection>.jsonl.gz` et `.parquet`,
+Fichiers : `<DATA_DIR>/publication/panel_erc/<collection>.jsonl.gz` et `.parquet`,
 plus `manifest.json`.
 
 ### `entites` — commune à tous les onglets
@@ -79,14 +79,14 @@ est lancé avant `indicators.compute_indicators()` ; `publish()` signale tout pa
 
 | Champ | Type | Contenu |
 |---|---|---|
-| `perimetre`, `classement`, `entite_type`, `entite_id`, `annee_publication`, `discipline_code` | | clés |
+| `perimetre`, `nomenclature_disciplinaire`, `entite_type`, `entite_id`, `annee_publication`, `discipline_code` | | clés |
 | `nb_articles` | entier | articles de l'entité |
 | `nb_articles_top10_cites` | décimal | articles dans le top 10 % des plus cités de la discipline et de l'année, en équivalent-articles (méthode de Waltman et Schreiber) |
 | `nb_articles_revues_tete_disciplinaires` | entier | articles parus dans une des 10 revues de tête de leur discipline |
 | `nb_articles_revues_tete_multidisciplinaires` | entier | articles parus dans une revue multidisciplinaire de tête (Nature, Science…) |
 | `influence_provisoire` | booléen | fenêtre de citation pas encore close |
 
-Index : `(entite_id, perimetre, classement, annee_publication, discipline_code)`.
+Index : `(entite_id, perimetre, nomenclature_disciplinaire, annee_publication, discipline_code)`.
 
 ### `biblio_copublications`
 
@@ -108,11 +108,11 @@ garde, par entité et par type de partenaire, les 50 partenaires les plus fréqu
 
 ### `biblio_disciplines`
 
-`classement`, `discipline_code`, `discipline_nom`, `domaine_code`, `domaine_nom`.
+`nomenclature_disciplinaire`, `discipline_code`, `discipline_nom`, `domaine_code`, `domaine_nom`.
 
 ### `biblio_revues_tete`
 
-`classement`, `discipline_code`, `categorie` (`disciplinaire` | `multidisciplinaire`),
+`nomenclature_disciplinaire`, `discipline_code`, `categorie` (`disciplinaire` | `multidisciplinaire`),
 `rang`, `sjr_id`, `titre`, `issn`, `sjr`, `quartile`, `nb_articles_discipline`,
 `part_discipline` (part des articles de la revue qui relèvent de la discipline).
 
@@ -126,7 +126,7 @@ minimales pour entrer dans le top), `nb_articles_au_seuil` (ex aequo au seuil),
 
 ### `biblio_meta` — un seul document
 
-`classement`, `snapshot_openalex` (`source`, `date`), `date_calcul`, `perimetres`,
+`nomenclature_disciplinaire`, `snapshot_openalex` (`source`, `date`), `date_calcul`, `perimetres`,
 `annees`, `annees_influence_provisoire`, `nb_revues_tete`, `revues_multidisciplinaires`
 (titres), `pays_compares` (comparaison bibliométrique), `pays_effectifs` (pays présents dans
 `biblio_effectifs` : `pays_compares` + pays de la comparaison ERC), `parametres` (paramètres de chaque étape), `methode`
@@ -338,7 +338,7 @@ Domaine : additionner les panels du domaine (lettres en tête du code).
 | `parametres` | paramètres du calcul |
 | `controles` | `nb_lignes`, `nb_laureats`, `nb_lignes_doublons`, `nb_laureats_sans_annee`, `laureat_type`, `genre`, `nb_personnes_sans_structure`, `nb_laureats_rattaches_etablissement`, `part_laureats_avec_structure_rattaches`, `liens_etablissement` (`structure`, `tutelle_rnsr`), `nb_structures_successeur`, `nb_laureats_avec_rnsr`, `nb_laureats_avec_tutelles_rnsr`, `nb_etablissements`, `groupes_vides` |
 | `methode`, `sources` | textes à afficher tels quels (avec, si elles sont calculées, les règles des disciplines) |
-| `disciplines` | si `compute_prix_disciplines()` a été lancé : `classement`, `parametres` (`fenetre`, `min_publications`, `noms`, `annee_min_publications`), `controles` (`nb_laureats_personnes`, `nb_avec_orcid`, `par_methode`, `part_classes`, `par_domaine`) |
+| `disciplines` | si `compute_prix_disciplines()` a été lancé : `nomenclature_disciplinaire`, `parametres` (`fenetre`, `min_publications`, `noms`, `annee_min_publications`), `controles` (`nb_laureats_personnes`, `nb_avec_orcid`, `par_methode`, `part_classes`, `par_domaine`) |
 
 ### `viviers_effectifs` — chercheurs actifs par pays, établissement et discipline
 
@@ -415,7 +415,7 @@ Index : `(entites, discipline_code)`, `(chercheur_id)`, `(orcid)`.
 
 ### `viviers_meta` — un seul document
 
-`date_calcul`, `classement`, `perimetre`, `pays` (pays présents), `periode` (`annee_debut`, `annee_fin`,
+`date_calcul`, `nomenclature_disciplinaire`, `perimetre`, `pays` (pays présents), `periode` (`annee_debut`, `annee_fin`,
 `annee_debut_recente`), `annees_influence_provisoire`, `parametres` (seuils et paramètres
 d'extraction), `controles` (`nb_auteurs_fenetre`, `nb_signatures_fenetre`,
 `nb_signatures_grandes_collaborations`, `nb_chercheurs_actifs` (tous pays), `nb_chercheurs_france`,
@@ -459,7 +459,7 @@ note de méthode dans tableaux :
 | `types_documents`, `types_sources` | articles : ex. `["article"]` (reviews exclues), `["journal"]` |
 | `annee_debut`, `annee_fin` | période des publications (= `periode`) |
 | `max_auteurs_par_article` | au-delà, article ignoré (grandes collaborations) |
-| `classement_disciplines`, `discipline_article` | topic principal OpenAlex → panel ERC ; articles sans panel exclus |
+| `nomenclature_disciplinaire`, `discipline_article` | topic principal OpenAlex → panel ERC ; articles sans panel exclus |
 | `exclusions` | liste lisible des exclusions (rétractés, paratexte, sans panel, grandes collaborations) |
 | `signatures_lues` | seules les affiliations dans les pays lus comptent |
 | `meme_base_que` | mêmes articles et disciplines que les indicateurs bibliométriques du périmètre (livres et chapitres en plus, hors bibliométrie) |
@@ -549,7 +549,7 @@ périmètre SJR) :
 ```js
 db.biblio_effectifs_<version>.aggregate([
   { $match: { entite_id: { $in: ["FR", "MONDE"] }, perimetre: "revues_sjr",
-              classement: "erc", annee_publication: { $gte: 2015, $lte: 2022 } } },
+              nomenclature_disciplinaire: "panel_erc", annee_publication: { $gte: 2015, $lte: 2022 } } },
   { $group: { _id: "$entite_id",
               nb_articles_top10_cites: { $sum: "$nb_articles_top10_cites" } } }
 ])
@@ -610,13 +610,13 @@ db.prix_effectifs_<version>.aggregate([
 | Étape | Fonction | Sortie |
 |---|---|---|
 | 0 | `referentiel.build_referentiel()` | `/data/referentiel/paysage.parquet` |
-| 3 | `disciplines.build_disciplines()` | `disciplines/erc.parquet` |
-| 4 | `top10_citations.compute_top10()` | `top10/erc_<perimetre>.parquet`, `…_seuils.parquet` |
-| 5 | `top_journals.compute_top_journals()` | `revues_tete/erc.parquet`, `sources_sjr.parquet` |
-| 6 | `indicators.compute_indicators()` | `indicateurs/erc_effectifs.parquet`, `erc_entites.parquet` |
-| 6b | `copublications.compute_copublications()` | `indicateurs/erc_copublications.parquet` |
+| 3 | `disciplines.build_disciplines()` | `disciplines/panel_erc.parquet` |
+| 4 | `top10_citations.compute_top10()` | `top10/panel_erc_<perimetre>.parquet`, `…_seuils.parquet` |
+| 5 | `top_journals.compute_top_journals()` | `revues_tete/panel_erc.parquet`, `sources_sjr.parquet` |
+| 6 | `indicators.compute_indicators()` | `indicateurs/panel_erc_effectifs.parquet`, `panel_erc_entites.parquet` |
+| 6b | `copublications.compute_copublications()` | `indicateurs/panel_erc_copublications.parquet` |
 | ERC | `erc.compute_erc()` | `erc/erc_effectifs.parquet`, `erc_entites.parquet`, `erc_meta.json`, `erc_non_rattaches.csv` |
 | Prix | `prix.compute_prix()` | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv`, `prix_personnes.parquet` (interne) |
 | Prix : disciplines | `publications_auteurs.extraire_publications()` (lecture commune avec les viviers) puis `prix_disciplines.compute_prix_disciplines()` | `prix/publications/`, `prix_laureats_disciplines.parquet`, `prix_effectifs_disciplines.parquet`, `prix_disciplines_meta.json` |
 | Viviers | `publications_auteurs.extraire_publications()` (lecture commune avec les prix) puis `viviers.compute_viviers()` | `viviers/auteurs/`, `viviers_chercheurs.parquet`, `viviers_effectifs.parquet`, `viviers_meta.json` |
-| 7 | `publish.publish()` puis `publish.publish_mongo()` | `publication/erc/*.jsonl.gz` puis MongoDB |
+| 7 | `publish.publish()` puis `publish.publish_mongo()` | `publication/panel_erc/*.jsonl.gz` puis MongoDB |

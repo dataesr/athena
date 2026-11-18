@@ -3,7 +3,7 @@ prix_disciplines.py
 ===================
 Discipline (panel ERC) des lauréats de prix, déduite de leurs publications dans le
 snapshot OpenAlex, avec la même table topic -> discipline que la bibliométrie
-(<DATA_DIR>/disciplines/<CLASSEMENT>.parquet, étape 3).
+(<DATA_DIR>/disciplines/<NOMENCLATURE_DISCIPLINAIRE>.parquet, étape 3).
 
 Deux étapes, après prix.compute_prix() (qui écrit prix/prix_personnes.parquet) :
 
@@ -58,9 +58,10 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-from .config import (CLASSEMENT, DATA_DIR, PRIX_DIR, PRIX_DISC_FENETRE, PRIX_DISC_MIN_PUBLICATIONS,
+from .config import (NOMENCLATURE_DISCIPLINAIRE, DATA_DIR, PRIX_DIR, PRIX_DISC_FENETRE, PRIX_DISC_MIN_PUBLICATIONS,
                      PRIX_DISC_NOMS, PRIX_PUB_ANNEE_MIN)
 from .publications_auteurs import TYPES, _cle_sql, extraire_publications, poids_disciplines
+from .disciplines import disciplines_path
 
 ORCID_RE = re.compile(r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])")
 COLS_PUB = ["work_id", "year", "topic_id", "author_id", "orcid", "cle_nom", "inst_ids"]
@@ -114,14 +115,14 @@ def extraire_publications_laureats(prix_dir: str = PRIX_DIR, data_dir: str = DAT
 # --- 2. Calcul -------------------------------------------------------------------------------
 
 def compute_prix_disciplines(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR,
-                             classement: str = CLASSEMENT, fenetre: int = PRIX_DISC_FENETRE,
+                             nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, fenetre: int = PRIX_DISC_FENETRE,
                              min_publications: int = PRIX_DISC_MIN_PUBLICATIONS,
                              noms: bool = PRIX_DISC_NOMS, verbose: bool = True) -> dict:
     """Discipline de chaque lauréat et effectifs par discipline (voir l'en-tête)."""
     prix_dir, data_dir = Path(prix_dir), Path(data_dir)
     f_pers = prix_dir / "prix_personnes.parquet"
     f_eff = prix_dir / "prix_effectifs.parquet"
-    f_disc = data_dir / "disciplines" / f"{classement}.parquet"
+    f_disc = disciplines_path(nomenclature, data_dir)
     pubs = prix_dir / "publications"
     for f in (f_pers, f_eff, f_disc):
         if not f.exists():
@@ -238,7 +239,7 @@ def compute_prix_disciplines(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR,
     par_methode = ld.loc[personnes.values, "methode_discipline"].value_counts().to_dict()
     meta = {
         "date_calcul": dt.date.today().isoformat(),
-        "classement": classement,
+        "nomenclature_disciplinaire": nomenclature,
         "parametres": {"fenetre": fenetre, "min_publications": min_publications, "noms": noms,
                        "annee_min_publications": PRIX_PUB_ANNEE_MIN},
         "controles": {
@@ -251,7 +252,7 @@ def compute_prix_disciplines(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR,
         },
         "methode": [
             "Discipline des lauréats : panel ERC de leurs publications (topic principal OpenAlex, même "
-            "classement que la bibliométrie). Auteur OpenAlex retrouvé par l'ORCID du lauréat, à "
+            "nomenclature que la bibliométrie). Auteur OpenAlex retrouvé par l'ORCID du lauréat, à "
             "défaut par son nom et une publication dans l'un de ses établissements.",
             f"Publications des {fenetre} années précédant le prix (année du prix comprise) ; moins de "
             f"{min_publications} : toutes les publications depuis {PRIX_PUB_ANNEE_MIN}.",

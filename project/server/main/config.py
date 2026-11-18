@@ -9,7 +9,7 @@ Règle de nommage des données
     topic_id, inst_id, ror...), pour rester calqués sur la source.
   - À partir de l'étape 3 : noms français explicites, identiques dans tous les
     fichiers, la base Mongo et le front (voir CONTRAT_DONNEES.md) :
-      classement, perimetre, annee_publication, discipline_code, entite_id,
+      nomenclature, perimetre, annee_publication, discipline_code, entite_id,
       nb_articles, nb_articles_top10_cites, nb_articles_revues_tete_disciplinaires,
       nb_articles_revues_tete_multidisciplinaires, influence_provisoire...
     Préfixe nb_ = un nombre d'articles ; part_ = un ratio entre 0 et 1.
@@ -27,11 +27,14 @@ import os
 
 # --- Dossiers et fichiers d'entrée ----------------------------------------------
 # Choix du snapshot OpenAlex utilisé par TOUTES les étapes :
-#   SNAPSHOT = None          -> /data (données extraites avant la gestion des snapshots)
-#   SNAPSHOT = "2026-10-01"  -> /data/snapshots/2026-10-01 (créé par extract_snapshot())
+#   SNAPSHOT_DEFAUT = None          -> /data (données extraites avant la gestion des snapshots)
+#   SNAPSHOT_DEFAUT = "2026-10-01"  -> /data/snapshots/2026-10-01 (créé par extract_snapshot())
 # Liste des snapshots disponibles localement : extract_works.list_snapshots()
+# POST /compute peut imposer une autre date ({"snapshot": "AAAA-MM-JJ"}) : le calcul tourne alors
+# dans un processus séparé, avec la variable d'environnement ATHENA_SNAPSHOT (voir tasks.py).
 DATA_ROOT = "/data"
-SNAPSHOT = "2026-11-04"            # figé sur le snapshot quotidien de cette date
+SNAPSHOT_DEFAUT = "2026-11-04"     # snapshot quotidien utilisé quand /compute n'en impose pas
+SNAPSHOT = os.getenv("ATHENA_SNAPSHOT") or SNAPSHOT_DEFAUT
 
 # Source des snapshots OpenAlex :
 #   "public" : bucket public s3://openalex, snapshot trimestriel, seul le dernier
@@ -47,13 +50,14 @@ DATA_DIR = f"{DATA_ROOT}/snapshots/{SNAPSHOT}" if SNAPSHOT else DATA_ROOT
 TOPICS_PATH = "topics/openalex_topics_erc_panels.json"
 SJR_PATH = "scimago/scimagojr_2025.csv"
 
-# --- Classement (étape 3) -------------------------------------------------------
-# Nom du classement topic -> discipline : écrit dans <DATA_DIR>/disciplines/<classement>.parquet.
-# Plusieurs classements peuvent coexister (erc, erc_alt, ost, ...).
-CLASSEMENT = "erc"
+# --- Nomenclature disciplinaire (étape 3) --------------------------------------
+# Nom de la nomenclature topic -> discipline : écrit dans <DATA_DIR>/disciplines/<nomenclature>.parquet.
+# Plusieurs nomenclatures peuvent coexister (panel_erc, panel_erc_alt, ost, ...).
+# panel_erc = panels ERC (LS1…SH8) ; « erc » seul est réservé aux données des bourses ERC.
+NOMENCLATURE_DISCIPLINAIRE = "panel_erc"
 
 # --- Périmètre des indicateurs (étapes 4 à 6) -----------------------------------
-# Ne sert PAS au classement : il définit quels articles composent « le monde ».
+# Ne sert PAS au rattachement aux disciplines : il définit quels articles composent « le monde ».
 WORK_TYPES = ("article",)          # ("article", "review") pour inclure les reviews
 SOURCE_TYPES = ("journal",)        # None = toutes les sources
 ANNEE_MIN = 2015
@@ -148,7 +152,7 @@ COPUB_MAX_ENTITES_PAR_ARTICLE = None   # ex. 50 : ignore les articles à très n
                                        # établissement x établissement ; None = tous
 
 # --- Publication (étape 7, publish.py) -------------------------------------------
-# Fichiers : <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz (+ .parquet)
+# Fichiers : <DATA_DIR>/publication/<nomenclature>/<collection>.jsonl.gz (+ .parquet)
 # Base : MongoDB de l'application tableaux (https://github.com/dataesr/tableaux).
 MONGO_URI = os.getenv("MONGO_URI")                       # ne jamais écrire l'URI en dur ici
 MONGO_DB = os.getenv("MONGO_DB_NAME", "tableaux-staging")
@@ -242,7 +246,9 @@ ODS_API_KEY = os.getenv("ODS_API_KEY")   # facultative (jeux publics) ; jamais e
 HORIZON_ODS_SOUMIS = "fr-esr-horizon-projets-soumis-candidats"   # stage = evaluated
 HORIZON_ODS_LAUREATS = "fr-esr-horizon-projects-entities"       # stage = successful
 HORIZON_DIR = f"{DATA_DIR}/horizon"
-HORIZON_COLONNES_EXCLUES = ("abstract",)   # textes longs non conservés dans la copie
+HORIZON_COLONNES_EXCLUES = ()     # colonnes non conservées dans la copie ; garder « abstract » :
+                                   # texte classé par aboutness (horizon_topics.py)
+HORIZON_TOPICS_EXCLURE = ("ERC",)  # thema_code / action_id non classés par aboutness (panel de la source)
 
 # --- Bourses ERC (erc.py) ---------------------------------------------------------
 # Candidatures et lauréats ERC par entité (établissement, pays, monde), année d'appel,
@@ -354,10 +360,11 @@ VIVIER_PUBLIER_CHERCHEURS = True   # collection viviers_chercheurs (liste nomina
 # panel ERC (topic principal de l'award -> discipline, table de l'étape 3).
 # Snapshot des awards indépendant de celui des works (SNAPSHOT) : les financements sont lus
 # dans le snapshot le plus récent, de source SNAPSHOT_SOURCE ("daily" = offre payante, clé
-# OPENALEX_API_KEY). Le classement topic -> panel reste celui de DATA_DIR (étape 3).
+# OPENALEX_API_KEY). La nomenclature topic -> panel reste celle de DATA_DIR (étape 3).
 # Sorties dans <AWARDS_ROOT>/<date du snapshot des awards>/ (les anciens sont conservés).
 AWARDS_ROOT = f"{DATA_ROOT}/awards"
-AWARDS_SNAPSHOT = None             # None = dernier snapshot quotidien à l'extraction (puis, pour
+AWARDS_SNAPSHOT = os.getenv("ATHENA_SNAPSHOT_AWARDS") or None   # /compute : {"snapshot_awards": "AAAA-MM-JJ"}
+                                   # None = dernier snapshot quotidien à l'extraction (puis, pour
                                    # compute_awards, le plus récent extrait) ; "AAAA-MM-JJ" pour figer
 AWARDS_ANNEE_MIN = None            # ex. 2015 : awards dont start_year est antérieure écartés à
                                    # l'extraction ; None = tous (y compris sans start_year)
@@ -374,6 +381,64 @@ AWARDS_FINANCEURS_INTERNATIONAUX = [
     "F4320308321",                 # UNESCO
     "F4320310728",                 # Centre international de recherche sur le cancer
 ]
+
+# --- Projets scanR enrichis (projets_scanr.py) -------------------------------------------
+# Base des projets de scanR (ANR, Horizon Europe, H2020...) enrichie du topic OpenAlex de
+# l'award correspondant (awards du snapshot AWARDS_SNAPSHOT, voir extract_awards.py), puis
+# du panel ERC (même table topic -> panel que la bibliométrie, étape 3).
+# Appariement : identifiant scanR (id) = funder_award_id OpenAlex, normalisé selon le groupe
+# de financeurs, et seulement parmi les financeurs OpenAlex du groupe (un même numéro peut
+# désigner des projets de financeurs différents : NSF, NIH...).
+PROJETS_SCANR_URL = "https://scanr-data.s3.gra.io.cloud.ovh.net/production/projects_denormalized.jsonl.gz"
+# Participations de scanR (scanr-backend, projects.get_participations_simple) : une ligne par
+# participation x participant, structure d'accueil + chacune de ses tutelles (« établissement
+# tutelle » seulement). FAIT FOI pour les participants des projets scanR : contrôle de cohérence
+# (controle_scanr.py) des participants calculés ici.
+PARTICIPATIONS_SCANR_URL = "https://scanr-data.s3.gra.io.cloud.ovh.net/production/participations_denormalized.jsonl.gz"
+SCANR_SEUIL_ALERTE = 0.005         # alerte si plus de 0,5 % des participations ont des participants
+                                   # différents de scanR
+SCANR_ALERTE_BLOQUANTE = False     # True : l'incohérence arrête le calcul (sinon : alerte + rapport)
+PROJETS_DIR = f"{DATA_ROOT}/projets"     # copie de la base scanR et sorties (commun aux snapshots)
+# Groupes : types scanR concernés, financeurs OpenAlex (ROR de la fiche funder, ou nom), règle
+# de normalisation de l'identifiant ("anr" : ANR-AA-CODE-NNNN ; "numero" : chiffres seuls ;
+# "texte" : lettres et chiffres en majuscules)
+PROJETS_GROUPES = {
+    "ANR": {"types": ["ANR", "PIA ANR"], "ror": ["00rbzpz17"], "cle": "anr"},
+    "UE": {"types": ["Horizon Europe", "Horizon 2020", "FP7", "FP6", "Autres financements européens"],
+           "ror": ["00k4n6c32", "0472cxd90", "05cx8cy07"],    # Commission, ERC, EIC
+           # fiches OpenAlex par programme, souvent sans ROR (« H2020 Transport »...)
+           "nom_regex": r"^(H2020|HORIZON EUROPE|Horizon 2020|FP7|FP6|(Fifth|Sixth|Seventh) Framework Programme"
+                        r"|European Commission|European Research Council)\b",
+           "cle": "numero"},
+    "INCa": {"types": ["INCa"], "ror": ["03m8vkq32"], "cle": "texte"},
+    "ANSES": {"types": ["ANSES"], "ror": ["0471kz689"], "cle": "texte"},
+}
+# Plusieurs awards OpenAlex pour un même projet (source officielle + déclarations dans les
+# articles) : on garde celui qui a un topic, en priorité de ces provenances, puis le meilleur score
+PROJETS_PROVENANCES_PRIORITAIRES = ["anr_opendata", "cordis"]
+# Les topics OpenAlex présents dans scanR (openalex_primary_topic) ne sont PAS utilisés : topics
+# calculés ici seulement (awards OpenAlex, aboutness).
+
+# --- Aboutness OpenAlex (aboutness.py) -----------------------------------------------------
+# Topic d'un texte (titre + résumé) par le classifieur OpenAlex, pour les projets sans topic
+# d'award (candidatures non financées, lauréats non retrouvés). Limites OpenAlex (vérifiées le
+# 2026-11-17, https://help.openalex.org/api/tag-aboutness) : 1 requête/s, 0,01 $ par requête,
+# 20 à 2000 caractères (titre + résumé). À 1 req/s, au plus ~86 400 requêtes (~864 $) par jour :
+# c'est le débit, pas le budget de la clé (1000 $/jour), qui limite.
+ABOUTNESS_URL = "https://api.openalex.org/text/topics"
+ABOUTNESS_VERSION = 2              # classifieur des topics actuels des works et awards (oct. 2026)
+ABOUTNESS_INTERVALLE_S = 1.05      # pause entre deux requêtes (limite : 1 requête par seconde)
+ABOUTNESS_BUDGET_USD = 300         # dépense maximale par lancement (0,01 $ par texte)
+ABOUTNESS_MARGE_USD = 50           # arrêt si le budget restant du jour (en-tête OpenAlex) passe dessous
+ABOUTNESS_DIR = f"{DATA_ROOT}/aboutness"   # cache des textes déjà classés (jamais payés deux fois)
+
+# --- ANR (anr.py) ---------------------------------------------------------------------------
+# Projets ANR de scanR (lauréats ; candidatures à venir), rattachés aux établissements de TOUS
+# les partenaires (règle commune, affiliations.py ; le coordinateur est gardé mais pas utilisé
+# par défaut), panel ERC par aboutness (titre + résumé) pour tous les projets.
+ANR_DIR = f"{DATA_DIR}/anr"
+ANR_TYPES = ("ANR",)               # types scanR ; "PIA ANR" : investissements d'avenir opérés par l'ANR
+ANR_RATTACHEMENT_LIGNEE = True     # un projet compte aussi pour les tutelles OpenAlex (comme les articles)
 
 # --- DuckDB ---------------------------------------------------------------------
 DUCKDB_MEMORY_LIMIT = None    # ex. "16GB" ; None = défaut DuckDB (80 % de la RAM)

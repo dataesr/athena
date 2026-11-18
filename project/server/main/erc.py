@@ -40,7 +40,7 @@ Règles
   toujours pour les Synergy et les Proof of Concept, et pour quelques STG / COG / ADG.
   Ces lignes ne comptent que pour « toutes disciplines ». Année, panel et type d'un
   projet : valeur la plus fréquente de ses lignes (lauréats d'abord).
-  Établissement (horizon.rattacher_structures, même logique que scanR) : le projet compte
+  Établissement (affiliations.rattacher_structures, même logique que scanR) : le projet compte
   pour la structure participante (entities_id : Paysage, ROR ou RNSR) et, pour une
   participation française, pour toutes les tutelles des laboratoires RNSR indiqués
   (numero_national_de_structure, plusieurs valeurs séparées par ;) : un ERC hébergé par le
@@ -67,6 +67,10 @@ Sorties (dans ERC_DIR = <DATA_DIR>/erc/)
                             (sert à compléter la collection « entites », entites.py)
   erc_meta.json             paramètres, années (dont provisoires), types de bourse,
                             pays comparés, contrôles, textes de méthode
+  <HORIZON_DIR>/horizon_controle_scanr.csv  projets Horizon Europe lauréats (tous programmes)
+                            dont les participants (structures, laboratoires RNSR, tutelles)
+                            diffèrent des participations de scanR, qui font foi (alerte au-delà
+                            de SCANR_SEUIL_ALERTE ; erc_meta.controles.coherence_scanr_horizon)
   erc_non_rattaches.csv     structures de dépôt ou de signature sans ROR (à corriger
                             dans Paysage)
   Les copies brutes des jeux sont dans HORIZON_DIR (horizon.py).
@@ -84,14 +88,15 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-from .common import MONDE_ID, PAYS_NOMS, pays_list_sql
-from .config import (CLASSEMENT, DATA_DIR, ERC_ANNEES_PROVISOIRES, ERC_DIR, ERC_PAYS_COMPARAISON,
+from .common import MONDE_ID, pays_entite, plus_frequent
+from .config import (NOMENCLATURE_DISCIPLINAIRE, DATA_DIR, ERC_ANNEES_PROVISOIRES, ERC_DIR, ERC_PAYS_COMPARAISON,
                      ERC_PAYS_COMPARAISON_N, ERC_RATTACHEMENT_LIGNEE, ERC_ROLE_PI,
                      ERC_SEUIL_ANNEE_COMPLETE, ERC_THEMA, ERC_TYPES_BOURSE, ERC_TYPES_PRINCIPAUX,
-                     ETAB_EXCLUDE, HORIZON_DIR, HORIZON_ODS_LAUREATS, HORIZON_ODS_SOUMIS,
-                     LINEAGE_CUTS, PAYS_FR, REFERENTIEL_DIR)
-from .horizon import lire_horizon, participations, rattacher_structures
-from .referentiel import charger_correspondance_paysage
+                     HORIZON_DIR, HORIZON_ODS_LAUREATS, HORIZON_ODS_SOUMIS, PAYS_FR, REFERENTIEL_DIR)
+from .affiliations import lignes_entites, rattacher_structures, tutelles_ror
+from .horizon import lire_horizon, participations
+from .programmes import effectifs_projets, nommer_entites, non_rattaches as non_rattaches_programme
+from .disciplines import disciplines_path
 
 CLES = ["annee_appel", "discipline_code", "type_bourse"]
 EFFECTIFS = ["nb_candidatures", "nb_candidatures_retenues", "nb_laureats", "nb_laureats_arrivees",
@@ -171,11 +176,6 @@ def types_bourse_meta(eff: pd.DataFrame, projets: pd.DataFrame,
     return sorted(res, key=lambda x: (ordre.get(x["code"], len(ordre)), x["code"]))
 
 
-def _plus_frequent(s: pd.Series):
-    s = s.dropna()
-    return s.value_counts().index[0] if len(s) else None
-
-
 # --- Préparation ---------------------------------------------------------------------
 
 def lignes_pi(p: pd.DataFrame, thema: str = ERC_THEMA, role_pi: str = ERC_ROLE_PI) -> pd.DataFrame:
@@ -190,9 +190,9 @@ def preparer_projets(soumis: pd.DataFrame, laureats: pd.DataFrame, types_bourse=
     laureat ; soumis et laureats restreints aux types retenus."""
     def _attr(d):
         g = d.groupby("project_id")
-        return pd.DataFrame({"annee_appel": g["annee_appel"].agg(_plus_frequent),
-                             "discipline_code": g["panel_code"].agg(_plus_frequent),
-                             "type_bourse": g["destination_code"].agg(_plus_frequent)})
+        return pd.DataFrame({"annee_appel": g["annee_appel"].agg(plus_frequent),
+                             "discipline_code": g["panel_code"].agg(plus_frequent),
+                             "type_bourse": g["destination_code"].agg(plus_frequent)})
     a_l, a_s = _attr(laureats), _attr(soumis)
     projets = a_l.combine_first(a_s)   # valeurs des lauréats, complétées par celles des soumis
     projets.index.name = "project_id"
@@ -207,29 +207,6 @@ def preparer_projets(soumis: pd.DataFrame, laureats: pd.DataFrame, types_bourse=
     return projets.reset_index(drop=True), soumis, laureats
 
 
-def tutelles_ror(rors, data_dir: str = DATA_DIR, lineage_cuts=LINEAGE_CUTS,
-                 etab_exclude=ETAB_EXCLUDE) -> pd.DataFrame:
-    """(ror, entite_id) : chaque ROR et les ROR de ses tutelles (lignée OpenAlex
-    corrigée par LINEAGE_CUTS), moins ETAB_EXCLUDE. Sans lignée disponible : le ROR seul."""
-    data_dir = Path(data_dir)
-    base = pd.DataFrame({"ror": sorted(set(rors))})
-    base["entite_id"] = base["ror"]
-    if not ((data_dir / "inst_lineage.parquet").exists() and (data_dir / "institutions.parquet").exists()):
-        print(f"Lignée OpenAlex absente de {data_dir} : pas de rattachement aux tutelles")
-        return base
-    from .lineage_check import apply_lineage_cuts
-    excl = pays_list_sql([r.split("/")[-1] for r in (etab_exclude or [])]) or "NULL"
-    with duckdb.connect() as con:
-        apply_lineage_cuts(con, data_dir, lineage_cuts, table="lin_ok")
-        con.register("base", base[["ror"]])
-        anc = con.execute(f"""
-            SELECT DISTINCT i.ror, l.anc_ror AS entite_id
-            FROM lin_ok l
-            JOIN read_parquet('{data_dir}/institutions.parquet') i ON i.inst_id = l.inst_id
-            WHERE i.ror IN (SELECT ror FROM base)
-              AND l.anc_ror IS NOT NULL AND l.anc_ror <> '' AND l.anc_ror NOT IN ({excl})
-        """).df()
-    return pd.concat([base, anc], ignore_index=True).drop_duplicates()
 
 
 # --- Calcul ----------------------------------------------------------------------------
@@ -276,7 +253,7 @@ def _methode(meta: dict) -> list:
 
 
 def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir: str = DATA_DIR,
-                ref_dir: str = REFERENTIEL_DIR, classement: str = CLASSEMENT,
+                ref_dir: str = REFERENTIEL_DIR, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                 thema: str = ERC_THEMA, role_pi: str = ERC_ROLE_PI, types_bourse=ERC_TYPES_BOURSE,
                 rattachement_lignee: bool = ERC_RATTACHEMENT_LIGNEE,
                 pays_comparaison=ERC_PAYS_COMPARAISON, pays_comparaison_n: int = ERC_PAYS_COMPARAISON_N,
@@ -288,6 +265,12 @@ def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir
     out = Path(erc_dir)
     out.mkdir(parents=True, exist_ok=True)
     part = {j: participations(lire_horizon(j, horizon_dir, telecharger), j) for j in ("soumis", "laureats")}
+    # Contrôle : participants de TOUS les lauréats Horizon Europe (règle commune) comparés, projet
+    # par projet, aux participations de scanR, qui font foi ; alerte si écart (controle_scanr.py)
+    from .controle_scanr import controler_horizon_scanr
+    controle_scanr = controler_horizon_scanr(part["laureats"], ref_dir,
+                                             out_csv=str(Path(horizon_dir) / "horizon_controle_scanr.csv"),
+                                             verbose=verbose)
     erc = {j: p[(p["thema_code"] == thema.upper()) | (p["action_id"] == thema.upper())] for j, p in part.items()}
     valeurs = {j: {c: e[c].fillna("(vide)").value_counts().to_dict()
                    for c in ["stage", "erc_role", "destination_code"]} for j, e in erc.items()}
@@ -304,10 +287,7 @@ def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir
     # Participations sans aucun établissement (ni structure, ni tutelle) : à corriger
     nr = pd.concat([soumis[~soumis["ligne"].isin(liens_s["ligne"])],
                     laureats[~laureats["ligne"].isin(liens_l["ligne"])]], ignore_index=True)
-    non_rattaches = (nr.groupby(["entities_id", "type_identifiant"], dropna=False)
-                     .agg(nom=("entities_name", _plus_frequent), pays_code=("pays_code", _plus_frequent),
-                          nb_projets=("project_id", "nunique"))
-                     .reset_index().sort_values("nb_projets", ascending=False))
+    non_rattaches = non_rattaches_programme(nr, "project_id", "nb_projets", avec_pays=True)
     non_rattaches.to_csv(out / "erc_non_rattaches.csv", sep=";", index=False, encoding="utf-8")
 
     # Établissements : ROR de la structure, puis tutelles ; pays : pays de la structure
@@ -316,41 +296,15 @@ def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir
             else pd.DataFrame({"ror": rors, "entite_id": rors}))
 
     def _long(d, src):
-        cols = ["project_id", "participation_id"]
-        li = liens[src]
-        monde = d[cols].assign(entite_type="monde", entite_id=MONDE_ID)
-        pays = (d.dropna(subset=["pays_code"])
-                .assign(entite_type="pays",
-                        entite_id=lambda x: x["pays_code"].where(~x["pays_code"].isin(PAYS_FR), "FR"))
-                [cols + ["entite_type", "entite_id"]])
-        etab = (li[cols + ["ror"]].merge(lien, on="ror")
-                .assign(entite_type="etablissement")[cols + ["entite_type", "entite_id"]])
-        return pd.concat([monde, pays, etab], ignore_index=True).drop_duplicates().assign(src=src)
+        # monde, pays, établissements : règle commune (affiliations.lignes_entites)
+        return lignes_entites(d, liens[src], lien, ["project_id", "participation_id"]).assign(src=src)
 
+    # Une ligne par (entité, projet) : déposé dans l'entité (d), signé dans l'entité (s), et
+    # nombre de porteurs de chaque côté (programmes.effectifs_projets, commun aux programmes)
+    lignes = pd.concat([_long(soumis, "d"), _long(laureats, "s")], ignore_index=True)
+    eff = effectifs_projets(lignes, projets, ["annee_appel", "discipline_code", "type_bourse"], pi=True)
     con = duckdb.connect()
-    con.register("projets", projets)
-    con.register("lignes", pd.concat([_long(soumis, "d"), _long(laureats, "s")], ignore_index=True))
-    # Une ligne par (entité, projet) : déposé dans l'entité (d), signé dans l'entité (s),
-    # et nombre de porteurs de chaque côté.
-    eff = con.execute(f"""
-        WITH par_projet AS (
-            SELECT entite_type, entite_id, project_id,
-                   bool_or(src = 'd') AS d, bool_or(src = 's') AS s,
-                   count(DISTINCT participation_id) FILTER (WHERE src = 'd') AS pi_d,
-                   count(DISTINCT participation_id) FILTER (WHERE src = 's') AS pi_s
-            FROM lignes GROUP BY ALL)
-        SELECT c.entite_type, c.entite_id, p.annee_appel, p.discipline_code, p.type_bourse,
-               count(*) FILTER (WHERE d)::BIGINT AS nb_candidatures,
-               count(*) FILTER (WHERE d AND p.laureat)::BIGINT AS nb_candidatures_retenues,
-               count(*) FILTER (WHERE s)::BIGINT AS nb_laureats,
-               count(*) FILTER (WHERE s AND NOT d)::BIGINT AS nb_laureats_arrivees,
-               count(*) FILTER (WHERE d AND p.laureat AND NOT s)::BIGINT AS nb_laureats_departs,
-               sum(pi_d)::BIGINT AS nb_pi_candidats,
-               sum(pi_s)::BIGINT AS nb_pi_laureats
-        FROM par_projet c JOIN projets p USING (project_id)
-        GROUP BY 1, 2, 3, 4, 5
-        ORDER BY CASE entite_type WHEN 'monde' THEN 0 WHEN 'pays' THEN 1 ELSE 2 END, 2, 3, 4, 5
-    """).df()
+    con.register("eff", eff)
     con.execute(f"COPY (SELECT * FROM eff) TO '{out / 'erc_effectifs.parquet'}' (FORMAT parquet)")
 
     # Contrôle : nb_laureats = nb_candidatures_retenues + arrivées - départs
@@ -362,7 +316,7 @@ def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir
     def _ensembles(d, col):
         return d.dropna(subset=[col]).groupby("project_id")[col].agg(frozenset)
     cle = lambda d: d.assign(structure=d["ror"].fillna(d["entities_id"]),
-                             pays=d["pays_code"].where(~d["pays_code"].isin(PAYS_FR), "FR"))
+                             pays=pays_entite(d["pays_code"]))
     dep_c, sig_c = cle(soumis), cle(laureats)
     mob = pd.DataFrame({"project_id": projets.loc[projets["laureat"] & projets["soumis"], "project_id"]})
     nb_changements = {}
@@ -376,21 +330,8 @@ def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir
     tot = (eff[eff["entite_type"] != "monde"].groupby(["entite_type", "entite_id"])
            [cols_tot].sum().reset_index())
     # (les sommes sur années et panels sont exactes : un projet n'a qu'une année et un panel)
-    corresp = charger_correspondance_paysage(ref_dir)
-    noms_ref = corresp.drop_duplicates("ror").set_index("ror")["nom"].to_dict()
-    infos = tous_liens
-    noms_erc = (infos[infos["origine"] == "structure"].groupby("ror")["entities_name"]
-                .agg(_plus_frequent).to_dict())
-    pays_erc = infos.groupby("ror")["pays_code"].agg(_plus_frequent).to_dict()
-    # tutelle sans ligne directe : pays le plus fréquent de ses structures
-    pays_tut = (infos[["project_id", "ror"]].drop_duplicates().merge(lien, on="ror")
-                .assign(pays=lambda x: x["ror"].map(pays_erc))
-                .groupby("entite_id")["pays"].agg(_plus_frequent).to_dict())
-    etab = tot["entite_type"] == "etablissement"
-    tot["nom"] = [noms_ref.get(i) or noms_erc.get(i) or i if e else PAYS_NOMS.get(i, i)
-                  for i, e in zip(tot["entite_id"], etab)]
-    tot["pays_code"] = [(pays_erc.get(i) or pays_tut.get(i)) if e else i
-                        for i, e in zip(tot["entite_id"], etab)]
+    # nom (Paysage, sinon libellé de la source) et pays (pays des participations) : règle commune
+    tot = nommer_entites(tot, tous_liens, lien, ref_dir, pays="source", cle="project_id")
     tot = tot.sort_values(["entite_type", "nb_candidatures"], ascending=[False, False])
     con.register("tot", tot)
     con.execute(f"COPY (SELECT entite_id, entite_type, nom, pays_code, nb_candidatures, "
@@ -407,7 +348,7 @@ def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir
                                        .head(pays_comparaison_n).index]))
 
     # Panels inconnus de la bibliométrie (filtre discipline commun)
-    f_disc = Path(data_dir) / "disciplines" / f"{classement}.parquet"
+    f_disc = disciplines_path(nomenclature, data_dir)
     panels = sorted(set(projets["discipline_code"].dropna()))
     hors_biblio = []
     if f_disc.exists():
@@ -468,6 +409,7 @@ def compute_erc(erc_dir: str = ERC_DIR, horizon_dir: str = HORIZON_DIR, data_dir
             "nb_laureats_changement_pays": nb_changements["pays"],
             "nb_laureats_sans_candidature": int(laur_sans_cand.sum()),
             "nb_lignes_ecart_controle_laureats": nb_lignes_ecart,
+            "coherence_scanr_horizon": controle_scanr,
             "nb_structures_non_rattachees": int(len(non_rattaches)),
             "panels_hors_bibliometrie": hors_biblio,
         },

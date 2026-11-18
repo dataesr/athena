@@ -10,7 +10,7 @@ CONTRAT_DONNEES.md. Résumé :
 
   entites                  une ligne par entité (monde, pays, établissement), commune
                            à tous les onglets ; clé entite_id (ROR court, code ISO, MONDE)
-  biblio_disciplines       disciplines du classement et grands domaines
+  biblio_disciplines       disciplines de la nomenclature et grands domaines
   biblio_effectifs         nombres d'articles par périmètre x entité x année x discipline
                            (l'entité MONDE donne les dénominateurs)
   biblio_copublications    articles cosignés par entité x partenaire x année x discipline
@@ -33,7 +33,7 @@ CONTRAT_DONNEES.md. Résumé :
   viviers_chercheurs       un document par chercheur actif (si VIVIER_PUBLIER_CHERCHEURS)
   viviers_meta             un document : période, paramètres, contrôles, textes de méthode
 
-1. publish()          écrit <DATA_DIR>/publication/<classement>/<collection>.jsonl.gz
+1. publish()          écrit <DATA_DIR>/publication/<nomenclature>/<collection>.jsonl.gz
                       (+ .parquet) et manifest.json. Aucune base nécessaire.
 2. publish_mongo()    charge ces fichiers dans MongoDB, avec la convention de
                       tableaux : une collection <collection>_<horodatage> par
@@ -58,10 +58,11 @@ import duckdb
 import pandas as pd
 
 from .common import DOMAINES_NOMS
-from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_DB, MONGO_URI, PRIX_DIR,
+from .config import (NOMENCLATURE_DISCIPLINAIRE, DASHBOARD_ETABS_PATH, DATA_DIR, ERC_DIR, MONGO_DB, MONGO_URI, PRIX_DIR,
                      PUBLIER_COPUBLICATIONS, REFERENTIEL_DIR, REFERENTIEL_SOURCE, SJR_PATH,
                      TABLEAUX_BOARD_ID, VIVIER_PUBLIER_CHERCHEURS, VIVIERS_DIR)
 from .entites import construire_entites
+from .disciplines import disciplines_path
 
 COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copublications",
                "biblio_revues_tete", "biblio_seuils_top10", "biblio_meta", "erc_effectifs", "erc_meta",
@@ -71,15 +72,15 @@ COLLECTIONS = ["entites", "biblio_disciplines", "biblio_effectifs", "biblio_copu
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
 INDEX = {
     "entites": [[("entite_id", 1)], [("selecteur", 1), ("ordre_selecteur", 1)], [("entite_type", 1)]],
-    "biblio_disciplines": [[("classement", 1), ("discipline_code", 1)]],
-    "biblio_effectifs": [[("entite_id", 1), ("perimetre", 1), ("classement", 1),
+    "biblio_disciplines": [[("nomenclature_disciplinaire", 1), ("discipline_code", 1)]],
+    "biblio_effectifs": [[("entite_id", 1), ("perimetre", 1), ("nomenclature_disciplinaire", 1),
                           ("annee_publication", 1), ("discipline_code", 1)],
                          [("entite_type", 1), ("perimetre", 1), ("annee_publication", 1)]],
     "biblio_copublications": [[("entite_id", 1), ("partenaire_type", 1), ("perimetre", 1),
                                ("annee_publication", 1)],
                               [("partenaire_id", 1)]],
-    "biblio_revues_tete": [[("classement", 1), ("discipline_code", 1), ("categorie", 1), ("rang", 1)]],
-    "biblio_seuils_top10": [[("perimetre", 1), ("classement", 1), ("discipline_code", 1),
+    "biblio_revues_tete": [[("nomenclature_disciplinaire", 1), ("discipline_code", 1), ("categorie", 1), ("rang", 1)]],
+    "biblio_seuils_top10": [[("perimetre", 1), ("nomenclature_disciplinaire", 1), ("discipline_code", 1),
                              ("annee_publication", 1)]],
     "biblio_meta": [],
     "erc_effectifs": [[("entite_id", 1), ("annee_appel", 1), ("discipline_code", 1), ("type_bourse", 1)],
@@ -142,14 +143,14 @@ def methode_textes(p_ind: dict, p_top: dict, p_rt: dict) -> list:
     ]
 
 
-def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) -> dict:
+def meta_bibliometrie(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR) -> dict:
     """Document biblio_meta : snapshot, paramètres de chaque étape, textes de méthode."""
     data_dir = Path(data_dir)
-    p_ind = _json(data_dir / "indicateurs" / f"{classement}_params.json")
+    p_ind = _json(data_dir / "indicateurs" / f"{nomenclature}_params.json")
     perims = p_ind.get("perimetres") or []
-    p_top = _json(data_dir / "top10" / f"{classement}_{perims[0]}_params.json") if perims else {}
-    p_rt = _json(data_dir / "revues_tete" / f"{classement}_params.json")
-    p_cop = _json(data_dir / "indicateurs" / f"{classement}_copublications_params.json")
+    p_top = _json(data_dir / "top10" / f"{nomenclature}_{perims[0]}_params.json") if perims else {}
+    p_rt = _json(data_dir / "revues_tete" / f"{nomenclature}_params.json")
+    p_cop = _json(data_dir / "indicateurs" / f"{nomenclature}_copublications_params.json")
     man = _json(data_dir / "works_manifest.json")
     snapshot = {"source": man.get("source", "public"), "date": man.get("date")}
     y0, y1 = p_ind.get("annee_min"), p_ind.get("annee_max")
@@ -157,7 +158,7 @@ def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) ->
     prov = [a for a in range(y0, y1 + 1) if W is not None and last and a + W >= last] if y0 else []
     calcul = dt.date.today().isoformat()
     return {
-        "classement": classement,
+        "nomenclature_disciplinaire": nomenclature,
         "snapshot_openalex": snapshot,
         "date_calcul": calcul,
         "perimetres": perims,
@@ -176,7 +177,7 @@ def meta_bibliometrie(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) ->
     }
 
 
-def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
+def _tables(nomenclature: str, data_dir: Path, etabs_path: str, verbose: bool,
             referentiel_source: str = REFERENTIEL_SOURCE, referentiel_dir: str = REFERENTIEL_DIR,
             erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR,
             copublications: bool = PUBLIER_COPUBLICATIONS, viviers_dir: str = VIVIERS_DIR,
@@ -184,19 +185,19 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
     """Chaque collection sous forme de DataFrame (ou de dict pour les collections *_meta)."""
     ind, rt, t10 = data_dir / "indicateurs", data_dir / "revues_tete", data_dir / "top10"
     sql = lambda q: duckdb.sql(q).df()
-    meta = meta_bibliometrie(classement, data_dir)
-    tables = {"entites": construire_entites(classement, data_dir, etabs_path, referentiel_source,
+    meta = meta_bibliometrie(nomenclature, data_dir)
+    tables = {"entites": construire_entites(nomenclature, data_dir, etabs_path, referentiel_source,
                                             referentiel_dir, erc_dir=erc_dir, prix_dir=prix_dir,
                                             verbose=verbose)}
 
-    disc = sql(f"""SELECT DISTINCT '{classement}' AS classement, discipline_code, discipline_nom, domaine_code
-                   FROM read_parquet('{data_dir}/disciplines/{classement}.parquet')
+    disc = sql(f"""SELECT DISTINCT '{nomenclature}' AS nomenclature_disciplinaire, discipline_code, discipline_nom, domaine_code
+                   FROM read_parquet('{disciplines_path(nomenclature, data_dir)}')
                    WHERE discipline_code IS NOT NULL""")
     disc["domaine_nom"] = disc["domaine_code"].map(DOMAINES_NOMS).fillna(disc["domaine_code"])
     tables["biblio_disciplines"] = disc.sort_values("discipline_code", key=lambda s: s.map(_cle_code))
 
-    tables["biblio_effectifs"] = sql(f"SELECT * FROM read_parquet('{ind}/{classement}_effectifs.parquet')")
-    f_cop = ind / f"{classement}_copublications.parquet"
+    tables["biblio_effectifs"] = sql(f"SELECT * FROM read_parquet('{ind}/{nomenclature}_effectifs.parquet')")
+    f_cop = ind / f"{nomenclature}_copublications.parquet"
     if not copublications:
         if verbose:
             print("biblio_copublications non publiée (PUBLIER_COPUBLICATIONS = False)")
@@ -204,13 +205,13 @@ def _tables(classement: str, data_dir: Path, etabs_path: str, verbose: bool,
         tables["biblio_copublications"] = sql(f"SELECT * FROM read_parquet('{f_cop}')")
     elif verbose:
         print(f"{f_cop} absent : biblio_copublications non publiée (lancer compute_copublications())")
-    tables["biblio_revues_tete"] = sql(f"""SELECT '{classement}' AS classement, *
-                                           FROM read_parquet('{rt}/{classement}.parquet')""")
+    tables["biblio_revues_tete"] = sql(f"""SELECT '{nomenclature}' AS nomenclature_disciplinaire, *
+                                           FROM read_parquet('{rt}/{nomenclature}.parquet')""")
     seuils = []
     for perim in meta["perimetres"]:
-        f = t10 / f"{classement}_{perim}_seuils.parquet"
+        f = t10 / f"{nomenclature}_{perim}_seuils.parquet"
         if f.exists():
-            seuils.append(sql(f"SELECT '{perim}' AS perimetre, '{classement}' AS classement, * "
+            seuils.append(sql(f"SELECT '{perim}' AS perimetre, '{nomenclature}' AS nomenclature_disciplinaire, * "
                               f"FROM read_parquet('{f}')"))
     if seuils:
         tables["biblio_seuils_top10"] = pd.concat(seuils, ignore_index=True)
@@ -277,23 +278,23 @@ def _cle_code(code: str):
     return (m.group(1), int(m.group(2)) if m.group(2) else 0, m.group(3))
 
 
-def publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
+def publish(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR,
             etabs_path: str = DASHBOARD_ETABS_PATH, out_dir: str = None,
             parquet: bool = True, referentiel_source: str = REFERENTIEL_SOURCE,
             referentiel_dir: str = REFERENTIEL_DIR, erc_dir: str = ERC_DIR, prix_dir: str = PRIX_DIR,
             copublications: bool = PUBLIER_COPUBLICATIONS, viviers_dir: str = VIVIERS_DIR,
             verbose: bool = True) -> dict:
-    """Écrit chaque collection dans <out_dir> (défaut <data_dir>/publication/<classement>) :
+    """Écrit chaque collection dans <out_dir> (défaut <data_dir>/publication/<nomenclature>) :
     <collection>.jsonl.gz (un document JSON par ligne, prêt pour Mongo) et, si parquet=True,
     <collection>.parquet ; plus manifest.json (liste, nombre de lignes, colonnes).
     copublications : publier biblio_copublications (défaut : config.PUBLIER_COPUBLICATIONS).
     Renvoie le manifeste."""
     data_dir = Path(data_dir)
-    out = Path(out_dir) if out_dir else data_dir / "publication" / classement
+    out = Path(out_dir) if out_dir else data_dir / "publication" / nomenclature
     out.mkdir(parents=True, exist_ok=True)
-    tables = _tables(classement, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir, erc_dir,
+    tables = _tables(nomenclature, data_dir, etabs_path, verbose, referentiel_source, referentiel_dir, erc_dir,
                      prix_dir, copublications, viviers_dir)
-    manifeste = {"classement": classement, "genere_le": dt.datetime.now().isoformat(timespec="seconds"),
+    manifeste = {"nomenclature_disciplinaire": nomenclature, "genere_le": dt.datetime.now().isoformat(timespec="seconds"),
                  "snapshot_openalex": tables["biblio_meta"]["snapshot_openalex"], "collections": {}}
     for nom, t in tables.items():
         f = out / f"{nom}.jsonl.gz"
@@ -337,7 +338,7 @@ def _lire_jsonl(f: Path, taille: int):
         yield lot
 
 
-def publish_mongo(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, uri: str = MONGO_URI,
+def publish_mongo(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR, uri: str = MONGO_URI,
                   db_name: str = MONGO_DB, board_id: str = TABLEAUX_BOARD_ID, collections=None,
                   pub_dir: str = None, enregistrer_version: bool = True, taille_lot: int = 20000,
                   copublications: bool = PUBLIER_COPUBLICATIONS, verbose: bool = True) -> dict:
@@ -359,7 +360,7 @@ def publish_mongo(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, uri: s
         raise ImportError("pymongo manquant : ajouter « pymongo » à requirements.txt") from e
     if not uri:
         raise ValueError("MONGO_URI non défini (variable d'environnement)")
-    src = Path(pub_dir) if pub_dir else Path(data_dir) / "publication" / classement
+    src = Path(pub_dir) if pub_dir else Path(data_dir) / "publication" / nomenclature
     man = _json(src / "manifest.json")
     if not man:
         raise FileNotFoundError(f"{src}/manifest.json absent : lancer publish() d'abord")

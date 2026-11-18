@@ -1,13 +1,17 @@
 """
 common.py
 =========
-Outils partagés par les étapes 3 à 7 : connexion DuckDB, périmètre de
-référence, noms des pays.
+Outils partagés par toutes les étapes : connexion DuckDB, périmètre de référence, pays
+(noms, outre-mer sous FR), petits utilitaires de nettoyage (texte, valeur la plus fréquente)
+et téléchargement avec copie locale.
 """
 
+import shutil
+import urllib.request
 from pathlib import Path
 
 import duckdb
+import pandas as pd
 
 from .config import DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS, PAYS_FR
 
@@ -54,10 +58,10 @@ def perimetre_sources(perimetre: str, data_dir: str):
     return str(p)
 
 
-def nom_fichier(classement: str, perimetre: str = None) -> str:
-    """Nom des sorties : <classement>_<perimetre> (ex. erc_revues_sjr), ou
-    <classement> pour une sortie qui ne dépend pas du périmètre."""
-    return f"{classement}_{perimetre}" if perimetre else classement
+def nom_fichier(nomenclature: str, perimetre: str = None) -> str:
+    """Nom des sorties : <nomenclature>_<perimetre> (ex. panel_erc_revues_sjr), ou
+    <nomenclature> pour une sortie qui ne dépend pas du périmètre."""
+    return f"{nomenclature}_{perimetre}" if perimetre else nomenclature
 
 
 def perimeter_where(work_types=None, source_types=None, annee_min=None,
@@ -127,3 +131,44 @@ REGIONS = {
     "asie": ["CN", "JP", "KR", "TW", "HK", "SG", "IN", "ID", "MY", "TH", "VN", "PH", "PK", "BD",
              "KZ", "AU", "NZ"],
 }
+
+
+# --- Utilitaires communs (biblio, ERC, ANR, prix, Horizon) ---------------------------------
+
+def texte(v, strict: bool = False):
+    """Texte nettoyé (espaces de bord retirés), None si vide ou manquant.
+    strict=True : seules les chaînes sont gardées (un nombre lu dans un JSON donne None)."""
+    if strict:
+        return v.strip() if isinstance(v, str) and v.strip() else None
+    v = str(v).strip() if v is not None and not (isinstance(v, float) and pd.isna(v)) else ""
+    return v or None
+
+
+def plus_frequent(s: pd.Series, ignorer_vides: bool = False):
+    """Valeur la plus fréquente (manquants ignorés ; chaînes vides aussi si ignorer_vides),
+    None s'il n'y en a pas. À égalité : ordre de value_counts."""
+    s = s.dropna()
+    if ignorer_vides:
+        s = s[s.astype(str).str.strip() != ""]
+    return s.value_counts().index[0] if len(s) else None
+
+
+def pays_entite(s: pd.Series) -> pd.Series:
+    """Code pays -> code de l'entité pays (pandas) : outre-mer regroupé sous FR (PAYS_FR), comme
+    pays_sql en SQL."""
+    return s.where(~s.isin(PAYS_FR), "FR")
+
+
+def telecharger(url: str, f, refresh: bool = False, verbose: bool = True) -> Path:
+    """Copie locale f de url (écriture atomique) ; gardée si elle existe et refresh=False."""
+    f = Path(f)
+    if f.exists() and not refresh:
+        return f
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(f.suffix + ".tmp")
+    with urllib.request.urlopen(url) as r, open(tmp, "wb") as out:
+        shutil.copyfileobj(r, out)
+    tmp.replace(f)
+    if verbose:
+        print(f"Téléchargé : {url.rsplit('/', 1)[-1]} -> {f} ({f.stat().st_size / 1e6:.0f} Mo)")
+    return f

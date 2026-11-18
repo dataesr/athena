@@ -6,7 +6,7 @@ et à tous les usages : aperçu HTML (export_dashboard.py) et publication
 (publish.py, collection Mongo « entites »).
 
 Sources, jointes sur le ROR :
-  - OpenAlex (étape 6, indicateurs/<classement>_entites.parquet) : la liste des
+  - OpenAlex (étape 6, indicateurs/<nomenclature>_entites.parquet) : la liste des
     établissements qui ont des articles, leur taille, leurs tutelles ;
   - le référentiel Paysage ou scanR (étape 0, referentiel.py) : nom d'usage,
     sigle, catégorie, ville, et le périmètre du sélecteur ;
@@ -61,7 +61,7 @@ import duckdb
 import pandas as pd
 
 from .common import pays_list_sql
-from .config import (CLASSEMENT, DASHBOARD_ETABS_PATH, DASHBOARD_ORDRE_SELECTEUR, DATA_DIR,
+from .config import (NOMENCLATURE_DISCIPLINAIRE, DASHBOARD_ETABS_PATH, DASHBOARD_ORDRE_SELECTEUR, DATA_DIR,
                      ERC_DIR, GROUPES_ETABLISSEMENTS, PAYS_FR, PRIX_DIR, REFERENTIEL_DIR,
                      REFERENTIEL_SOURCE)
 from .referentiel import charger_referentiel, groupe_etablissement
@@ -120,7 +120,7 @@ def load_etab_selection(path: str = DASHBOARD_ETABS_PATH) -> pd.DataFrame:
     return df
 
 
-def write_etab_selection(path: str = DASHBOARD_ETABS_PATH, classement: str = CLASSEMENT,
+def write_etab_selection(path: str = DASHBOARD_ETABS_PATH, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                          data_dir: str = DATA_DIR, min_articles: int = 0,
                          overwrite: bool = False) -> str:
     """Écrit un fichier de corrections de départ avec TOUS les établissements français
@@ -131,7 +131,7 @@ def write_etab_selection(path: str = DASHBOARD_ETABS_PATH, classement: str = CLA
     p = Path(path)
     if p.exists() and not overwrite:
         raise FileExistsError(f"{p} existe déjà (overwrite=True pour l'écraser)")
-    f_ent = Path(data_dir) / "indicateurs" / f"{classement}_entites.parquet"
+    f_ent = Path(data_dir) / "indicateurs" / f"{nomenclature}_entites.parquet"
     df = duckdb.sql(f"""
         SELECT entite_id AS ror, '' AS nom, '' AS alias, '' AS exclure, nb_articles, type_openalex,
                nom AS nom_openalex
@@ -168,7 +168,7 @@ def _alias_openalex(data_dir: Path) -> dict:
     return res
 
 
-def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
+def construire_entites(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR,
                        etabs_path: str = DASHBOARD_ETABS_PATH,
                        referentiel_source: str = REFERENTIEL_SOURCE,
                        referentiel_dir: str = REFERENTIEL_DIR,
@@ -182,7 +182,7 @@ def construire_entites(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
     erc_dir            : sorties de erc.compute_erc() (None ou absentes : pas de données ERC)
     prix_dir           : sorties de prix.compute_prix() (None ou absentes : pas de données prix)"""
     data_dir = Path(data_dir)
-    f_ent = data_dir / "indicateurs" / f"{classement}_entites.parquet"
+    f_ent = data_dir / "indicateurs" / f"{nomenclature}_entites.parquet"
     if not f_ent.exists():
         raise FileNotFoundError(f"{f_ent} absent : lancer compute_indicators()")
     ent = duckdb.sql(f"SELECT * FROM read_parquet('{f_ent}')").df()

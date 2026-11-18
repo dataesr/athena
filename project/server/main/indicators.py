@@ -29,10 +29,10 @@ Entités
                  d'une UMR compte pour l'UMR, son université et le CNRS.
   Comptage entier : un article compte 1 pour chaque entité présente.
 
-Colonnes de <classement>_effectifs.parquet
+Colonnes de <nomenclature>_effectifs.parquet
 ------------------------------------------
   perimetre                     toutes_revues_openalex | revues_sjr
-  classement                    ex. erc
+  nomenclature_disciplinaire    ex. panel_erc
   entite_type                   monde | pays | etablissement
   entite_id                     MONDE | code ISO du pays | ROR court
   annee_publication
@@ -56,11 +56,11 @@ Colonnes de <classement>_effectifs.parquet
 
 Autres sorties (dans <data_dir>/indicateurs/)
 ---------------------------------------------
-  <classement>_entites.parquet   une ligne par entité : entite_id, entite_type, nom,
+  <nomenclature>_entites.parquet   une ligne par entité : entite_id, entite_type, nom,
                                  pays_code, type_openalex, nb_articles (premier
                                  périmètre, toute la période), pays_compare,
                                  tutelles (ROR), nb_structures_rattachees
-  <classement>_params.json       paramètres utilisés
+  <nomenclature>_params.json       paramètres utilisés
 
 Les fonctions _preparer_* sont réutilisées par copublications.py (étape 6b).
 
@@ -76,7 +76,7 @@ from pathlib import Path
 import pandas as pd
 
 from .common import MONDE_ID, PAYS_NOMS, connect, nom_fichier, pays_list_sql
-from .config import (ANNEE_MAX, ANNEE_MIN, CLASSEMENT, DATA_DIR, ERC_DIR, ETAB_COUNTRIES,
+from .config import (ANNEE_MAX, ANNEE_MIN, NOMENCLATURE_DISCIPLINAIRE, DATA_DIR, ERC_DIR, ETAB_COUNTRIES,
                      ETAB_EXCLUDE, ETAB_INTERNATIONAL_N, ETAB_INTERNATIONAL_RORS,
                      ETAB_INTERNATIONAL_TYPES, ETAB_MIN_ARTICLES, LINEAGE_CUTS, PAYS_COMPARAISON,
                      PAYS_COMPARAISON_N, PAYS_FR, PERIMETRES)
@@ -97,11 +97,11 @@ _AGG = """count(*)::BIGINT                                                AS nb_
           sum(en_revue_tete_multidisciplinaire::INT)::BIGINT              AS nb_articles_revues_tete_multidisciplinaires"""
 
 
-def _fichier_top10(data_dir: Path, classement: str, perimetre: str) -> tuple:
-    name = nom_fichier(classement, perimetre)
+def _fichier_top10(data_dir: Path, nomenclature: str, perimetre: str) -> tuple:
+    name = nom_fichier(nomenclature, perimetre)
     f = data_dir / "top10" / f"{name}.parquet"
     if not f.exists():
-        raise FileNotFoundError(f"{f} absent : lancer compute_top10(classement={classement!r}, "
+        raise FileNotFoundError(f"{f} absent : lancer compute_top10(nomenclature={nomenclature!r}, "
                                 f"perimetre={perimetre!r})")
     p = data_dir / "top10" / f"{name}_params.json"
     params = json.loads(p.read_text()) if p.exists() else {}
@@ -180,7 +180,7 @@ def _preparer_etablissements(con, data_dir: Path, etab_countries, lineage_cuts, 
     """)
 
 
-def _preparer_articles(con, data_dir: Path, classement: str, perimetre: str,
+def _preparer_articles(con, data_dir: Path, nomenclature: str, perimetre: str,
                        f_revues_tete: Path, f_sources_sjr: Path, pays, annee_min: int,
                        annee_max: int) -> dict:
     """Table `articles` du périmètre : une ligne par article
@@ -188,7 +188,7 @@ def _preparer_articles(con, data_dir: Path, classement: str, perimetre: str,
       pays_codes (outre-mer regroupé sous FR), en_revue_tete_disciplinaire,
       en_revue_tete_multidisciplinaire
     et table `articles_pays` (work_id, pays_code). Renvoie les paramètres du top 10 %."""
-    f_top10, params10 = _fichier_top10(data_dir, classement, perimetre)
+    f_top10, params10 = _fichier_top10(data_dir, nomenclature, perimetre)
     fr = pays_list_sql(pays)
     # revues_tete : (discipline, revue SJR) -> disciplinaire vrai / faux.
     # max(...) : par sécurité si une revue figurait deux fois pour une discipline
@@ -276,7 +276,7 @@ def _retenir_entites(con, pays_comparaison, pays_comparaison_n: int, etab: bool,
         """)
 
 
-def compute_indicators(classement: str = CLASSEMENT,
+def compute_indicators(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                        perimetres=PERIMETRES,
                        revues_tete_name: str = None,
                        data_dir: str = DATA_DIR,
@@ -298,9 +298,9 @@ def compute_indicators(classement: str = CLASSEMENT,
                        verbose: bool = True) -> dict:
     """Calcule les effectifs (voir l'en-tête du module).
 
-    classement        : classement des disciplines (étapes 3 à 5)
+    nomenclature        : nomenclature des disciplines (étapes 3 à 5)
     perimetres        : périmètres à calculer ; chacun exige son fichier top10
-    revues_tete_name  : liste de revues de tête (défaut : nom du classement)
+    revues_tete_name  : liste de revues de tête (défaut : nom de la nomenclature)
     etab_countries    : None = pas d'établissements (pays seulement)
     lineage_cuts      : corrections de la lignée OpenAlex (voir config.LINEAGE_CUTS)
     etab_exclude      : ROR à ne pas présenter comme établissements
@@ -309,13 +309,13 @@ def compute_indicators(classement: str = CLASSEMENT,
                         comparaison bibliométrique ; None = pays de la comparaison ERC
                         (erc.pays_compares_erc(erc_dir)), [] = aucun
     etab_international_rors / _n / _types : établissements étrangers de comparaison
-    out_name          : défaut : nom du classement
+    out_name          : défaut : nom de la nomenclature
 
     Renvoie {'fichier', 'nb_lignes', 'nb_etablissements', 'france', 'top_etablissements', 'pays'}.
     """
     data_dir = Path(data_dir)
-    out_name = out_name or classement
-    rt_name = revues_tete_name or classement
+    out_name = out_name or nomenclature
+    rt_name = revues_tete_name or nomenclature
     out_dir = data_dir / "indicateurs"
     out_dir.mkdir(parents=True, exist_ok=True)
     con = connect(data_dir)
@@ -341,7 +341,7 @@ def compute_indicators(classement: str = CLASSEMENT,
 
     resultats, premier = [], True
     for perimetre in perimetres:
-        params10 = _preparer_articles(con, data_dir, classement, perimetre, f_rt, f_ss, pays,
+        params10 = _preparer_articles(con, data_dir, nomenclature, perimetre, f_rt, f_ss, pays,
                                       annee_min, annee_max)
         if verbose:
             n = con.execute("SELECT count(*) FROM articles").fetchone()[0]
@@ -394,11 +394,11 @@ def compute_indicators(classement: str = CLASSEMENT,
                 JOIN articles a USING (work_id)
                 GROUP BY ALL
             """)
-        # On ajoute les colonnes communes : périmètre, classement, influence provisoire
+        # On ajoute les colonnes communes : périmètre, nomenclature, influence provisoire
         # (année + fenêtre de citation >= dernière année de citations disponible).
         con.execute(f"""
             CREATE OR REPLACE TEMP TABLE {t} AS
-            SELECT '{perimetre}' AS perimetre, '{classement}' AS classement, *,
+            SELECT '{perimetre}' AS perimetre, '{nomenclature}' AS nomenclature_disciplinaire, *,
                    {prov} AS influence_provisoire
             FROM {t}
         """)
@@ -410,7 +410,7 @@ def compute_indicators(classement: str = CLASSEMENT,
     f_out = out_dir / f"{out_name}_effectifs.parquet"
     con.execute(f"""
         COPY (
-            SELECT perimetre, classement, entite_type, entite_id, annee_publication,
+            SELECT perimetre, nomenclature_disciplinaire, entite_type, entite_id, annee_publication,
                    discipline_code, {", ".join(COLONNES_EFFECTIFS)}, influence_provisoire
             FROM ({union})
             ORDER BY perimetre, entite_type, entite_id, annee_publication, discipline_code
@@ -466,7 +466,7 @@ def compute_indicators(classement: str = CLASSEMENT,
     """)
     n_etab = con.execute("SELECT count(*) FROM etablissements_retenus").fetchone()[0] if etab else 0
 
-    params = dict(classement=classement, perimetres=list(perimetres), revues_tete=rt_name,
+    params = dict(nomenclature_disciplinaire=nomenclature, perimetres=list(perimetres), revues_tete=rt_name,
                   pays_fr=list(pays), etab_countries=list(etab_countries or []),
                   etab_min_articles=etab_min_articles,
                   lineage_cuts=[list(c) for c in (lineage_cuts or [])],

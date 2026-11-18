@@ -27,9 +27,9 @@ Paires calculées
   toute la période (premier périmètre). Les partenaires établissements sont
   pris parmi les établissements retenus à l'étape 6.
 
-Colonnes de <classement>_copublications.parquet
+Colonnes de <nomenclature>_copublications.parquet
 -----------------------------------------------
-  perimetre, classement, entite_type, entite_id,
+  perimetre, nomenclature_disciplinaire, entite_type, entite_id,
   partenaire_type (pays | etablissement), partenaire_id,
   annee_publication, discipline_code,
   nb_articles_copublies               articles cosignés par l'entité et le partenaire
@@ -48,14 +48,14 @@ import json
 from pathlib import Path
 
 from .common import connect
-from .config import (ANNEE_MAX, ANNEE_MIN, CLASSEMENT, COPUB_MAX_ENTITES_PAR_ARTICLE,
+from .config import (ANNEE_MAX, ANNEE_MIN, NOMENCLATURE_DISCIPLINAIRE, COPUB_MAX_ENTITES_PAR_ARTICLE,
                      COPUB_PARTENAIRES_N, DATA_DIR, ETAB_COUNTRIES, ETAB_EXCLUDE,
                      ETAB_INTERNATIONAL_N, ETAB_INTERNATIONAL_RORS, ETAB_INTERNATIONAL_TYPES,
                      LINEAGE_CUTS, PAYS_FR, PERIMETRES)
 from .indicators import _preparer_articles, _preparer_etablissements
 
 
-def compute_copublications(classement: str = CLASSEMENT,
+def compute_copublications(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                            perimetres=PERIMETRES,
                            revues_tete_name: str = None,
                            data_dir: str = DATA_DIR,
@@ -73,7 +73,7 @@ def compute_copublications(classement: str = CLASSEMENT,
                            out_name: str = None,
                            verbose: bool = True) -> dict:
     """Calcule les copublications (voir l'en-tête du module).
-    Les entités sont celles de l'étape 6 (<classement>_entites.parquet) : lancer
+    Les entités sont celles de l'étape 6 (<nomenclature>_entites.parquet) : lancer
     compute_indicators() d'abord, avec les mêmes paramètres d'établissements.
 
     partenaires_n           : partenaires gardés par entité et par type (None = tous)
@@ -83,8 +83,8 @@ def compute_copublications(classement: str = CLASSEMENT,
     Renvoie {'fichier', 'nb_lignes', 'france', 'par_type'}.
     """
     data_dir = Path(data_dir)
-    out_name = out_name or classement
-    rt_name = revues_tete_name or classement
+    out_name = out_name or nomenclature
+    rt_name = revues_tete_name or nomenclature
     out_dir = data_dir / "indicateurs"
     f_ent = out_dir / f"{out_name}_entites.parquet"
     if not f_ent.exists():
@@ -114,7 +114,7 @@ def compute_copublications(classement: str = CLASSEMENT,
                   if max_entites_par_article else "")
     resultats, partenaires_fixes = [], False
     for perimetre in perimetres:
-        _preparer_articles(con, data_dir, classement, perimetre, f_rt, f_ss, pays, annee_min, annee_max)
+        _preparer_articles(con, data_dir, nomenclature, perimetre, f_rt, f_ss, pays, annee_min, annee_max)
         # Paires (entité, partenaire, article). Pays x pays : auto-jointure de
         # articles_pays sur l'article. Exemple : article A [FR, US, DE], entités
         # retenues FR et US -> (FR, US, A), (FR, DE, A), (US, FR, A), (US, DE, A).
@@ -198,7 +198,7 @@ def compute_copublications(classement: str = CLASSEMENT,
         t = f"copub_{len(resultats)}"
         con.execute(f"""
             CREATE TEMP TABLE {t} AS
-            SELECT '{perimetre}' AS perimetre, '{classement}' AS classement,
+            SELECT '{perimetre}' AS perimetre, '{nomenclature}' AS nomenclature_disciplinaire,
                    p.entite_type, p.entite_id, p.partenaire_type, p.partenaire_id,
                    a.annee_publication, a.discipline_code,
                    count(*)::BIGINT                     AS nb_articles_copublies,
@@ -220,7 +220,7 @@ def compute_copublications(classement: str = CLASSEMENT,
                        annee_publication, discipline_code)
         TO '{f_out}' (FORMAT parquet, COMPRESSION zstd)
     """)
-    params = dict(classement=classement, perimetres=list(perimetres), partenaires_n=partenaires_n,
+    params = dict(nomenclature_disciplinaire=nomenclature, perimetres=list(perimetres), partenaires_n=partenaires_n,
                   max_entites_par_article=max_entites_par_article,
                   annee_min=annee_min, annee_max=annee_max)
     (out_dir / f"{out_name}_copublications_params.json").write_text(json.dumps(params, indent=1))

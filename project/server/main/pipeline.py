@@ -25,6 +25,13 @@ Les étapes (chacune dépend des précédentes)
   "awards"                extract_awards + compute_awards  financements OpenAlex par pays du
                                                         financeur et panel ERC (relit les awards
                                                         du snapshot ; reprise possible)
+  "projets_scanr"         build_projets_scanr           projets scanR (ANR, UE...) + topic de
+                                                        l'award OpenAlex + panel ERC (après "awards")
+  "horizon_topics"        compute_horizon_topics        topic (aboutness) et panel ERC des projets
+                                                        Horizon hors ERC, candidatures et lauréats
+  "anr"                   compute_anr                   projets ANR par établissement (tous les
+                                                        partenaires, tutelles), panel ERC par
+                                                        aboutness -> tables anr_*
   "publish"               publish                       fichiers pour tableaux (publication/)
   (publish_mongo() n'est jamais lancé automatiquement : chargement en base à la main)
 
@@ -69,10 +76,10 @@ Exemples :
     p.run(steps=["top10", "indicators"])               # deux étapes
     p.step_top10(perimetre="revues_sjr")               # une seule étape, un seul périmètre
     p.run(steps=["review", "indicators"],
-          reviewed_csv="/data/snapshots/2026-10-15/revues_tete/erc_relecture_validee.csv")
+          reviewed_csv="/data/snapshots/2026-10-15/revues_tete/panel_erc_relecture_validee.csv")
 
-Relecture des revues de tête : compute_top_journals RÉÉCRIT <classement>_relecture.csv.
-Enregistrez votre CSV corrigé sous un autre nom (ex. erc_relecture_validee.csv) et
+Relecture des revues de tête : compute_top_journals RÉÉCRIT <nomenclature>_relecture.csv.
+Enregistrez votre CSV corrigé sous un autre nom (ex. panel_erc_relecture_validee.csv) et
 passez-le en `reviewed_csv` : il est réappliqué juste après "top_journals".
 """
 
@@ -80,12 +87,15 @@ import shutil
 import time
 from pathlib import Path
 
-from .config import CLASSEMENT, DATA_DIR, PERIMETRES, TOPICS_PATH
+from .config import NOMENCLATURE_DISCIPLINAIRE, DATA_DIR, PERIMETRES, TOPICS_PATH
 from .copublications import compute_copublications
 from .disciplines import build_disciplines
 from .erc import compute_erc
 from .extract_awards import compute_awards, extract_awards
 from .extract_sources_institutions import extract_sources_institutions
+from .projets_scanr import build_projets_scanr
+from .anr import compute_anr
+from .horizon_topics import compute_horizon_topics
 from .indicators import compute_indicators
 from .prix import compute_prix
 from .prix_disciplines import compute_prix_disciplines
@@ -97,7 +107,7 @@ from .top_journals import compute_top_journals, top_journals_from_review
 from .viviers import compute_viviers
 
 STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc", "prix",
-         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "awards", "publish"]
+         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "awards", "projets_scanr", "horizon_topics", "anr", "publish"]
 
 
 # --- Étapes individuelles ------------------------------------------------------
@@ -112,44 +122,44 @@ def step_sources_institutions(data_dir: str = DATA_DIR, **kw):
     return extract_sources_institutions(data_dir=data_dir, **kw)
 
 
-def step_disciplines(classement: str = CLASSEMENT, mapping_path: str = TOPICS_PATH,
+def step_disciplines(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, mapping_path: str = TOPICS_PATH,
                      data_dir: str = DATA_DIR, **kw):
-    """Étape 3 : classement topic -> discipline."""
-    return build_disciplines(mapping_path, classement=classement, data_dir=data_dir, **kw)
+    """Étape 3 : nomenclature topic -> discipline."""
+    return build_disciplines(mapping_path, nomenclature=nomenclature, data_dir=data_dir, **kw)
 
 
-def step_top_journals(classement: str = CLASSEMENT, data_dir: str = DATA_DIR,
+def step_top_journals(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR,
                       reviewed_csv: str = None, **kw):
     """Étape 4 : revues de tête ; réapplique `reviewed_csv` s'il est fourni."""
-    res = compute_top_journals(classement, data_dir=data_dir, **kw)
+    res = compute_top_journals(nomenclature, data_dir=data_dir, **kw)
     if reviewed_csv:
-        step_review(reviewed_csv, classement=classement, data_dir=data_dir)
+        step_review(reviewed_csv, nomenclature=nomenclature, data_dir=data_dir)
     return res
 
 
-def step_review(reviewed_csv: str, classement: str = CLASSEMENT,
+def step_review(reviewed_csv: str, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                 data_dir: str = DATA_DIR):
     """Applique une liste de revues de tête relue à la main (sans recalcul)."""
-    return top_journals_from_review(reviewed_csv, out_name=classement, data_dir=data_dir)
+    return top_journals_from_review(reviewed_csv, out_name=nomenclature, data_dir=data_dir)
 
 
-def step_top10(classement: str = CLASSEMENT, perimetres=PERIMETRES,
+def step_top10(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, perimetres=PERIMETRES,
                perimetre: str = None, data_dir: str = DATA_DIR, **kw):
     """Étape 4 : top 10 % ; un périmètre (`perimetre`) ou tous ceux de `perimetres`."""
-    return {p: compute_top10(classement, data_dir=data_dir, perimetre=p, **kw)
+    return {p: compute_top10(nomenclature, data_dir=data_dir, perimetre=p, **kw)
             for p in ([perimetre] if perimetre else perimetres)}
 
 
-def step_indicators(classement: str = CLASSEMENT, perimetres=PERIMETRES,
+def step_indicators(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, perimetres=PERIMETRES,
                     data_dir: str = DATA_DIR, **kw):
     """Étape 6 : effectifs."""
-    return compute_indicators(classement, perimetres=perimetres, data_dir=data_dir, **kw)
+    return compute_indicators(nomenclature, perimetres=perimetres, data_dir=data_dir, **kw)
 
 
-def step_copublications(classement: str = CLASSEMENT, perimetres=PERIMETRES,
+def step_copublications(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, perimetres=PERIMETRES,
                         data_dir: str = DATA_DIR, **kw):
     """Étape 6b : copublications."""
-    return compute_copublications(classement, perimetres=perimetres, data_dir=data_dir, **kw)
+    return compute_copublications(nomenclature, perimetres=perimetres, data_dir=data_dir, **kw)
 
 
 def step_erc(data_dir: str = DATA_DIR, **kw):
@@ -171,30 +181,45 @@ def step_publications(data_dir: str = DATA_DIR, **kw):
     return res
 
 
-def step_prix_disciplines(data_dir: str = DATA_DIR, classement: str = CLASSEMENT):
+def step_prix_disciplines(data_dir: str = DATA_DIR, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE):
     """Discipline des lauréats de prix (extraction complétée si besoin, prix et viviers ensemble)."""
     step_publications(data_dir)
-    return compute_prix_disciplines(data_dir=data_dir, classement=classement)
+    return compute_prix_disciplines(data_dir=data_dir, nomenclature=nomenclature)
 
 
-def step_viviers(data_dir: str = DATA_DIR, classement: str = CLASSEMENT):
+def step_viviers(data_dir: str = DATA_DIR, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE):
     """Viviers de chercheurs (extraction complétée si besoin, prix et viviers ensemble)."""
     step_publications(data_dir)
-    return compute_viviers(data_dir=data_dir, classement=classement)
+    return compute_viviers(data_dir=data_dir, nomenclature=nomenclature)
 
 
-def step_awards(data_dir: str = DATA_DIR, classement: str = CLASSEMENT, **kw):
+def step_awards(data_dir: str = DATA_DIR, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, **kw):
     """Financements OpenAlex : extraction (seuls les fichiers manquants sont lus), puis
     pays du financeur x panel ERC."""
     res = extract_awards(**kw)          # snapshot le plus récent (AWARDS_SNAPSHOT), indépendant des works
     if res["erreurs"]:
         raise RuntimeError(f"{len(res['erreurs'])} fichier(s) awards non lus : relancer (reprise possible)")
-    return compute_awards(classement, date=res["snapshot"], data_dir=data_dir)
+    return compute_awards(nomenclature, date=res["snapshot"], data_dir=data_dir)
 
 
-def step_publish(classement: str = CLASSEMENT, data_dir: str = DATA_DIR, **kw):
+def step_projets_scanr(data_dir: str = DATA_DIR, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, **kw):
+    """Projets scanR enrichis du topic OpenAlex (awards) et du panel ERC."""
+    return build_projets_scanr(nomenclature, data_dir=data_dir, **kw)
+
+
+def step_horizon_topics(data_dir: str = DATA_DIR, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, **kw):
+    """Projets Horizon hors ERC (candidatures et lauréats) : topic par aboutness, panel ERC."""
+    return compute_horizon_topics(data_dir=data_dir, nomenclature=nomenclature, **kw)
+
+
+def step_anr(data_dir: str = DATA_DIR, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, **kw):
+    """Projets ANR : affiliations (règle commune) et panel ERC -> <DATA_DIR>/anr/anr_*."""
+    return compute_anr(data_dir=data_dir, nomenclature=nomenclature, **kw)
+
+
+def step_publish(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR, **kw):
     """Étape 7 : fichiers de publication (le chargement Mongo reste manuel : publish_mongo())."""
-    return publish(classement, data_dir=data_dir, **kw)
+    return publish(nomenclature, data_dir=data_dir, **kw)
 
 
 def archive_indicators(data_dir: str = DATA_DIR) -> str:
@@ -210,7 +235,7 @@ def archive_indicators(data_dir: str = DATA_DIR) -> str:
 # --- Enchaînement ------------------------------------------------------------------
 
 def run(steps=None, start: str = None, end: str = None,
-        classement: str = CLASSEMENT,
+        nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
         mapping_path: str = TOPICS_PATH,
         perimetres=PERIMETRES,
         reviewed_csv: str = None,
@@ -237,19 +262,22 @@ def run(steps=None, start: str = None, end: str = None,
     actions = {
         "referentiel": lambda: step_referentiel(),
         "sources_institutions": lambda: step_sources_institutions(data_dir),
-        "disciplines": lambda: step_disciplines(classement, mapping_path, data_dir),
-        "top_journals": lambda: step_top_journals(classement, data_dir, reviewed_csv),
-        "review": lambda: step_review(reviewed_csv, classement, data_dir),
-        "top10": lambda: step_top10(classement, perimetres, data_dir=data_dir),
-        "indicators": lambda: step_indicators(classement, perimetres, data_dir),
-        "copublications": lambda: step_copublications(classement, perimetres, data_dir),
+        "disciplines": lambda: step_disciplines(nomenclature, mapping_path, data_dir),
+        "top_journals": lambda: step_top_journals(nomenclature, data_dir, reviewed_csv),
+        "review": lambda: step_review(reviewed_csv, nomenclature, data_dir),
+        "top10": lambda: step_top10(nomenclature, perimetres, data_dir=data_dir),
+        "indicators": lambda: step_indicators(nomenclature, perimetres, data_dir),
+        "copublications": lambda: step_copublications(nomenclature, perimetres, data_dir),
         "erc": lambda: step_erc(data_dir),
         "prix": lambda: step_prix(data_dir),
         "publications": lambda: step_publications(data_dir),
-        "prix_disciplines": lambda: step_prix_disciplines(data_dir, classement),
-        "viviers": lambda: step_viviers(data_dir, classement),
-        "awards": lambda: step_awards(data_dir, classement),
-        "publish": lambda: step_publish(classement, data_dir),
+        "prix_disciplines": lambda: step_prix_disciplines(data_dir, nomenclature),
+        "viviers": lambda: step_viviers(data_dir, nomenclature),
+        "awards": lambda: step_awards(data_dir, nomenclature),
+        "projets_scanr": lambda: step_projets_scanr(data_dir, nomenclature),
+        "horizon_topics": lambda: step_horizon_topics(data_dir, nomenclature),
+        "anr": lambda: step_anr(data_dir, nomenclature),
+        "publish": lambda: step_publish(nomenclature, data_dir),
     }
     if "review" in steps and not reviewed_csv:
         raise ValueError("l'étape 'review' demande reviewed_csv=...")

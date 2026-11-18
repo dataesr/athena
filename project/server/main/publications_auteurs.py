@@ -19,7 +19,7 @@ Code commun aux lauréats de prix (prix_disciplines.py) et aux viviers de cherch
    extraire_publications_laureats() et extraire_auteurs() n'en lancent qu'une.
 
 2. poids_disciplines()       règle de discipline commune : part des publications par panel
-   ERC (topic principal -> panel, table disciplines/<CLASSEMENT>.parquet), discipline
+   ERC (topic principal -> panel, table disciplines/<NOMENCLATURE_DISCIPLINAIRE>.parquet), discipline
    principale = la plus fréquente (à égalité : code le plus petit).
 
 Exemple :

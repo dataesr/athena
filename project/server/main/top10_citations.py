@@ -26,7 +26,7 @@ Méthode
       (méthode de Waltman & Schreiber, 2013).
    Avec TOP_EXCLUDE_UNCITED, un article jamais cité vaut toujours 0.
 
-Sorties (dans <data_dir>/top10/, <nom> = <classement>_<perimetre>)
+Sorties (dans <data_dir>/top10/, <nom> = <nomenclature>_<perimetre>)
 -------------------------------------------------------------------
   <nom>.parquet          une ligne par article du périmètre
       work_id, annee_publication, discipline_code, nb_citations, fraction_top10_cites
@@ -42,8 +42,8 @@ Sorties (dans <data_dir>/top10/, <nom> = <classement>_<perimetre>)
 Exemple :
     from project.server.main.top10_citations import compute_top10
     res = compute_top10()                                   # paramètres de config.py
-    res = compute_top10(classement="erc_alt")               # autre classement
-    res = compute_top10(perimetre="revues_sjr")             # -> erc_revues_sjr.parquet
+    res = compute_top10(nomenclature="panel_erc_alt")         # autre nomenclature
+    res = compute_top10(perimetre="revues_sjr")             # -> panel_erc_revues_sjr.parquet
     res = compute_top10(citation_window=None, out_name="erc_cumul")
 """
 
@@ -51,9 +51,10 @@ import json
 from pathlib import Path
 
 from .common import connect, nom_fichier, perimeter_where, perimetre_sources
-from .config import (ANNEE_MAX, ANNEE_MIN, CITATION_WINDOW, CLASSEMENT, COUNTS_FIRST_YEAR,
+from .config import (ANNEE_MAX, ANNEE_MIN, CITATION_WINDOW, NOMENCLATURE_DISCIPLINAIRE, COUNTS_FIRST_YEAR,
                      DATA_DIR, PERIMETRE, SOURCE_TYPES, TOP_EXCLUDE_UNCITED,
                      TOP_SHARE, WORK_TYPES)
+from .disciplines import disciplines_path
 
 
 def detect_counts_years(con, data_dir: str = DATA_DIR, sample_files: int = 30) -> tuple:
@@ -72,7 +73,7 @@ def detect_counts_years(con, data_dir: str = DATA_DIR, sample_files: int = 30) -
     return int(last) - 9, int(last)
 
 
-def compute_top10(classement: str = CLASSEMENT,
+def compute_top10(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                   data_dir: str = DATA_DIR,
                   work_types=WORK_TYPES,
                   source_types=SOURCE_TYPES,
@@ -87,15 +88,15 @@ def compute_top10(classement: str = CLASSEMENT,
                   verbose: bool = True) -> dict:
     """Calcule fraction_top10_cites pour chaque article (voir l'en-tête du module).
 
-    classement : <data_dir>/disciplines/<classement>.parquet
+    nomenclature : <data_dir>/disciplines/<nomenclature>.parquet
     perimetre  : "toutes_revues_openalex" ou "revues_sjr"
-    out_name   : nom des fichiers de sortie (défaut : <classement>_<perimetre>)
+    out_name   : nom des fichiers de sortie (défaut : <nomenclature>_<perimetre>)
     Les autres arguments reprennent config.py.
 
     Renvoie {'fichier', 'nb_articles', 'counts_years', 'par_annee', 'par_discipline'}.
     """
     data_dir = Path(data_dir)
-    out_name = out_name or nom_fichier(classement, perimetre)
+    out_name = out_name or nom_fichier(nomenclature, perimetre)
     sources_file = perimetre_sources(perimetre, data_dir)
     out_dir = data_dir / "top10"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -134,7 +135,7 @@ def compute_top10(classement: str = CLASSEMENT,
     # --- 2. Périmètre + citations ----------------------------------------------
     # Une ligne par article du périmètre : discipline (jointure topic -> discipline
     # de l'étape 3) et nombre de citations (fenêtre ou cumul, voir ci-dessus).
-    # upper(topic_id) : les topics sont écrits 'T10001' dans le fichier de classement.
+    # upper(topic_id) : les topics sont écrits 'T10001' dans le fichier de nomenclature.
     # perimeter_where : types de documents, types de sources, années, et pour le
     # périmètre revues_sjr, seulement les sources appariées à SJR.
     con.execute(f"""
@@ -143,7 +144,7 @@ def compute_top10(classement: str = CLASSEMENT,
                coalesce({cit_expr}, 0)::BIGINT AS nb_citations,
                w.oa_top10
         FROM read_parquet('{data_dir}/works/*.parquet') w
-        JOIN read_parquet('{data_dir}/disciplines/{classement}.parquet') d
+        JOIN read_parquet('{disciplines_path(nomenclature, data_dir)}') d
           ON upper(w.topic_id) = d.topic_id
         WHERE d.discipline_code IS NOT NULL
           AND {perimeter_where(work_types, source_types, annee_min, annee_max, 'w', sources_file)}
@@ -247,7 +248,7 @@ def compute_top10(classement: str = CLASSEMENT,
         ) TO '{f_seuils}' (FORMAT parquet)
     """)
 
-    params = dict(classement=classement, perimetre=perimetre, work_types=list(work_types or []),
+    params = dict(nomenclature_disciplinaire=nomenclature, perimetre=perimetre, work_types=list(work_types or []),
                   source_types=list(source_types or []), annee_min=annee_min,
                   annee_max=annee_max, citation_window=citation_window,
                   top_share=top_share, exclude_uncited=exclude_uncited,

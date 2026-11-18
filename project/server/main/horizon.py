@@ -24,7 +24,7 @@ Fonctions
       ROR ou SIREN...), entities_id_source, entities_name, pays_code (ISO2, comme OpenAlex :
       GB et GR ; outre-mer sous son code propre, ex. RE), rnsr (numero_national_de_structure :
       laboratoires RNSR de la participation française, séparés par ;)
-  rattacher_structures(p)    établissements (ROR) de chaque participation, logique de
+  affiliations.rattacher_structures(p)  (code commun ERC, ANR, prix) établissements (ROR) de chaque participation, logique de
                              scanR (scanr-backend, projects.get_participations_simple) :
       - la structure participante (entities_id : Paysage, ROR ou RNSR), remplacée par son
         successeur Paysage si elle a été fusionnée ou renommée (structure actuelle) ;
@@ -38,24 +38,18 @@ Exemple :
     p = participations(lire_horizon("laureats"), "laureats")
 """
 
-import re
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
 from .config import (HORIZON_COLONNES_EXCLUES, HORIZON_DIR, HORIZON_ODS_LAUREATS,
-                     HORIZON_ODS_SOUMIS, REFERENTIEL_DIR)
-from .referentiel import (charger_correspondance_paysage, charger_successeurs_paysage,
-                          charger_tutelles_rnsr, successeur_final)
+                     HORIZON_ODS_SOUMIS)
+from .common import texte
 from .utils_ods import get_ods_data
 
 JEUX = {"soumis": HORIZON_ODS_SOUMIS, "laureats": HORIZON_ODS_LAUREATS}
 
-# ROR court : 0 + 6 caractères (alphabet Crockford, sans i, l, o, u) + 2 chiffres
-ROR_RE = re.compile(r"^0[a-hj-km-np-tv-z0-9]{6}[0-9]{2}$")
-# Numéro RNSR : année (4 chiffres) + 5 chiffres + lettre de contrôle, ex. 199719338M
-RNSR_RE = re.compile(r"^[0-9]{9}[A-Z]$")
 
 COLONNES_REQUISES = ["project_id", "call_year", "destination_code", "entities_id",
                      "entities_name", "country_code"]
@@ -121,18 +115,13 @@ def pays_iso2(iso3: str, code2: str = None):
     return None
 
 
-def _texte(v):
-    v = str(v).strip() if v is not None and not (isinstance(v, float) and pd.isna(v)) else ""
-    return v or None
-
-
 def participations(df: pd.DataFrame, jeu: str) -> pd.DataFrame:
     """Colonnes normalisées (voir l'en-tête). Une cellule entities_id à plusieurs
     identifiants (séparés par ; ou |) donne une ligne par identifiant."""
     manquantes = [c for c in COLONNES_REQUISES if c not in df.columns]
     if manquantes:
         raise ValueError(f"colonnes absentes du jeu {jeu} : {manquantes} (lues : {list(df.columns)})")
-    col = lambda c: (df[c].map(_texte) if c in df.columns else pd.Series([None] * len(df), index=df.index))
+    col = lambda c: (df[c].map(texte) if c in df.columns else pd.Series([None] * len(df), index=df.index))
     p = pd.DataFrame({
         "jeu": jeu,
         "project_id": col("project_id"),
@@ -162,73 +151,7 @@ def participations(df: pd.DataFrame, jeu: str) -> pd.DataFrame:
     p["participation_id"] = p["participation_id"].fillna(
         p["project_id"] + "|" + p["entities_id"].fillna("") + "|" + rang)
     p = p.assign(entities_id=p["entities_id"].str.split(r"[;|]")).explode("entities_id")
-    p["entities_id"] = p["entities_id"].map(_texte)
+    p["entities_id"] = p["entities_id"].map(texte)
     return p.reset_index(drop=True)
 
 
-def _rnsrs(v) -> list:
-    if not isinstance(v, str):
-        return []
-    return [x for x in (t.strip().upper() for t in re.split(r"[;|,]", v)) if RNSR_RE.match(x)]
-
-
-def rattacher_structures(p: pd.DataFrame, ref_dir: str = REFERENTIEL_DIR, successeurs: bool = True,
-                         tutelles_rnsr: bool = True) -> tuple:
-    """(p, liens) :
-    p      : participations + ligne (numéro de ligne), type_identifiant (ror | paysage | rnsr |
-             inconnu | vide), ror (ROR actuel de la structure participante, ou None),
-             successeur (vrai si la structure a été remplacée par son successeur),
-             nb_tutelles_rnsr (tutelles trouvées par le RNSR, avec un ROR)
-    liens  : (ligne, ror, origine) : un lien par établissement auquel la participation
-             est rattachée ; origine = structure | tutelle_rnsr"""
-    p = p.reset_index(drop=True).copy()
-    p["ligne"] = range(len(p))
-    corresp = charger_correspondance_paysage(ref_dir)
-    p2r = dict(zip(corresp["referentiel_id"], corresp["ror"]))
-    r2p_tous = corresp.groupby("ror")["referentiel_id"].agg(list)
-    r2p = {r: v[0] for r, v in r2p_tous.items() if len(v) == 1}   # ROR -> Paysage, si sans ambiguïté
-    succ = charger_successeurs_paysage(ref_dir) if successeurs else {}
-    tut = charger_tutelles_rnsr(ref_dir) if tutelles_rnsr else pd.DataFrame(columns=["rnsr", "tutelle_id"])
-    tutelles = tut.groupby("rnsr")["tutelle_id"].agg(list).to_dict()
-
-    def ror_actuel(pid):
-        """ROR de la structure Paysage actuelle (successeur), à défaut celui de pid."""
-        fin = successeur_final(pid, succ)
-        return p2r.get(fin) or p2r.get(pid), fin != pid
-
-    rors, types, remplacees, liens, nb_tut = [], [], [], [], []
-    for ligne, i, rn in zip(p["ligne"], p["entities_id"].fillna(""), p["rnsr"]):
-        norm = i.strip().rstrip("/").split("/")[-1]
-        ror, remplace, labos = None, False, _rnsrs(rn)
-        if not i:
-            t = "vide"
-        elif ROR_RE.match(norm.lower()):
-            t, ror = "ror", norm.lower()
-            if ror in r2p:
-                autre, remplace = ror_actuel(r2p[ror])
-                ror = autre if remplace and autre else ror
-                remplace = remplace and bool(autre)
-        elif i in p2r or i in succ:
-            t = "paysage"
-            ror, remplace = ror_actuel(i)
-        elif RNSR_RE.match(i.strip().upper()):
-            t = "rnsr"
-            labos.append(i.strip().upper())
-        else:
-            t = "inconnu"
-        rors.append(ror)
-        types.append(t)
-        remplacees.append(bool(remplace and ror))
-        if ror:
-            liens.append((ligne, ror, "structure"))
-        n = 0
-        for labo in dict.fromkeys(labos):
-            for tid in tutelles.get(labo, []):
-                r, _ = ror_actuel(tid)
-                if r:
-                    liens.append((ligne, r, "tutelle_rnsr"))
-                    n += 1
-        nb_tut.append(n)
-    p["type_identifiant"], p["ror"], p["successeur"], p["nb_tutelles_rnsr"] = types, rors, remplacees, nb_tut
-    liens = pd.DataFrame(liens, columns=["ligne", "ror", "origine"]).drop_duplicates(["ligne", "ror"])
-    return p, liens

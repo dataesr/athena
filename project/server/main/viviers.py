@@ -11,7 +11,7 @@ la France (outre-mer compris, PAYS_FR), les pays de la comparaison ERC (erc_meta
 et ceux de la comparaison bibliométrique (biblio_meta.pays_compares), ou la liste VIVIER_PAYS :
 lancer erc.compute_erc() et indicators.compute_indicators() avant l'extraction.
 
-Deux étapes, après l'étape 4 (top10/) et de préférence l'étape 6 (indicateurs/<classement>_entites) :
+Deux étapes, après l'étape 4 (top10/) et de préférence l'étape 6 (indicateurs/<nomenclature>_entites) :
 
 1. extraire_auteurs()   (long : relit les works du snapshot sur S3, de l'ordre de l'étape 1 ;
    reprise possible, fichier par fichier)
@@ -73,25 +73,26 @@ import json
 from pathlib import Path
 
 from .common import DOMAINES_NOMS, PAYS_NOMS, connect
-from .config import (CLASSEMENT, DATA_DIR, ERC_DIR, ETAB_COUNTRIES, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR, SNAPSHOT, TOP_SHARE,
+from .config import (NOMENCLATURE_DISCIPLINAIRE, DATA_DIR, ERC_DIR, ETAB_COUNTRIES, ETAB_EXCLUDE, LINEAGE_CUTS, PAYS_FR, SNAPSHOT, TOP_SHARE,
                      VIVIER_ANNEE_FIN, VIVIER_PART_MIN_PAYS, VIVIER_PAYS, VIVIER_ANNEES_RECENTES, VIVIER_ANNEE_DEBUT,
                      VIVIER_LIVRES_DOMAINES, VIVIER_LIVRES_TYPES, VIVIER_MAX_AUTEURS_PAR_ARTICLE, VIVIER_MIN_PUBLICATIONS,
                      VIVIER_MIN_PUBLICATIONS_RECENTES, VIVIER_PUB_TYPES,
                      VIVIER_MIN_AUTEUR_PRINCIPAL, VIVIER_MIN_TOP10, VIVIER_PART_MIN_ETABLISSEMENT,
                      VIVIER_PERIMETRE, VIVIER_PUB_ANNEE_MIN, VIVIER_SEUIL_FRACTION_TOP10, VIVIERS_DIR)
 from .publications_auteurs import extraire_publications, poids_disciplines
+from .disciplines import disciplines_path
 
 
 def pays_viviers(erc_dir: str = ERC_DIR, pays=VIVIER_PAYS, data_dir: str = DATA_DIR,
-                 classement: str = CLASSEMENT, verbose: bool = True) -> list:
+                 nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, verbose: bool = True) -> list:
     """Pays des viviers : liste imposée (VIVIER_PAYS), sinon FR + pays de la comparaison ERC
     (erc_meta.pays_compares) + pays de la comparaison bibliométrique (biblio_meta.pays_compares,
-    lus dans indicateurs/<classement>_params.json). FR toujours compris (outre-mer : PAYS_FR,
+    lus dans indicateurs/<nomenclature>_params.json). FR toujours compris (outre-mer : PAYS_FR,
     regroupé sous FR)."""
     if pays is None:
         from .erc import pays_compares_erc
         erc = pays_compares_erc(erc_dir)
-        f_ind = Path(data_dir) / "indicateurs" / f"{classement}_params.json"
+        f_ind = Path(data_dir) / "indicateurs" / f"{nomenclature}_params.json"
         p_ind = json.loads(f_ind.read_text()) if f_ind.exists() else {}
         biblio = set(p_ind.get("pays_compares") or []) | set(p_ind.get("pays_effectifs") or [])
         if verbose and not erc:
@@ -259,7 +260,7 @@ def _textes_publics(*, perimetre, types, debut, fin, debut_recent, min_publicati
 # --- 2. Calcul -------------------------------------------------------------------------------
 
 def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
-                    classement: str = CLASSEMENT, perimetre: str = VIVIER_PERIMETRE,
+                    nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, perimetre: str = VIVIER_PERIMETRE,
                     annee_debut: int = VIVIER_ANNEE_DEBUT, annee_fin: int = VIVIER_ANNEE_FIN,
                     min_publications: int = VIVIER_MIN_PUBLICATIONS,
                     annees_recentes: int = VIVIER_ANNEES_RECENTES,
@@ -282,9 +283,9 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
     auteurs = viviers_dir / "auteurs"
     if not any(auteurs.glob("*.parquet")):
         raise FileNotFoundError(f"{auteurs} vide : lancer extraire_auteurs()")
-    f_top10, params10 = _fichier_top10(data_dir, classement, perimetre)
-    f_disc = data_dir / "disciplines" / f"{classement}.parquet"
-    f_ent = data_dir / "indicateurs" / f"{classement}_entites.parquet"
+    f_top10, params10 = _fichier_top10(data_dir, nomenclature, perimetre)
+    f_disc = disciplines_path(nomenclature, data_dir)
+    f_ent = data_dir / "indicateurs" / f"{nomenclature}_entites.parquet"
     debut, debut_recent = int(annee_debut), int(annee_fin) - int(annees_recentes) + 1
     if debut > int(annee_fin) or debut_recent < debut:
         raise ValueError(f"période {debut}-{annee_fin} incohérente (annees_recentes={annees_recentes})")
@@ -515,10 +516,10 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         "annee_debut": debut,
         "annee_fin": int(annee_fin),
         "max_auteurs_par_article": max_auteurs,
-        "classement_disciplines": classement,
+        "nomenclature_disciplinaire": nomenclature,
         "discipline_article": "topic principal OpenAlex -> panel ERC ; articles sans panel exclus",
         "exclusions": ["documents rétractés", "paratexte (éditoriaux, sommaires...)",
-                       "sans topic principal ou topic hors classement"]
+                       "sans topic principal ou topic hors nomenclature"]
                       + ([f"plus de {max_auteurs} auteurs (grandes collaborations)"] if max_auteurs else []),
         "signatures_lues": "seules les signatures avec une affiliation dans les pays lus (champ pays) ; "
                            "les articles d'un chercheur publiés depuis un autre pays ne comptent pas",
@@ -566,7 +567,7 @@ def compute_viviers(viviers_dir: str = VIVIERS_DIR, data_dir: str = DATA_DIR,
         livres_types=livres_types, livres_domaines=list(livres_domaines or []))
     meta = {
         "date_calcul": dt.date.today().isoformat(),
-        "classement": classement,
+        "nomenclature_disciplinaire": nomenclature,
         "perimetre": perimetre,
         "publications": publications,
         "pays": params_extraction.get("pays") or ["FR"],

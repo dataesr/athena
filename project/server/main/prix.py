@@ -65,9 +65,9 @@ import pandas as pd
 
 from .config import (DATA_DIR, PRIX_ANNEE_MIN, PRIX_COLONNES_EXCLUES, PRIX_DIR, PRIX_GROUPES,
                      PRIX_ODS, PRIX_PUBLIER_LAUREATS, PRIX_RATTACHEMENT_LIGNEE, REFERENTIEL_DIR)
-from .erc import tutelles_ror
-from .horizon import pays_iso2, rattacher_structures
-from .referentiel import charger_correspondance_paysage
+from .affiliations import rattacher_structures, tutelles_ror
+from .common import plus_frequent, texte
+from .programmes import nommer_entites, non_rattaches as non_rattaches_programme
 from .utils_ods import get_ods_data
 
 ENTITE_NATIONALE = "FR"
@@ -103,14 +103,9 @@ def lire_prix(prix_dir: str = PRIX_DIR, telecharger: bool = True,
 
 # --- Normalisation -----------------------------------------------------------------------
 
-def _texte(v):
-    v = str(v).strip() if v is not None and not (isinstance(v, float) and pd.isna(v)) else ""
-    return v or None
-
-
 def _liste(v) -> list:
     """Valeurs séparées par ; (sans vides, ordre conservé)."""
-    v = _texte(v)
+    v = texte(v)
     return [x.strip() for x in v.split(";") if x.strip()] if v else []
 
 
@@ -123,7 +118,7 @@ def _annee(annee, prix_annee):
 
 
 def _genre(v):
-    v = (_texte(v) or "").lower()
+    v = (texte(v) or "").lower()
     return {"femme": "femme", "homme": "homme"}.get(v)
 
 
@@ -135,7 +130,7 @@ def laureats(df: pd.DataFrame) -> pd.DataFrame:
     manquantes = [c for c in COLONNES_REQUISES if c not in df.columns]
     if manquantes:
         raise ValueError(f"colonnes absentes du jeu des prix : {manquantes} (lues : {list(df.columns)})")
-    col = lambda c: (df[c].map(_texte) if c in df.columns else pd.Series([None] * len(df), index=df.index))
+    col = lambda c: (df[c].map(texte) if c in df.columns else pd.Series([None] * len(df), index=df.index))
     lst = lambda c: (df[c].map(_liste) if c in df.columns else pd.Series([[]] * len(df), index=df.index))
     l = pd.DataFrame({
         "laureat_id": col("prix_laureat_identifiant"),
@@ -166,7 +161,7 @@ def laureats(df: pd.DataFrame) -> pd.DataFrame:
 def catalogue_prix(df: pd.DataFrame) -> pd.DataFrame:
     """Une ligne par prix : prix_id, libelle, libelle_francais, libelle_anglais,
     categories, porteurs_ids, porteurs_libelles (listes), site_internet, wikidata."""
-    col = lambda c: (df[c].map(_texte) if c in df.columns else pd.Series([None] * len(df), index=df.index))
+    col = lambda c: (df[c].map(texte) if c in df.columns else pd.Series([None] * len(df), index=df.index))
     p = pd.DataFrame({
         "prix_id": col("prix_identifiant"), "libelle": col("prix_libelle"),
         "libelle_francais": col("prix_libelle_francais"), "libelle_anglais": col("prix_libelle_anglais"),
@@ -175,11 +170,7 @@ def catalogue_prix(df: pd.DataFrame) -> pd.DataFrame:
         "wikidata": col("prix_identifiant_wikidata"),
     }).dropna(subset=["prix_id"])
 
-    def _premier(s):
-        s = s.dropna()
-        return s.value_counts().index[0] if len(s) else None
-
-    cat = p.groupby("prix_id").agg({c: _premier for c in p.columns if c != "prix_id"}).reset_index()
+    cat = p.groupby("prix_id").agg({c: plus_frequent for c in p.columns if c != "prix_id"}).reset_index()
     for c in ["categories", "porteurs_ids", "porteurs_libelles"]:
         cat[c] = cat[c].map(_liste)
     cat["site_internet"] = cat["site_internet"].map(lambda v: _liste(v)[0] if _liste(v) else None)
@@ -199,7 +190,7 @@ def groupes_prix(cat: pd.DataFrame, groupes=PRIX_GROUPES) -> dict:
 
 def structures_a_rattacher(l: pd.DataFrame) -> pd.DataFrame:
     """Une ligne par (lauréat, identifiant de structure), au format de
-    horizon.rattacher_structures : laureat_id, entities_id, entities_name, rnsr. Les RNSR du
+    affiliations.rattacher_structures : laureat_id, entities_id, entities_name, rnsr. Les RNSR du
     lauréat sont sur sa première ligne ; un lauréat sans structure garde une ligne vide."""
     lignes = []
     for r in l.itertuples():
@@ -325,17 +316,11 @@ def compute_prix(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR, ref_dir: st
     con.execute(f"COPY pers TO '{out / 'prix_personnes.parquet'}' (FORMAT parquet)")
 
     # Entités : nom et pays (référentiel Paysage, sinon libellé de la structure)
-    corresp = charger_correspondance_paysage(ref_dir)
-    c1 = corresp.drop_duplicates("ror").set_index("ror")
-    noms_ref, pays_ref = c1["nom"].to_dict(), c1["pays_iso3"].map(lambda v: pays_iso2(_texte(v))).to_dict()
-    noms_src = (liens[liens["origine"] == "structure"].dropna(subset=["entities_name"])
-                .groupby("ror")["entities_name"].agg(lambda v: v.value_counts().index[0]).to_dict())
+    # nom (Paysage, sinon libellé de la source) et pays (Paysage) : règle commune
     tot = (eff.groupby(["entite_type", "entite_id"])["nb_laureats"].sum().reset_index())
-    etab = tot["entite_type"] == "etablissement"
-    tot["nom"] = [noms_ref.get(i) or noms_src.get(i) or i if e else "France"
-                  for i, e in zip(tot["entite_id"], etab)]
-    tot["pays_code"] = tot["entite_id"].map(pays_ref).where(etab, ENTITE_NATIONALE)
+    tot = nommer_entites(tot, liens, lien, ref_dir, pays="referentiel")
     tot = tot[["entite_id", "entite_type", "nom", "pays_code", "nb_laureats"]]
+    etab = tot["entite_type"] == "etablissement"
     con.register("tot", tot)
     con.execute(f"COPY tot TO '{out / 'prix_entites.parquet'}' (FORMAT parquet)")
     con.close()
@@ -344,10 +329,7 @@ def compute_prix(prix_dir: str = PRIX_DIR, data_dir: str = DATA_DIR, ref_dir: st
     s_ok = set(liens["ligne"])
     nr = s[~s["ligne"].isin(s_ok) & s["entities_id"].notna()]
     nr = nr[~nr["laureat_id"].isin(set(etabs["laureat_id"]))]
-    non_rattaches = (nr.groupby(["entities_id", "type_identifiant"], dropna=False)
-                     .agg(nom=("entities_name", lambda v: v.dropna().iloc[0] if v.notna().any() else None),
-                          nb_laureats=("laureat_id", "nunique"))
-                     .reset_index().sort_values("nb_laureats", ascending=False))
+    non_rattaches = non_rattaches_programme(nr, "laureat_id", "nb_laureats", nom="premier")
     non_rattaches.to_csv(out / "prix_non_rattaches.csv", sep=";", index=False, encoding="utf-8")
 
     # Méta

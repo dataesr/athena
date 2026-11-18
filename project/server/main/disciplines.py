@@ -3,12 +3,12 @@ disciplines.py
 ==============
 Étape 3 : classer chaque topic OpenAlex dans une discipline.
 
-Ce n'est qu'un classement : aucun filtre de périmètre (type de document,
+Ce n'est qu'un rattachement aux disciplines : aucun filtre de périmètre (type de document,
 type de source...) n'est appliqué ici. Le contrôle de couverture porte sur
 tout ce qui a été extrait à l'étape 1.
 
 Format générique de sortie, quel que soit le regroupement fourni :
-  <data_dir>/disciplines/<classement>.parquet
+  <data_dir>/disciplines/<nomenclature>.parquet
       topic_id, discipline_code, discipline_nom, domaine_code, doute,
       discipline_code_alternative
   -> domaine_code = lettres en tête du code (ERC : LS, PE, SH)
@@ -23,8 +23,8 @@ Fichiers acceptés en entrée :
 Exemples :
     from project.server.main.disciplines import build_disciplines
     res = build_disciplines()                                   # ERC, valeurs de config.py
-    res = build_disciplines(classement="erc_alt", use_alternative=True)  # test de sensibilité
-    res = build_disciplines("topics/mon_regroupement.csv", classement="ost",
+    res = build_disciplines(nomenclature="panel_erc_alt", use_alternative=True)  # test de sensibilité
+    res = build_disciplines("topics/mon_regroupement.csv", nomenclature="ost",
                             code_col="code", name_col="libelle")
 """
 
@@ -34,7 +34,7 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-from .config import DATA_DIR, CLASSEMENT, TOPICS_PATH
+from .config import DATA_DIR, NOMENCLATURE_DISCIPLINAIRE, TOPICS_PATH
 
 _VRAI = {"true", "1", "oui", "yes", "vrai"}
 
@@ -102,8 +102,8 @@ def load_mapping(path: str = TOPICS_PATH,
     return out.drop_duplicates("topic_id").reset_index(drop=True)
 
 
-def check_coverage(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) -> dict:
-    """Confronte le classement aux articles extraits (étape 1).
+def check_coverage(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR) -> dict:
+    """Confronte la nomenclature aux articles extraits (étape 1).
 
     Renvoie :
       nb_articles, nb_articles_classes, pct_classes   couverture des articles
@@ -122,14 +122,14 @@ def check_coverage(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) -> di
     """)
     con.execute(f"""
         CREATE TEMP TABLE m AS
-        SELECT * FROM read_parquet('{data_dir}/disciplines/{classement}.parquet')
+        SELECT * FROM read_parquet('{disciplines_path(nomenclature, data_dir)}')
         WHERE discipline_code IS NOT NULL
     """)
 
-    # Couverture : LEFT JOIN des articles sur le classement ; count(m.topic_id) ne
+    # Couverture : LEFT JOIN des articles sur la nomenclature ; count(m.topic_id) ne
     # compte que les articles dont le topic a trouvé une discipline (NULL sinon).
     # ANTI JOIN (ci-dessous) : les lignes de gauche SANS correspondance à droite,
-    # c'est-à-dire les topics des articles absents du classement, et inversement.
+    # c'est-à-dire les topics des articles absents de la nomenclature, et inversement.
     n, n_ok = con.execute("""
         SELECT count(*), count(m.topic_id)
         FROM w LEFT JOIN m USING (topic_id)
@@ -166,17 +166,17 @@ def check_coverage(classement: str = CLASSEMENT, data_dir: str = DATA_DIR) -> di
 
 
 def build_disciplines(mapping_path: str = TOPICS_PATH,
-                      classement: str = CLASSEMENT,
+                      nomenclature: str = NOMENCLATURE_DISCIPLINAIRE,
                       data_dir: str = DATA_DIR,
                       verbose: bool = True,
                       **load_kwargs) -> dict:
-    """Charge le classement, l'écrit dans <data_dir>/disciplines/<classement>.parquet
+    """Charge la nomenclature, l'écrit dans <data_dir>/disciplines/<nomenclature>.parquet
     et renvoie les contrôles de couverture (voir check_coverage).
     load_kwargs : arguments de load_mapping (code_col, name_col, use_alternative...)."""
     mapping = load_mapping(mapping_path, **load_kwargs)
     out_dir = Path(data_dir) / "disciplines"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f"{classement}.parquet"
+    out_file = disciplines_path(nomenclature, data_dir)
     # écriture via DuckDB (évite d'ajouter pyarrow aux dépendances)
     for c in ("discipline_code_alternative", "domaine_code"):
         mapping[c] = mapping[c].astype("string")
@@ -189,10 +189,10 @@ def build_disciplines(mapping_path: str = TOPICS_PATH,
            "n_sans_code": int(mapping["discipline_code"].isna().sum()),
            "n_disciplines": mapping["discipline_code"].nunique(),
            "n_doute": int(mapping["doute"].sum())}
-    res.update(check_coverage(classement, data_dir))
+    res.update(check_coverage(nomenclature, data_dir))
 
     if verbose:
-        print(f"{classement} : {res['n_topics']} topics -> {res['n_disciplines']} disciplines "
+        print(f"{nomenclature} : {res['n_topics']} topics -> {res['n_disciplines']} disciplines "
               f"({res['n_doute']} topics en doute, {res['n_sans_code']} sans code) -> {out_file}")
         print(f"Articles classés : {res['nb_articles_classes']:,} / {res['nb_articles']:,} "
               f"({res['pct_classes']} %)")
@@ -206,3 +206,24 @@ def build_disciplines(mapping_path: str = TOPICS_PATH,
         print()
         print(res["par_discipline"].to_string(index=False))
     return res
+
+
+def disciplines_path(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR) -> Path:
+    """Table topic -> discipline de l'étape 3 : seul endroit où son chemin est construit."""
+    return Path(data_dir) / "disciplines" / f"{nomenclature}.parquet"
+
+
+def ajouter_disciplines(df, nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR,
+                        col_topic: str = "topic_id"):
+    """Ajoute discipline_code, discipline_nom, domaine_code, doute à df (colonne col_topic,
+    'T10001' ou URL OpenAlex) : règle commune topic -> discipline (articles, awards, projets)."""
+    f = disciplines_path(nomenclature, data_dir)
+    if not f.exists():
+        raise FileNotFoundError(f"{f} absent : lancer build_disciplines (étape 3)")
+    d = (duckdb.sql(f"SELECT topic_id, discipline_code, discipline_nom, domaine_code, doute "
+                    f"FROM read_parquet('{f}') WHERE discipline_code IS NOT NULL").df())
+    cle = df[col_topic].astype("string").str.extract(r"([^/]+)$")[0].str.upper()
+    out = df.drop(columns=[c for c in d.columns if c != "topic_id" and c in df.columns]).assign(_t=cle.values)
+    out = out.merge(d.rename(columns={"topic_id": "_t"}), on="_t", how="left").drop(columns="_t")
+    out["doute"] = out["doute"].fillna(False).astype(bool)
+    return out
