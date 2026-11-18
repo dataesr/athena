@@ -16,6 +16,7 @@ from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
 from project.server.main.pipeline import step_anr, step_awards, step_horizon_topics, step_projets_scanr
 from project.server.main.indicators import compute_indicators
+from project.server.main.startups import compute_startups
 from project.server.main.logger import get_logger
 from project.server.main.openalex_s3 import diagnose_daily
 from project.server.main.projects import generate_projects
@@ -45,9 +46,9 @@ logger = get_logger(__name__)
 ETAPES = ["diagnose_daily", "referentiel", "tutelles_rnsr", "extract_snapshot", "summary",
           "check_duplicates", "disciplines", "top_journals", "top10", "erc", "prix", "indicators",
           "publications", "prix_disciplines", "viviers", "copublications", "awards",
-          "projets_scanr", "horizon_topics", "anr", "publish", "publish_mongo", "dashboard"]
+          "projets_scanr", "horizon_topics", "anr", "startups", "publish", "publish_mongo", "dashboard"]
 # Lancées seulement si demandées explicitement dans "steps" (contrôles, chargement en base)
-HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "awards", "projets_scanr", "horizon_topics", "anr", "publish_mongo"]
+HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "awards", "projets_scanr", "horizon_topics", "anr", "startups", "publish_mongo"]
 PAR_DEFAUT = [e for e in ETAPES if e not in HORS_DEFAUT]
 
 
@@ -381,6 +382,14 @@ def _compute(args: dict) -> dict:
 #          anr_non_rattaches.csv, anr_controle_scanr.csv, anr_meta.json
 # ---------------------------------------------------------------------------
     etape("anr", step_anr)
+
+# 6f. Startups : créations annuelles de startups ESR (facultatif)
+#     Télécharge le jeu public fr-esr-startup-esr-france et résout les SIRET
+#     liés vers scanR organizations-v2. Les données individuelles restent locales.
+#     Écrit : innovation/startups_effectifs.parquet, startups_entites.parquet,
+#             startups_meta.json et startups_non_rattaches.parquet
+# ---------------------------------------------------------------------------
+    etape("startups", compute_startups)
 
 # ---------------------------------------------------------------------------
 # 7. Publication pour l'application tableaux (une à deux minutes)

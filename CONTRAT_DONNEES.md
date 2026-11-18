@@ -1,4 +1,4 @@
-# Contrat de données — bibliométrie, bourses ERC, prix et viviers (application tableaux)
+# Contrat de données — bibliométrie, bourses ERC, prix, viviers et innovation (application tableaux)
 
 Ce document décrit les données produites par la chaîne Python (`project/server/main/`)
 pour l'application [tableaux](https://github.com/dataesr/tableaux). Il fait foi pour
@@ -13,15 +13,15 @@ MongoDB et dans le code du front.
 - Les étapes 1 et 2 (extraction OpenAlex) gardent les noms d'OpenAlex (`work_id`,
   `year`, `inst_id`…). Les données publiées n'en contiennent aucun.
 
-| Terme | Sens |
-|---|---|
-| `entite_id` | ROR court (`02feahw73`), code ISO du pays (`FR`), ou `MONDE` |
-| `entite_type` | `monde`, `pays` ou `etablissement` |
-| `perimetre` | ensemble d'articles de référence (« le monde ») : `toutes_revues_openalex` ou `revues_sjr` |
+| Terme                        | Sens                                                                                                                                                           |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entite_id`                  | ROR court (`02feahw73`), code ISO du pays (`FR`), ou `MONDE`                                                                                                   |
+| `entite_type`                | `monde`, `pays` ou `etablissement`                                                                                                                             |
+| `perimetre`                  | ensemble d'articles de référence (« le monde ») : `toutes_revues_openalex` ou `revues_sjr`                                                                     |
 | `nomenclature_disciplinaire` | nomenclature des disciplines (topic OpenAlex → discipline) : `panel_erc` (panels ERC) aujourd'hui. « erc » seul désigne uniquement les données des bourses ERC |
-| `annee_publication` | année de parution de l'article |
-| `discipline_code` | `LS1`…`LS9`, `PE1`…`PE11`, `SH1`…`SH8` |
-| `domaine_code` | `LS`, `PE`, `SH` |
+| `annee_publication`          | année de parution de l'article                                                                                                                                 |
+| `discipline_code`            | `LS1`…`LS9`, `PE1`…`PE11`, `SH1`…`SH8`                                                                                                                         |
+| `domaine_code`               | `LS`, `PE`, `SH`                                                                                                                                               |
 
 ## 2. Les collections
 
@@ -39,30 +39,30 @@ plus `manifest.json`.
 Une ligne par entité. C'est la clé de jointure de tous les onglets (bibliométrie,
 financements, innovation) : toujours `entite_id`.
 
-| Champ | Type | Contenu |
-|---|---|---|
-| `entite_id` | texte | ROR court, code ISO ou `MONDE` |
-| `entite_type` | texte | `monde`, `pays`, `etablissement` |
-| `nom` | texte | nom affiché : fichier de corrections > référentiel (Paysage ou scanR) > OpenAlex |
-| `nom_openalex` | texte | nom dans OpenAlex |
-| `sigle` | texte | sigle du référentiel |
-| `categorie` | texte | catégorie du référentiel (Université, Organisme de recherche…) |
-| `groupe_etablissement` | texte ou null | groupe de comparaison des établissements français : `universites`, `organismes`, `sante`, `ecoles-ingenieurs`, `grands-etablissements`, `commerce-iep`, `prive`, `autres` (mêmes codes que `GROUPES_ETABLISSEMENTS` de tableaux). Déduit de **toutes** les catégories Paysage (typologie universitaire, habilitation CTI…), pas seulement de `categorie`, qui est souvent un statut (« Grand établissement » pour l'Université de Lorraine) ; la colonne `groupe` du fichier de corrections l'emporte. null hors établissements français. À utiliser à la place de `categorie` pour regrouper les établissements comparés |
-| `ville` | texte | ville du référentiel |
-| `referentiel_id` | texte | identifiant Paysage (ou scanR) |
-| `pays_code` | texte | pays de l'établissement (ou du pays lui-même) |
-| `type_openalex` | texte | `education`, `facility`, `government`… |
-| `nb_articles` | entier | taille : articles du premier périmètre, toute la période (0 pour une entité présente seulement dans les données ERC) |
-| `nb_candidatures_erc` | entier ou null | candidatures ERC, toutes années (null : aucune) |
-| `nb_laureats_prix` | entier ou null | lauréats de prix (`prix_effectifs`, tous prix, toutes années ; null : aucun). Aucune entité n'est ajoutée au registre par les prix |
-| `pays_compare` | booléen | pays retenu pour la comparaison internationale **bibliométrique** (`biblio_meta.pays_compares`) |
-| `pays_compare_erc` | booléen | pays retenu pour la comparaison internationale **ERC** (`erc_meta.pays_compares`) |
-| `tutelles` | liste | ROR des tutelles (lignée OpenAlex) |
-| `nb_structures_rattachees` | entier | structures dont les articles comptent pour l'entité |
-| `alias` | liste | termes de recherche : sigles OpenAlex, sigle calculé, alias du fichier de configuration |
-| `recherche` | texte | nom + ROR + alias + ville, minuscules, sans accents : filtre « contient » côté front |
-| `selecteur` | booléen | proposé dans le sélecteur principal : périmètre du référentiel (structures de tête actives des catégories retenues) qui ont des articles, corrigé par le fichier `config/etablissements_dashboard.csv`. Les entités présentes seulement dans les données ERC n'y sont jamais. |
-| `ordre_selecteur` | entier ou null | ordre quand la recherche est vide (France = -1) |
+| Champ                      | Type           | Contenu                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entite_id`                | texte          | ROR court, code ISO ou `MONDE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `entite_type`              | texte          | `monde`, `pays`, `etablissement`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `nom`                      | texte          | nom affiché : fichier de corrections > référentiel (Paysage ou scanR) > OpenAlex                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `nom_openalex`             | texte          | nom dans OpenAlex                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `sigle`                    | texte          | sigle du référentiel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `categorie`                | texte          | catégorie du référentiel (Université, Organisme de recherche…)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `groupe_etablissement`     | texte ou null  | groupe de comparaison des établissements français : `universites`, `organismes`, `sante`, `ecoles-ingenieurs`, `grands-etablissements`, `commerce-iep`, `prive`, `autres` (mêmes codes que `GROUPES_ETABLISSEMENTS` de tableaux). Déduit de **toutes** les catégories Paysage (typologie universitaire, habilitation CTI…), pas seulement de `categorie`, qui est souvent un statut (« Grand établissement » pour l'Université de Lorraine) ; la colonne `groupe` du fichier de corrections l'emporte. null hors établissements français. À utiliser à la place de `categorie` pour regrouper les établissements comparés |
+| `ville`                    | texte          | ville du référentiel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `referentiel_id`           | texte          | identifiant Paysage (ou scanR)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `pays_code`                | texte          | pays de l'établissement (ou du pays lui-même)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `type_openalex`            | texte          | `education`, `facility`, `government`…                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `nb_articles`              | entier         | taille : articles du premier périmètre, toute la période (0 pour une entité présente seulement dans les données ERC)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `nb_candidatures_erc`      | entier ou null | candidatures ERC, toutes années (null : aucune)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `nb_laureats_prix`         | entier ou null | lauréats de prix (`prix_effectifs`, tous prix, toutes années ; null : aucun). Aucune entité n'est ajoutée au registre par les prix                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `pays_compare`             | booléen        | pays retenu pour la comparaison internationale **bibliométrique** (`biblio_meta.pays_compares`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `pays_compare_erc`         | booléen        | pays retenu pour la comparaison internationale **ERC** (`erc_meta.pays_compares`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `tutelles`                 | liste          | ROR des tutelles (lignée OpenAlex)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `nb_structures_rattachees` | entier         | structures dont les articles comptent pour l'entité                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `alias`                    | liste          | termes de recherche : sigles OpenAlex, sigle calculé, alias du fichier de configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `recherche`                | texte          | nom + ROR + alias + ville, minuscules, sans accents : filtre « contient » côté front                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `selecteur`                | booléen        | proposé dans le sélecteur principal : périmètre du référentiel (structures de tête actives des catégories retenues) qui ont des articles, corrigé par le fichier `config/etablissements_dashboard.csv`. Les entités présentes seulement dans les données ERC n'y sont jamais.                                                                                                                                                                                                                                                                                                                                             |
+| `ordre_selecteur`          | entier ou null | ordre quand la recherche est vide (France = -1)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### `biblio_effectifs` — la table principale
 
@@ -77,14 +77,14 @@ comparaison bibliométrique (`entites.pays_compare` inchangé). Pour cela, `erc.
 est lancé avant `indicators.compute_indicators()` ; `publish()` signale tout pays de
 `erc_meta.pays_compares` absent des effectifs.
 
-| Champ | Type | Contenu |
-|---|---|---|
-| `perimetre`, `nomenclature_disciplinaire`, `entite_type`, `entite_id`, `annee_publication`, `discipline_code` | | clés |
-| `nb_articles` | entier | articles de l'entité |
-| `nb_articles_top10_cites` | décimal | articles dans le top 10 % des plus cités de la discipline et de l'année, en équivalent-articles (méthode de Waltman et Schreiber) |
-| `nb_articles_revues_tete_disciplinaires` | entier | articles parus dans une des 10 revues de tête de leur discipline |
-| `nb_articles_revues_tete_multidisciplinaires` | entier | articles parus dans une revue multidisciplinaire de tête (Nature, Science…) |
-| `influence_provisoire` | booléen | fenêtre de citation pas encore close |
+| Champ                                                                                                         | Type    | Contenu                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `perimetre`, `nomenclature_disciplinaire`, `entite_type`, `entite_id`, `annee_publication`, `discipline_code` |         | clés                                                                                                                              |
+| `nb_articles`                                                                                                 | entier  | articles de l'entité                                                                                                              |
+| `nb_articles_top10_cites`                                                                                     | décimal | articles dans le top 10 % des plus cités de la discipline et de l'année, en équivalent-articles (méthode de Waltman et Schreiber) |
+| `nb_articles_revues_tete_disciplinaires`                                                                      | entier  | articles parus dans une des 10 revues de tête de leur discipline                                                                  |
+| `nb_articles_revues_tete_multidisciplinaires`                                                                 | entier  | articles parus dans une revue multidisciplinaire de tête (Nature, Science…)                                                       |
+| `influence_provisoire`                                                                                        | booléen | fenêtre de citation pas encore close                                                                                              |
 
 Index : `(entite_id, perimetre, nomenclature_disciplinaire, annee_publication, discipline_code)`.
 
@@ -94,12 +94,12 @@ Publiée seulement si `PUBLIER_COPUBLICATIONS = True` (config.py, défaut `False
 
 Une ligne par `perimetre` × `entite_id` × `partenaire_id` × `annee_publication` × `discipline_code`.
 
-| Champ | Type | Contenu |
-|---|---|---|
-| `entite_type`, `entite_id` | | entité (pays retenu ou établissement) |
-| `partenaire_type`, `partenaire_id` | | `pays` (code ISO) ou `etablissement` (ROR) |
-| `nb_articles_copublies` | entier | articles cosignés par l'entité et le partenaire |
-| `nb_articles_copublies_top10_cites` | décimal | dont dans le top 10 % des plus cités |
+| Champ                               | Type    | Contenu                                         |
+| ----------------------------------- | ------- | ----------------------------------------------- |
+| `entite_type`, `entite_id`          |         | entité (pays retenu ou établissement)           |
+| `partenaire_type`, `partenaire_id`  |         | `pays` (code ISO) ou `etablissement` (ROR)      |
+| `nb_articles_copublies`             | entier  | articles cosignés par l'entité et le partenaire |
+| `nb_articles_copublies_top10_cites` | décimal | dont dans le top 10 % des plus cités            |
 
 Règles : pour un établissement, son propre pays n'est pas un partenaire. Deux
 établissements ne sont partenaires sur un article que si chacun y a une affiliation
@@ -145,19 +145,19 @@ Couverture : appels **Horizon Europe (2021 et après)**. Les appels Horizon 2020
 dans ces jeux. Les années dont les résultats ne sont pas tous publiés sont listées dans
 `erc_meta.annees_provisoires`.
 
-| Champ | Type | Contenu |
-|---|---|---|
-| `entite_type`, `entite_id` | | `monde`, `pays` (ISO2, outre-mer sous `FR`), `etablissement` (ROR court) |
-| `annee_appel` | entier | année de l'appel ERC |
-| `discipline_code` | texte ou null | panel ERC (`panel_code` de la source), mêmes codes que `biblio_disciplines` ; null quand la source n'a pas de panel (voir ci-dessous) |
-| `type_bourse` | texte | code ERC du type de bourse (`destination_code`, en majuscules : `SyG` → `SYG`), voir ci-dessous |
-| `nb_candidatures` | entier | projets évalués (`project_id` distincts du jeu des soumis) déposés dans l'entité |
-| `nb_candidatures_retenues` | entier | dont projets financés (`project_id` présent chez les lauréats), où que le projet soit signé |
-| `nb_laureats` | entier | projets financés (`project_id` distincts du jeu des lauréats) **signés** dans l'entité ; pour `MONDE`, chaque projet financé une fois |
-| `nb_laureats_arrivees` | entier | lauréats signés dans l'entité, non déposés dans l'entité ; pour `MONDE` : lauréats absents du jeu des soumis (0 attendu) |
-| `nb_laureats_departs` | entier | candidatures retenues déposées dans l'entité, signées dans une autre (0 pour `MONDE`) |
-| `nb_pi_candidats` | entier | porteurs (lignes `erc_role = "PI"`) des projets évalués, rattachés à l'entité |
-| `nb_pi_laureats` | entier | porteurs des projets financés, rattachés à l'entité |
+| Champ                      | Type          | Contenu                                                                                                                               |
+| -------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `entite_type`, `entite_id` |               | `monde`, `pays` (ISO2, outre-mer sous `FR`), `etablissement` (ROR court)                                                              |
+| `annee_appel`              | entier        | année de l'appel ERC                                                                                                                  |
+| `discipline_code`          | texte ou null | panel ERC (`panel_code` de la source), mêmes codes que `biblio_disciplines` ; null quand la source n'a pas de panel (voir ci-dessous) |
+| `type_bourse`              | texte         | code ERC du type de bourse (`destination_code`, en majuscules : `SyG` → `SYG`), voir ci-dessous                                       |
+| `nb_candidatures`          | entier        | projets évalués (`project_id` distincts du jeu des soumis) déposés dans l'entité                                                      |
+| `nb_candidatures_retenues` | entier        | dont projets financés (`project_id` présent chez les lauréats), où que le projet soit signé                                           |
+| `nb_laureats`              | entier        | projets financés (`project_id` distincts du jeu des lauréats) **signés** dans l'entité ; pour `MONDE`, chaque projet financé une fois |
+| `nb_laureats_arrivees`     | entier        | lauréats signés dans l'entité, non déposés dans l'entité ; pour `MONDE` : lauréats absents du jeu des soumis (0 attendu)              |
+| `nb_laureats_departs`      | entier        | candidatures retenues déposées dans l'entité, signées dans une autre (0 pour `MONDE`)                                                 |
+| `nb_pi_candidats`          | entier        | porteurs (lignes `erc_role = "PI"`) des projets évalués, rattachés à l'entité                                                         |
+| `nb_pi_laureats`           | entier        | porteurs des projets financés, rattachés à l'entité                                                                                   |
 
 Deux modes de comptage, au même grain : **en projets** (`nb_candidatures`, `nb_laureats`, par
 défaut) ou **en porteurs** (`nb_pi_candidats`, `nb_pi_laureats`). Ils ne diffèrent que pour
@@ -197,16 +197,16 @@ listées dans `erc/erc_non_rattaches.csv`.
 
 Types de bourse (libellés et effectifs dans `erc_meta.types_bourse`) :
 
-| `type_bourse` | Libellé | Panel |
-|---|---|---|
-| `STG` | Starting Grant | oui (quelques candidatures sans panel) |
-| `COG` | Consolidator Grant | oui (quelques candidatures sans panel) |
-| `ADG` | Advanced Grant | oui (quelques candidatures sans panel) |
-| `SYG` | Synergy Grant | non |
-| `POC` | Proof of Concept | non |
-| `PERA` | Public Engagement with Research Award (prix) | non |
-| `SJI` | Science Journalism Initiative (pas de ligne PI chez les lauréats) | non |
-| `ERC-OTHER` | Autres actions ERC (pas de ligne PI chez les lauréats) | non |
+| `type_bourse` | Libellé                                                           | Panel                                  |
+| ------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| `STG`         | Starting Grant                                                    | oui (quelques candidatures sans panel) |
+| `COG`         | Consolidator Grant                                                | oui (quelques candidatures sans panel) |
+| `ADG`         | Advanced Grant                                                    | oui (quelques candidatures sans panel) |
+| `SYG`         | Synergy Grant                                                     | non                                    |
+| `POC`         | Proof of Concept                                                  | non                                    |
+| `PERA`        | Public Engagement with Research Award (prix)                      | non                                    |
+| `SJI`         | Science Journalism Initiative (pas de ligne PI chez les lauréats) | non                                    |
+| `ERC-OTHER`   | Autres actions ERC (pas de ligne PI chez les lauréats)            | non                                    |
 
 Seuls les types qui ont des lignes `erc_role = "PI"` apparaissent dans `erc_effectifs`.
 
@@ -224,21 +224,21 @@ Index : `(entite_id, annee_appel, discipline_code, type_bourse)`, `(entite_type,
 
 ### `erc_meta` — un seul document
 
-| Champ | Contenu |
-|---|---|
-| `source` | `soumis`, `laureats` (identifiants des jeux), `date_extraction` |
-| `date_calcul` | date du calcul |
-| `annees` | années d'appel présentes |
-| `annees_provisoires` | années d'appel dont les résultats ne sont pas tous publiés : candidatures et taux de succès vont encore évoluer (à signaler, ou exclure des comparaisons dans le temps) |
-| `annees_provisoires_motifs` | `{ "2025": "aucune candidature ADG ; …" }` : pourquoi chaque année est provisoire |
-| `types_bourse` | liste d'objets `{ code, libelle, avec_panel, principal, nb_candidatures, nb_candidatures_retenues, nb_laureats, nb_pi_candidats, nb_pi_laureats, nb_candidatures_sans_panel }` (`MONDE`) ; `avec_panel` : au moins la moitié des projets du type ont un panel |
-| `modes_comptage` | `{ projets: ["nb_candidatures", "nb_laureats"], pi: ["nb_pi_candidats", "nb_pi_laureats"] }` |
-| `types_bourse_defaut` | types du calcul par défaut : `["STG", "COG", "ADG"]` |
-| `panels` | panels présents |
-| `pays_compares` | pays de la comparaison internationale ERC : France puis les 25 pays qui déposent le plus (tous types) ; distincts des pays de la bibliométrie, où figurent les États-Unis ou la Chine |
-| `parametres` | paramètres du calcul |
-| `controles` | liens vers les établissements par origine (`liens_etablissement` : `structure`, `tutelle_rnsr`), `nb_participations_successeur`, `nb_participations_avec_rnsr`, `nb_participations_avec_tutelles_rnsr` ; nombres de lignes par jeu, valeurs de `stage`, `erc_role` et `destination_code`, taux de rattachement à un ROR (candidatures et lauréats), panels inconnus de la bibliométrie ; mobilité : `nb_laureats_changement_etablissement` (lauréats dont la structure de signature diffère de celle de dépôt), `nb_laureats_changement_pays`, `nb_laureats_sans_candidature` (lauréats absents du jeu des soumis), `nb_lignes_ecart_controle_laureats` (0 attendu) |
-| `methode`, `sources` | textes à afficher tels quels (couverture, années provisoires, règles) |
+| Champ                       | Contenu                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`                    | `soumis`, `laureats` (identifiants des jeux), `date_extraction`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `date_calcul`               | date du calcul                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `annees`                    | années d'appel présentes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `annees_provisoires`        | années d'appel dont les résultats ne sont pas tous publiés : candidatures et taux de succès vont encore évoluer (à signaler, ou exclure des comparaisons dans le temps)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `annees_provisoires_motifs` | `{ "2025": "aucune candidature ADG ; …" }` : pourquoi chaque année est provisoire                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `types_bourse`              | liste d'objets `{ code, libelle, avec_panel, principal, nb_candidatures, nb_candidatures_retenues, nb_laureats, nb_pi_candidats, nb_pi_laureats, nb_candidatures_sans_panel }` (`MONDE`) ; `avec_panel` : au moins la moitié des projets du type ont un panel                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `modes_comptage`            | `{ projets: ["nb_candidatures", "nb_laureats"], pi: ["nb_pi_candidats", "nb_pi_laureats"] }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `types_bourse_defaut`       | types du calcul par défaut : `["STG", "COG", "ADG"]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `panels`                    | panels présents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `pays_compares`             | pays de la comparaison internationale ERC : France puis les 25 pays qui déposent le plus (tous types) ; distincts des pays de la bibliométrie, où figurent les États-Unis ou la Chine                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `parametres`                | paramètres du calcul                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `controles`                 | liens vers les établissements par origine (`liens_etablissement` : `structure`, `tutelle_rnsr`), `nb_participations_successeur`, `nb_participations_avec_rnsr`, `nb_participations_avec_tutelles_rnsr` ; nombres de lignes par jeu, valeurs de `stage`, `erc_role` et `destination_code`, taux de rattachement à un ROR (candidatures et lauréats), panels inconnus de la bibliométrie ; mobilité : `nb_laureats_changement_etablissement` (lauréats dont la structure de signature diffère de celle de dépôt), `nb_laureats_changement_pays`, `nb_laureats_sans_candidature` (lauréats absents du jeu des soumis), `nb_lignes_ecart_controle_laureats` (0 attendu) |
+| `methode`, `sources`        | textes à afficher tels quels (couverture, années provisoires, règles)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 Règle des années provisoires (`ERC_ANNEES_PROVISOIRES` dans `config.py`) : liste imposée si
 elle est renseignée ; sinon, détection automatique sur les candidatures `MONDE` des types
@@ -254,12 +254,12 @@ médailles du CNRS, prix des académies et des sociétés savantes…), une lign
 d'un prix une année (`prix_laureat_identifiant`). Le recensement n'est pas exhaustif,
 surtout pour les années anciennes.
 
-| Champ | Type | Contenu |
-|---|---|---|
-| `entite_type`, `entite_id` | | `pays` (`FR` : tous les lauréats du jeu) ou `etablissement` (ROR court) |
-| `annee` | entier | année d'attribution (`annee` de la source, à défaut les 4 premiers chiffres de `prix_annee`) |
-| `prix_id` | texte | identifiant Paysage du prix (`prix_identifiant`), voir `prix_catalogue` |
-| `nb_laureats` | entier | lauréats du prix cette année rattachés à l'entité |
+| Champ                                      | Type   | Contenu                                                                                             |
+| ------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------- |
+| `entite_type`, `entite_id`                 |        | `pays` (`FR` : tous les lauréats du jeu) ou `etablissement` (ROR court)                             |
+| `annee`                                    | entier | année d'attribution (`annee` de la source, à défaut les 4 premiers chiffres de `prix_annee`)        |
+| `prix_id`                                  | texte  | identifiant Paysage du prix (`prix_identifiant`), voir `prix_catalogue`                             |
+| `nb_laureats`                              | entier | lauréats du prix cette année rattachés à l'entité                                                   |
 | `nb_laureats_femmes`, `nb_laureats_hommes` | entier | dont femmes, dont hommes (`laureat_personne_genre` ; le reste : genre inconnu ou lauréat structure) |
 
 Établissement, même logique que les ERC (scanR) : chaque structure d'affiliation du lauréat
@@ -278,36 +278,70 @@ Lauréats sans année : écartés (`prix_meta.controles.nb_laureats_sans_annee`)
 
 ### `prix_catalogue` — un document par prix
 
-| Champ | Contenu |
-|---|---|
-| `prix_id` | identifiant Paysage du prix |
-| `libelle`, `libelle_francais`, `libelle_anglais` | libellés |
-| `categories` | liste (`prix_categories` : « Médaille du CNRS », « Prix de thèse »…) |
-| `porteurs_ids`, `porteurs_libelles` | listes : structures qui décernent le prix (Paysage) |
-| `site_internet`, `wikidata` | liens |
-| `nb_laureats`, `nb_laureats_femmes`, `nb_laureats_hommes` | lauréats, toutes années (`FR`) |
-| `annee_min`, `annee_max` | première et dernière année présentes |
-| `groupes` | codes des groupes de `prix_meta.groupes` auxquels le prix appartient |
+| Champ                                                     | Contenu                                                              |
+| --------------------------------------------------------- | -------------------------------------------------------------------- |
+| `prix_id`                                                 | identifiant Paysage du prix                                          |
+| `libelle`, `libelle_francais`, `libelle_anglais`          | libellés                                                             |
+| `categories`                                              | liste (`prix_categories` : « Médaille du CNRS », « Prix de thèse »…) |
+| `porteurs_ids`, `porteurs_libelles`                       | listes : structures qui décernent le prix (Paysage)                  |
+| `site_internet`, `wikidata`                               | liens                                                                |
+| `nb_laureats`, `nb_laureats_femmes`, `nb_laureats_hommes` | lauréats, toutes années (`FR`)                                       |
+| `annee_min`, `annee_max`                                  | première et dernière année présentes                                 |
+| `groupes`                                                 | codes des groupes de `prix_meta.groupes` auxquels le prix appartient |
+
+### `innovation_effectifs` — créations annuelles de startups (pilote)
+
+Publiée uniquement après l'étape facultative `startups`. Le jeu ESR
+est identifié par SIREN ; les organisations liées sont résolues par SIRET dans
+le dump scanR `organizations-v2`. Les documents individuels de startups ne sont
+pas publiés.
+
+| Champ                      | Type   | Contenu                                                                 |
+| -------------------------- | ------ | ----------------------------------------------------------------------- |
+| `indicateur_id`            | texte  | `INN-STU-01` : SIREN distincts créés dans l'année                       |
+| `entite_type`, `entite_id` |        | `pays` / `FR`, ou `etablissement` / ROR court                           |
+| `annee`                    | entier | année de création du SIREN                                              |
+| `discipline_code`          | null   | non classé par panel ERC ; indicateur toutes disciplines                |
+| `nb_startups`              | entier | SIREN distincts créés, une fois par ROR si un SIRET lié a un ROR unique |
+| `unite`                    | texte  | `nombre`                                                                |
+| `statut`                   | texte  | `disponible` ou `provisoire`                                            |
+
+France compte tous les SIREN valides, même sans structure liée ; les nombres
+par établissement ne sont pas additifs, car une startup peut être liée à
+plusieurs ROR. Les identifiants SIRET résolus vers plusieurs ROR sont exclus
+du rattachement établissement. La couverture du recensement est incomplète :
+un zéro observé n'est pas une preuve d'absence de création.
+
+`innovation_entites` contient seulement les ROR avec au moins une startup
+rattachée sans ambiguïté, avec les champs `entite_id`, `entite_type`, `nom`,
+`sigle`, `ville` et `recherche`. Cette liste alimente le sélecteur propre à
+l'onglet Innovation sans élargir les sélecteurs des autres onglets.
+
+`innovation_meta` est un document. Il décrit `annees`, `annees_provisoires`,
+`methode`, la source ODS (jeu, licence, date d'extraction, date d'observation,
+empreinte) et les contrôles de qualité. `startups_brut.parquet`,
+`startups_non_rattaches.parquet` et les autres sorties de contrôle restent dans
+le dossier Athena et ne sont pas publiés.
 
 ### `prix_laureats` — un document par lauréat
 
 Liste nominative (données ouvertes de Paysage), pour afficher les lauréats d'un
 établissement. Publiée si `PRIX_PUBLIER_LAUREATS`.
 
-| Champ | Contenu |
-|---|---|
-| `laureat_id` | `prix_laureat_identifiant` |
-| `prix_id`, `prix_libelle`, `annee` | prix et année |
-| `laureat_type` | `Personne` ou `Structure` |
-| `personne_id` | identifiant Paysage du lauréat (personne ou structure) |
-| `libelle`, `prenom`, `nom`, `genre` | identité (`genre` : `femme`, `homme` ou null) |
-| `structures_ids`, `structures_libelles` | listes : affiliations dans la source (les deux listes ne sont **pas** dans le même ordre) |
-| `idref`, `orcid`, `wikidata` | identifiants de la personne |
-| `entites` | liste des `entite_id` (établissements) pour lesquels le lauréat compte ; filtre `{ entites: "<ROR>" }` |
-| `discipline_code`, `domaine_code` | panel ERC principal du lauréat (le plus fréquent dans ses publications) et son domaine (`LS`, `PE`, `SH`) ; null si non classé. Présents si `prix_disciplines.compute_prix_disciplines()` a été lancé |
-| `disciplines` | liste `{ discipline_code, poids }` (parts des publications, somme 1 ; vide si non classé) |
-| `methode_discipline` | `orcid` (auteur OpenAlex retrouvé par l'ORCID), `nom_affiliation` (même nom et une publication dans l'un des `entites`), `non_classe` |
-| `nb_publications_discipline` | publications utilisées (fenêtre de `PRIX_DISC_FENETRE` ans jusqu'au prix ; toutes si moins de `PRIX_DISC_MIN_PUBLICATIONS`) |
+| Champ                                   | Contenu                                                                                                                                                                                               |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `laureat_id`                            | `prix_laureat_identifiant`                                                                                                                                                                            |
+| `prix_id`, `prix_libelle`, `annee`      | prix et année                                                                                                                                                                                         |
+| `laureat_type`                          | `Personne` ou `Structure`                                                                                                                                                                             |
+| `personne_id`                           | identifiant Paysage du lauréat (personne ou structure)                                                                                                                                                |
+| `libelle`, `prenom`, `nom`, `genre`     | identité (`genre` : `femme`, `homme` ou null)                                                                                                                                                         |
+| `structures_ids`, `structures_libelles` | listes : affiliations dans la source (les deux listes ne sont **pas** dans le même ordre)                                                                                                             |
+| `idref`, `orcid`, `wikidata`            | identifiants de la personne                                                                                                                                                                           |
+| `entites`                               | liste des `entite_id` (établissements) pour lesquels le lauréat compte ; filtre `{ entites: "<ROR>" }`                                                                                                |
+| `discipline_code`, `domaine_code`       | panel ERC principal du lauréat (le plus fréquent dans ses publications) et son domaine (`LS`, `PE`, `SH`) ; null si non classé. Présents si `prix_disciplines.compute_prix_disciplines()` a été lancé |
+| `disciplines`                           | liste `{ discipline_code, poids }` (parts des publications, somme 1 ; vide si non classé)                                                                                                             |
+| `methode_discipline`                    | `orcid` (auteur OpenAlex retrouvé par l'ORCID), `nom_affiliation` (même nom et une publication dans l'un des `entites`), `non_classe`                                                                 |
+| `nb_publications_discipline`            | publications utilisées (fenêtre de `PRIX_DISC_FENETRE` ans jusqu'au prix ; toutes si moins de `PRIX_DISC_MIN_PUBLICATIONS`)                                                                           |
 
 ### `prix_effectifs_disciplines` — lauréats par discipline
 
@@ -316,10 +350,10 @@ Même grain que `prix_effectifs` plus `discipline_code` (panel ERC, mêmes codes
 × `prix_id` × `discipline_code`. Seuls les lauréats classés y figurent (couverture :
 `prix_meta.disciplines.controles`). Publiée si `compute_prix_disciplines()` a été lancé.
 
-| Champ | Contenu |
-|---|---|
-| `nb_laureats` | lauréats dont c'est la discipline **principale** (entier ; chaque lauréat classé compte une fois) |
-| `nb_laureats_fractionnaire` | somme des poids du lauréat dans cette discipline (décimal) |
+| Champ                       | Contenu                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `nb_laureats`               | lauréats dont c'est la discipline **principale** (entier ; chaque lauréat classé compte une fois) |
+| `nb_laureats_fractionnaire` | somme des poids du lauréat dans cette discipline (décimal)                                        |
 
 Les deux comptages ne se mélangent pas. Sur une même sélection, Σ `nb_laureats` = Σ
 `nb_laureats_fractionnaire` = nombre de lauréats classés (≤ `prix_effectifs.nb_laureats`).
@@ -327,18 +361,18 @@ Domaine : additionner les panels du domaine (lettres en tête du code).
 
 ### `prix_meta` — un seul document
 
-| Champ | Contenu |
-|---|---|
-| `source` | `jeu`, `date_extraction` |
-| `date_calcul` | date du calcul |
-| `annees` | années présentes (de la première à la dernière) |
-| `groupes` | liste d'objets `{ code, libelle, prix, nb_prix, nb_laureats }` : groupes de prix proposés (`PRIX_GROUPES` dans `config.py` : `IUF` = prix décernés par l'IUF, membres juniors et seniors ; `MEDAILLES_CNRS`) |
-| `groupe_defaut` | code du groupe affiché par défaut (`IUF`) |
-| `nb_prix` | nombre de prix |
-| `parametres` | paramètres du calcul |
-| `controles` | `nb_lignes`, `nb_laureats`, `nb_lignes_doublons`, `nb_laureats_sans_annee`, `laureat_type`, `genre`, `nb_personnes_sans_structure`, `nb_laureats_rattaches_etablissement`, `part_laureats_avec_structure_rattaches`, `liens_etablissement` (`structure`, `tutelle_rnsr`), `nb_structures_successeur`, `nb_laureats_avec_rnsr`, `nb_laureats_avec_tutelles_rnsr`, `nb_etablissements`, `groupes_vides` |
-| `methode`, `sources` | textes à afficher tels quels (avec, si elles sont calculées, les règles des disciplines) |
-| `disciplines` | si `compute_prix_disciplines()` a été lancé : `nomenclature_disciplinaire`, `parametres` (`fenetre`, `min_publications`, `noms`, `annee_min_publications`), `controles` (`nb_laureats_personnes`, `nb_avec_orcid`, `par_methode`, `part_classes`, `par_domaine`) |
+| Champ                | Contenu                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`             | `jeu`, `date_extraction`                                                                                                                                                                                                                                                                                                                                                                              |
+| `date_calcul`        | date du calcul                                                                                                                                                                                                                                                                                                                                                                                        |
+| `annees`             | années présentes (de la première à la dernière)                                                                                                                                                                                                                                                                                                                                                       |
+| `groupes`            | liste d'objets `{ code, libelle, prix, nb_prix, nb_laureats }` : groupes de prix proposés (`PRIX_GROUPES` dans `config.py` : `IUF` = prix décernés par l'IUF, membres juniors et seniors ; `MEDAILLES_CNRS`)                                                                                                                                                                                          |
+| `groupe_defaut`      | code du groupe affiché par défaut (`IUF`)                                                                                                                                                                                                                                                                                                                                                             |
+| `nb_prix`            | nombre de prix                                                                                                                                                                                                                                                                                                                                                                                        |
+| `parametres`         | paramètres du calcul                                                                                                                                                                                                                                                                                                                                                                                  |
+| `controles`          | `nb_lignes`, `nb_laureats`, `nb_lignes_doublons`, `nb_laureats_sans_annee`, `laureat_type`, `genre`, `nb_personnes_sans_structure`, `nb_laureats_rattaches_etablissement`, `part_laureats_avec_structure_rattaches`, `liens_etablissement` (`structure`, `tutelle_rnsr`), `nb_structures_successeur`, `nb_laureats_avec_rnsr`, `nb_laureats_avec_tutelles_rnsr`, `nb_etablissements`, `groupes_vides` |
+| `methode`, `sources` | textes à afficher tels quels (avec, si elles sont calculées, les règles des disciplines)                                                                                                                                                                                                                                                                                                              |
+| `disciplines`        | si `compute_prix_disciplines()` a été lancé : `nomenclature_disciplinaire`, `parametres` (`fenetre`, `min_publications`, `noms`, `annee_min_publications`), `controles` (`nb_laureats_personnes`, `nb_avec_orcid`, `par_methode`, `part_classes`, `par_domaine`)                                                                                                                                      |
 
 ### `viviers_effectifs` — chercheurs actifs par pays, établissement et discipline
 
@@ -360,15 +394,15 @@ de conférence en chapitres, ex. Springer LNCS). Un livre ou un chapitre compte 
 publication (activité, discipline, rattachements) mais jamais dans le top 10 %. Les
 publications à plus de `VIVIER_MAX_AUTEURS_PAR_ARTICLE` (100) auteurs sont ignorées.
 
-| Champ | Type | Contenu |
-|---|---|---|
-| `entite_type`, `entite_id` | | `pays` (code ISO2, outre-mer sous `FR`) ou `etablissement` (ROR court, établissements français) |
-| `discipline_code` | texte | panel ERC, mêmes codes que `biblio_disciplines` |
-| `nb_chercheurs` | entier | chercheurs actifs dont c'est la discipline **principale** |
-| `nb_chercheurs_fractionnaire` | décimal | somme des parts de la discipline dans les articles de chaque chercheur |
-| `nb_chercheurs_top10` | entier | dont chercheurs « top 10 % » (discipline principale) |
-| `nb_chercheurs_top10_fractionnaire` | décimal | idem, en fractionnaire |
-| `nb_chercheurs_auteur_principal` | entier | dont premier ou dernier auteur, ou correspondant, d'au moins une publication (discipline principale) |
+| Champ                               | Type    | Contenu                                                                                              |
+| ----------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `entite_type`, `entite_id`          |         | `pays` (code ISO2, outre-mer sous `FR`) ou `etablissement` (ROR court, établissements français)      |
+| `discipline_code`                   | texte   | panel ERC, mêmes codes que `biblio_disciplines`                                                      |
+| `nb_chercheurs`                     | entier  | chercheurs actifs dont c'est la discipline **principale**                                            |
+| `nb_chercheurs_fractionnaire`       | décimal | somme des parts de la discipline dans les articles de chaque chercheur                               |
+| `nb_chercheurs_top10`               | entier  | dont chercheurs « top 10 % » (discipline principale)                                                 |
+| `nb_chercheurs_top10_fractionnaire` | décimal | idem, en fractionnaire                                                                               |
+| `nb_chercheurs_auteur_principal`    | entier  | dont premier ou dernier auteur, ou correspondant, d'au moins une publication (discipline principale) |
 
 Pays : un chercheur compte pour un pays si au moins `VIVIER_PART_MIN_PAYS` (50 %) de ses
 publications des années récentes y ont une affiliation ; **même règle pour tous les pays, France
@@ -397,19 +431,19 @@ Index : `(entite_id, discipline_code)`, `(entite_type, discipline_code)`.
 Liste nominative (données ouvertes OpenAlex) des chercheurs actifs rattachés à `FR` ou à un
 établissement français (pas ceux des autres pays). Publiée si `VIVIER_PUBLIER_CHERCHEURS`.
 
-| Champ | Contenu |
-|---|---|
-| `chercheur_id` | identifiant d'auteur OpenAlex (`A…`) |
-| `nom`, `orcid` | nom affiché par OpenAlex (le plus récent), ORCID (null si aucun) |
-| `pays` | pays de rattachement, part décroissante (ex. `["FR", "DE"]` pour un chercheur partagé) ; contient `FR` dès que `entites` n'est pas vide (avec les seuils par défaut, `VIVIER_PART_MIN_PAYS` ≤ `VIVIER_PART_MIN_ETABLISSEMENT`) |
-| `entites` | liste des `entite_id` (établissements) de rattachement, part décroissante ; filtre `{ entites: "<ROR>" }` ; vide si aucun établissement n'atteint le seuil (le chercheur compte alors pour `FR` seulement) |
-| `discipline_code`, `domaine_code` | panel principal et son domaine |
-| `disciplines` | liste `{ discipline_code, poids }` (somme 1) |
-| `nb_publications`, `nb_publications_recentes` | publications de la période, des années récentes (articles + livres et chapitres SHS) |
-| `nb_livres_chapitres` | dont livres et chapitres (SHS) |
-| `nb_publications_auteur_principal`, `auteur_principal` | publications en premier ou dernier auteur ou correspondant ; booléen (seuil `VIVIER_MIN_AUTEUR_PRINCIPAL`) |
-| `nb_articles_top10`, `nb_articles_top10_cites`, `top10` | articles (seuls les articles ont une référence de citations) comptés dans le top 10 % (entier, seuil de fraction), somme des fractions (décimal), booléen « chercheur top 10 % » |
-| `annee_premiere_publication`, `annee_derniere_publication` | dans la période (pas un âge académique) |
+| Champ                                                      | Contenu                                                                                                                                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `chercheur_id`                                             | identifiant d'auteur OpenAlex (`A…`)                                                                                                                                                                                           |
+| `nom`, `orcid`                                             | nom affiché par OpenAlex (le plus récent), ORCID (null si aucun)                                                                                                                                                               |
+| `pays`                                                     | pays de rattachement, part décroissante (ex. `["FR", "DE"]` pour un chercheur partagé) ; contient `FR` dès que `entites` n'est pas vide (avec les seuils par défaut, `VIVIER_PART_MIN_PAYS` ≤ `VIVIER_PART_MIN_ETABLISSEMENT`) |
+| `entites`                                                  | liste des `entite_id` (établissements) de rattachement, part décroissante ; filtre `{ entites: "<ROR>" }` ; vide si aucun établissement n'atteint le seuil (le chercheur compte alors pour `FR` seulement)                     |
+| `discipline_code`, `domaine_code`                          | panel principal et son domaine                                                                                                                                                                                                 |
+| `disciplines`                                              | liste `{ discipline_code, poids }` (somme 1)                                                                                                                                                                                   |
+| `nb_publications`, `nb_publications_recentes`              | publications de la période, des années récentes (articles + livres et chapitres SHS)                                                                                                                                           |
+| `nb_livres_chapitres`                                      | dont livres et chapitres (SHS)                                                                                                                                                                                                 |
+| `nb_publications_auteur_principal`, `auteur_principal`     | publications en premier ou dernier auteur ou correspondant ; booléen (seuil `VIVIER_MIN_AUTEUR_PRINCIPAL`)                                                                                                                     |
+| `nb_articles_top10`, `nb_articles_top10_cites`, `top10`    | articles (seuls les articles ont une référence de citations) comptés dans le top 10 % (entier, seuil de fraction), somme des fractions (décimal), booléen « chercheur top 10 % »                                               |
+| `annee_premiere_publication`, `annee_derniere_publication` | dans la période (pas un âge académique)                                                                                                                                                                                        |
 
 Index : `(entites, discipline_code)`, `(chercheur_id)`, `(orcid)`.
 
@@ -429,21 +463,21 @@ d'extraction), `controles` (`nb_auteurs_fenetre`, `nb_signatures_fenetre`,
 **Textes pour le public**, à afficher tels quels : une liste de paragraphes courts, sans nom de
 champ, avec les seuils et années tirés de la configuration du calcul.
 
-| Clé | Contenu | Quand l'afficher |
-|---|---|---|
-| `methode` | liste : publications (le premier), vivier, chercheur actif, pays, établissement, discipline, top 10 %, auteur principal | note de méthode du vivier |
-| `lecture` | liste : non-additivité entre établissements et entre pays, total des établissements ≠ France, pas de chiffre par année | partout où le vivier est affiché |
-| `limites` | liste des limites **générales** : seuls les publiants, désambiguïsation des auteurs, affiliations | partout où le vivier est affiché |
-| `limites_par_usage` | objet `{ cle: [textes] }` : limites propres à un usage | seulement dans le contexte de la clé (voir `limites_usages`) |
-| `limites_usages` | objet `{ cle: contexte }` : quand afficher chaque groupe (texte pour les développeurs, pas pour le public) | — |
+| Clé                 | Contenu                                                                                                                 | Quand l'afficher                                             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `methode`           | liste : publications (le premier), vivier, chercheur actif, pays, établissement, discipline, top 10 %, auteur principal | note de méthode du vivier                                    |
+| `lecture`           | liste : non-additivité entre établissements et entre pays, total des établissements ≠ France, pas de chiffre par année  | partout où le vivier est affiché                             |
+| `limites`           | liste des limites **générales** : seuls les publiants, désambiguïsation des auteurs, affiliations                       | partout où le vivier est affiché                             |
+| `limites_par_usage` | objet `{ cle: [textes] }` : limites propres à un usage                                                                  | seulement dans le contexte de la clé (voir `limites_usages`) |
+| `limites_usages`    | objet `{ cle: contexte }` : quand afficher chaque groupe (texte pour les développeurs, pas pour le public)              | —                                                            |
 
 Clés de `limites_par_usage` :
 
-| Clé | À afficher avec |
-|---|---|
-| `sciences_humaines_sociales` | des chiffres du domaine SH, ou toutes disciplines confondues |
-| `types_bourse_erc` | un taux par type de bourse ERC (Starting, Consolidator, Advanced) |
-| `pays_sans_comparaison_erc` | un pays de `pays_sans_comparaison_erc` |
+| Clé                          | À afficher avec                                                   |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `sciences_humaines_sociales` | des chiffres du domaine SH, ou toutes disciplines confondues      |
+| `types_bourse_erc`           | un taux par type de bourse ERC (Starting, Consolidator, Advanced) |
+| `pays_sans_comparaison_erc`  | un pays de `pays_sans_comparaison_erc`                            |
 
 Les règles de calcul pour les développeurs (principal / fractionnaire sans mélange, domaine =
 somme des panels, taux annuel) ne figurent pas dans ces textes : voir `viviers_effectifs` et §3.
@@ -451,39 +485,39 @@ somme des panels, taux annuel) ne figurent pas dans ces textes : voir `viviers_e
 `publications` : sur quelles publications le vivier est calculé, à afficher ou à reprendre en
 note de méthode dans tableaux :
 
-| Champ | Contenu |
-|---|---|
-| `source`, `snapshot` | `OpenAlex` et date du snapshot |
-| `perimetre`, `perimetre_libelle` | `toutes_revues_openalex` (tous les articles de revues d'OpenAlex, défaut) ou `revues_sjr` (revues indexées dans SJR) ; le libellé mentionne les livres et chapitres SHS |
-| `revues_sjr_seulement` | booléen |
-| `types_documents`, `types_sources` | articles : ex. `["article"]` (reviews exclues), `["journal"]` |
-| `annee_debut`, `annee_fin` | période des publications (= `periode`) |
-| `max_auteurs_par_article` | au-delà, article ignoré (grandes collaborations) |
-| `nomenclature_disciplinaire`, `discipline_article` | topic principal OpenAlex → panel ERC ; articles sans panel exclus |
-| `exclusions` | liste lisible des exclusions (rétractés, paratexte, sans panel, grandes collaborations) |
-| `signatures_lues` | seules les affiliations dans les pays lus comptent |
-| `meme_base_que` | mêmes articles et disciplines que les indicateurs bibliométriques du périmètre (livres et chapitres en plus, hors bibliométrie) |
-| `livres_chapitres` | `inclus`, `types_documents` (`book`, `book-chapter`), `domaines` (`["SH"]`), `role` (publication à part entière, jamais top 10 %), `pourquoi_shs_seulement`, `discipline`, `nb_periode`, `nb_chercheurs_actifs_avec_livres` |
-| `top10` | `role` (indicateur, **pas un filtre** : le vivier compte toutes les publications), `part` (0,1), `reference`, `fenetre_citation_annees`, `non_cites_exclus`, `seuil_fraction_article`, `min_articles_top10_chercheur`, `annees_provisoires` |
-| `nb_articles_perimetre`, `nb_articles_signes_pays_lus` | articles du périmètre sur la période (monde) et ceux signés dans les pays lus |
+| Champ                                                  | Contenu                                                                                                                                                                                                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`, `snapshot`                                   | `OpenAlex` et date du snapshot                                                                                                                                                                                                              |
+| `perimetre`, `perimetre_libelle`                       | `toutes_revues_openalex` (tous les articles de revues d'OpenAlex, défaut) ou `revues_sjr` (revues indexées dans SJR) ; le libellé mentionne les livres et chapitres SHS                                                                     |
+| `revues_sjr_seulement`                                 | booléen                                                                                                                                                                                                                                     |
+| `types_documents`, `types_sources`                     | articles : ex. `["article"]` (reviews exclues), `["journal"]`                                                                                                                                                                               |
+| `annee_debut`, `annee_fin`                             | période des publications (= `periode`)                                                                                                                                                                                                      |
+| `max_auteurs_par_article`                              | au-delà, article ignoré (grandes collaborations)                                                                                                                                                                                            |
+| `nomenclature_disciplinaire`, `discipline_article`     | topic principal OpenAlex → panel ERC ; articles sans panel exclus                                                                                                                                                                           |
+| `exclusions`                                           | liste lisible des exclusions (rétractés, paratexte, sans panel, grandes collaborations)                                                                                                                                                     |
+| `signatures_lues`                                      | seules les affiliations dans les pays lus comptent                                                                                                                                                                                          |
+| `meme_base_que`                                        | mêmes articles et disciplines que les indicateurs bibliométriques du périmètre (livres et chapitres en plus, hors bibliométrie)                                                                                                             |
+| `livres_chapitres`                                     | `inclus`, `types_documents` (`book`, `book-chapter`), `domaines` (`["SH"]`), `role` (publication à part entière, jamais top 10 %), `pourquoi_shs_seulement`, `discipline`, `nb_periode`, `nb_chercheurs_actifs_avec_livres`                 |
+| `top10`                                                | `role` (indicateur, **pas un filtre** : le vivier compte toutes les publications), `part` (0,1), `reference`, `fenetre_citation_annees`, `non_cites_exclus`, `seuil_fraction_article`, `min_articles_top10_chercheur`, `annees_provisoires` |
+| `nb_articles_perimetre`, `nb_articles_signes_pays_lus` | articles du périmètre sur la période (monde) et ceux signés dans les pays lus                                                                                                                                                               |
 
 ## 3. Indicateurs
 
-| Indicateur | Nom du ratio | Numérateur (entité) | Dénominateur (`MONDE`) |
-|---|---|---|---|
-| Poids | `part_articles` | `nb_articles` | `nb_articles` |
-| Influence | `part_top10_cites` | `nb_articles_top10_cites` | `nb_articles_top10_cites` |
-| Prestige | `part_revues_tete` | `nb_articles_revues_tete_disciplinaires` (+ `…_multidisciplinaires` si l'option est cochée) | idem |
-| Part d'un partenaire | `part_copublications` | `nb_articles_copublies` (entité, partenaire) | `nb_articles` de l'entité |
-| ERC : taux de succès | `taux_succes` | `nb_laureats` (entité) | `nb_candidatures` (même entité) ; en porteurs : `nb_pi_laureats` / `nb_pi_candidats` |
-| ERC : part des candidatures | `part_candidatures` | `nb_candidatures` (entité) | `nb_candidatures` (`MONDE`) ; en porteurs : `nb_pi_candidats` / `nb_pi_candidats` (`MONDE`) |
-| ERC : part des lauréats | `part_laureats` | `nb_laureats` (entité) | `nb_laureats` (`MONDE`) ; en porteurs : `nb_pi_laureats` / `nb_pi_laureats` (`MONDE`) |
-| ERC : solde de mobilité des lauréats | `solde_mobilite_laureats` | `nb_laureats_arrivees - nb_laureats_departs` (entité) | — (différence, pas un ratio) |
-| ERC : intensité de candidature | `intensite_candidature` | `part_candidatures` (entité) | `part_articles` (entité) |
-| Prix : part des lauréats | `part_laureats_prix` | `nb_laureats` (établissement, `prix_effectifs`) | `nb_laureats` (`FR`) |
-| ERC : taux de candidature au vivier | `taux_candidature_vivier` | `nb_candidatures` (entité, `erc_effectifs`) | `nb_chercheurs` (même entité, `viviers_effectifs`) |
-| Vivier : part de chercheurs top 10 % | `part_chercheurs_top10` | `nb_chercheurs_top10` (entité) | `nb_chercheurs` (même entité) |
-| Prix : part de femmes | `part_femmes_prix` | `nb_laureats_femmes` (entité) | `nb_laureats_femmes + nb_laureats_hommes` (même entité) |
+| Indicateur                           | Nom du ratio              | Numérateur (entité)                                                                         | Dénominateur (`MONDE`)                                                                      |
+| ------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Poids                                | `part_articles`           | `nb_articles`                                                                               | `nb_articles`                                                                               |
+| Influence                            | `part_top10_cites`        | `nb_articles_top10_cites`                                                                   | `nb_articles_top10_cites`                                                                   |
+| Prestige                             | `part_revues_tete`        | `nb_articles_revues_tete_disciplinaires` (+ `…_multidisciplinaires` si l'option est cochée) | idem                                                                                        |
+| Part d'un partenaire                 | `part_copublications`     | `nb_articles_copublies` (entité, partenaire)                                                | `nb_articles` de l'entité                                                                   |
+| ERC : taux de succès                 | `taux_succes`             | `nb_laureats` (entité)                                                                      | `nb_candidatures` (même entité) ; en porteurs : `nb_pi_laureats` / `nb_pi_candidats`        |
+| ERC : part des candidatures          | `part_candidatures`       | `nb_candidatures` (entité)                                                                  | `nb_candidatures` (`MONDE`) ; en porteurs : `nb_pi_candidats` / `nb_pi_candidats` (`MONDE`) |
+| ERC : part des lauréats              | `part_laureats`           | `nb_laureats` (entité)                                                                      | `nb_laureats` (`MONDE`) ; en porteurs : `nb_pi_laureats` / `nb_pi_laureats` (`MONDE`)       |
+| ERC : solde de mobilité des lauréats | `solde_mobilite_laureats` | `nb_laureats_arrivees - nb_laureats_departs` (entité)                                       | — (différence, pas un ratio)                                                                |
+| ERC : intensité de candidature       | `intensite_candidature`   | `part_candidatures` (entité)                                                                | `part_articles` (entité)                                                                    |
+| Prix : part des lauréats             | `part_laureats_prix`      | `nb_laureats` (établissement, `prix_effectifs`)                                             | `nb_laureats` (`FR`)                                                                        |
+| ERC : taux de candidature au vivier  | `taux_candidature_vivier` | `nb_candidatures` (entité, `erc_effectifs`)                                                 | `nb_chercheurs` (même entité, `viviers_effectifs`)                                          |
+| Vivier : part de chercheurs top 10 % | `part_chercheurs_top10`   | `nb_chercheurs_top10` (entité)                                                              | `nb_chercheurs` (même entité)                                                               |
+| Prix : part de femmes                | `part_femmes_prix`        | `nb_laureats_femmes` (entité)                                                               | `nb_laureats_femmes + nb_laureats_hommes` (même entité)                                     |
 
 ERC : taux de succès = `nb_laureats` ÷ `nb_candidatures`, même entité, mêmes années, mêmes
 panels et types, en additionnant les effectifs avant de diviser. Le numérateur (lauréats
@@ -517,6 +551,7 @@ ERC : taux de candidature au vivier = candidatures ÷ chercheurs actifs, même e
 panels. Sert surtout à **comparer la France aux autres pays** (`erc_meta.pays_compares`, tous
 présents dans `viviers_effectifs`) : candidatures du pays (pays de la structure de dépôt)
 rapportées aux chercheurs actifs de ce pays.
+
 - Années : le vivier n'a pas d'année ; prendre les appels de `viviers_meta.periode` (2021-2025
   pour le moment, couverture Horizon Europe) et diviser par le nombre d'années pour un taux annuel.
   Signaler `erc_meta.annees_provisoires`.
@@ -531,7 +566,7 @@ rapportées aux chercheurs actifs de ce pays.
   `erc_meta.pays_compares`, puis diviser). Indice = taux du pays ÷ taux de l'ensemble.
 - Complément de l'intensité de candidature (`part_candidatures` ÷ `part_articles`) : ici on
   compte des personnes, pas des articles, ce qui neutralise les écarts de productivité entre pays.
-Ce sont des ordres de grandeur (personnes OpenAlex, pas des effectifs RH).
+  Ce sont des ordres de grandeur (personnes OpenAlex, pas des effectifs RH).
 
 Prix : mêmes prix (un groupe = la liste `prix_meta.groupes[].prix`) et mêmes années au
 numérateur et au dénominateur, effectifs sommés avant de diviser. Un lauréat comptant pour
@@ -607,16 +642,17 @@ db.prix_effectifs_<version>.aggregate([
 
 ## 5. Production
 
-| Étape | Fonction | Sortie |
-|---|---|---|
-| 0 | `referentiel.build_referentiel()` | `/data/referentiel/paysage.parquet` |
-| 3 | `disciplines.build_disciplines()` | `disciplines/panel_erc.parquet` |
-| 4 | `top10_citations.compute_top10()` | `top10/panel_erc_<perimetre>.parquet`, `…_seuils.parquet` |
-| 5 | `top_journals.compute_top_journals()` | `revues_tete/panel_erc.parquet`, `sources_sjr.parquet` |
-| 6 | `indicators.compute_indicators()` | `indicateurs/panel_erc_effectifs.parquet`, `panel_erc_entites.parquet` |
-| 6b | `copublications.compute_copublications()` | `indicateurs/panel_erc_copublications.parquet` |
-| ERC | `erc.compute_erc()` | `erc/erc_effectifs.parquet`, `erc_entites.parquet`, `erc_meta.json`, `erc_non_rattaches.csv` |
-| Prix | `prix.compute_prix()` | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv`, `prix_personnes.parquet` (interne) |
-| Prix : disciplines | `publications_auteurs.extraire_publications()` (lecture commune avec les viviers) puis `prix_disciplines.compute_prix_disciplines()` | `prix/publications/`, `prix_laureats_disciplines.parquet`, `prix_effectifs_disciplines.parquet`, `prix_disciplines_meta.json` |
-| Viviers | `publications_auteurs.extraire_publications()` (lecture commune avec les prix) puis `viviers.compute_viviers()` | `viviers/auteurs/`, `viviers_chercheurs.parquet`, `viviers_effectifs.parquet`, `viviers_meta.json` |
-| 7 | `publish.publish()` puis `publish.publish_mongo()` | `publication/panel_erc/*.jsonl.gz` puis MongoDB |
+| Étape                 | Fonction                                                                                                                             | Sortie                                                                                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0                     | `referentiel.build_referentiel()`                                                                                                    | `/data/referentiel/paysage.parquet`                                                                                                                                                      |
+| 3                     | `disciplines.build_disciplines()`                                                                                                    | `disciplines/panel_erc.parquet`                                                                                                                                                          |
+| 4                     | `top10_citations.compute_top10()`                                                                                                    | `top10/panel_erc_<perimetre>.parquet`, `…_seuils.parquet`                                                                                                                                |
+| 5                     | `top_journals.compute_top_journals()`                                                                                                | `revues_tete/panel_erc.parquet`, `sources_sjr.parquet`                                                                                                                                   |
+| 6                     | `indicators.compute_indicators()`                                                                                                    | `indicateurs/panel_erc_effectifs.parquet`, `panel_erc_entites.parquet`                                                                                                                   |
+| 6b                    | `copublications.compute_copublications()`                                                                                            | `indicateurs/panel_erc_copublications.parquet`                                                                                                                                           |
+| ERC                   | `erc.compute_erc()`                                                                                                                  | `erc/erc_effectifs.parquet`, `erc_entites.parquet`, `erc_meta.json`, `erc_non_rattaches.csv`                                                                                             |
+| Prix                  | `prix.compute_prix()`                                                                                                                | `prix/prix_effectifs.parquet`, `prix_catalogue.parquet`, `prix_laureats.parquet`, `prix_entites.parquet`, `prix_meta.json`, `prix_non_rattaches.csv`, `prix_personnes.parquet` (interne) |
+| Prix : disciplines    | `publications_auteurs.extraire_publications()` (lecture commune avec les viviers) puis `prix_disciplines.compute_prix_disciplines()` | `prix/publications/`, `prix_laureats_disciplines.parquet`, `prix_effectifs_disciplines.parquet`, `prix_disciplines_meta.json`                                                            |
+| Viviers               | `publications_auteurs.extraire_publications()` (lecture commune avec les prix) puis `viviers.compute_viviers()`                      | `viviers/auteurs/`, `viviers_chercheurs.parquet`, `viviers_effectifs.parquet`, `viviers_meta.json`                                                                                       |
+| Innovation : startups | `startups.compute_startups()` (étape facultative)                                                                                    | `innovation/startups_effectifs.parquet`, `startups_entites.parquet`, `startups_meta.json`, contrôles locaux                                                                              |
+| 7                     | `publish.publish()` puis `publish.publish_mongo()`                                                                                   | `publication/panel_erc/*.jsonl.gz` puis MongoDB                                                                                                                                          |

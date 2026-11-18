@@ -238,6 +238,7 @@ DASHBOARD_ORDRE_SELECTEUR = "taille"   # ordre quand la recherche est vide :
 # Jeux de données de data.enseignementsup-recherche.gouv.fr, téléchargés en CSV.
 ODS_BASE_URL = "https://data.enseignementsup-recherche.gouv.fr"
 ODS_API_KEY = os.getenv("ODS_API_KEY")   # facultative (jeux publics) ; jamais en dur ici
+STARTUPS_ESR_DATASET = "fr-esr-startup-esr-france"
 
 # --- Horizon Europe (horizon.py) --------------------------------------------------
 # Participations aux projets Horizon Europe, deux jeux de même structure (une ligne par
