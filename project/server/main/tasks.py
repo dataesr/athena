@@ -385,7 +385,8 @@ def _compute(args: dict) -> dict:
 
 # 6f. Startups : créations annuelles de startups ESR (facultatif)
 #     Télécharge le jeu public fr-esr-startup-esr-france et résout les SIRET
-#     liés vers scanR organizations-v2. Les données individuelles restent locales.
+#     liés par la règle commune d'affiliation (Paysage, tutelles scanR et OpenAlex).
+#     Les données individuelles restent locales.
 #     Écrit : innovation/startups_effectifs.parquet, startups_entites.parquet,
 #             startups_meta.json et startups_non_rattaches.parquet
 # ---------------------------------------------------------------------------

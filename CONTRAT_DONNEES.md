@@ -292,9 +292,9 @@ Lauréats sans année : écartés (`prix_meta.controles.nb_laureats_sans_annee`)
 ### `innovation_effectifs` — créations annuelles de startups (pilote)
 
 Publiée uniquement après l'étape facultative `startups`. Le jeu ESR
-est identifié par SIREN ; les organisations liées sont résolues par SIRET dans
-le dump scanR `organizations-v2`. Les documents individuels de startups ne sont
-pas publiés.
+est identifié par SIREN ; les structures liées sont résolues par la règle
+commune d'affiliation : SIRET Paysage, repli SIREN, successeurs et tutelles.
+Les documents individuels de startups ne sont pas publiés.
 
 | Champ                      | Type   | Contenu                                                                 |
 | -------------------------- | ------ | ----------------------------------------------------------------------- |
@@ -302,24 +302,27 @@ pas publiés.
 | `entite_type`, `entite_id` |        | `pays` / `FR`, ou `etablissement` / ROR court                           |
 | `annee`                    | entier | année de création du SIREN                                              |
 | `discipline_code`          | null   | non classé par panel ERC ; indicateur toutes disciplines                |
-| `nb_startups`              | entier | SIREN distincts créés, une fois par ROR si un SIRET lié a un ROR unique |
+| `nb_startups`              | entier | SIREN distincts créés, une fois par ROR de rattachement                |
 | `unite`                    | texte  | `nombre`                                                                |
 | `statut`                   | texte  | `disponible` ou `provisoire`                                            |
 
 France compte tous les SIREN valides, même sans structure liée ; les nombres
 par établissement ne sont pas additifs, car une startup peut être liée à
-plusieurs ROR. Les identifiants SIRET résolus vers plusieurs ROR sont exclus
-du rattachement établissement. La couverture du recensement est incomplète :
+plusieurs ROR, notamment ses tutelles OpenAlex. Un SIRET sans ROR selon la
+règle commune n'est pas attribué à un établissement. La couverture du recensement est incomplète :
 un zéro observé n'est pas une preuve d'absence de création.
 
 `innovation_entites` contient seulement les ROR avec au moins une startup
-rattachée sans ambiguïté, avec les champs `entite_id`, `entite_type`, `nom`,
+rattachée, avec les champs `entite_id`, `entite_type`, `nom`,
 `sigle`, `ville` et `recherche`. Cette liste alimente le sélecteur propre à
 l'onglet Innovation sans élargir les sélecteurs des autres onglets.
 
 `innovation_meta` est un document. Il décrit `annees`, `annees_provisoires`,
 `methode`, la source ODS (jeu, licence, date d'extraction, date d'observation,
-empreinte) et les contrôles de qualité. `startups_brut.parquet`,
+empreinte), la disponibilité de la lignée OpenAlex et les contrôles de qualité,
+dont les SIRET rattachés, non résolus et étendus aux tutelles OpenAlex.
+Si les fichiers de lignée manquent, seules les affiliations directes et les
+éventuelles tutelles scanR sont prises en compte. `startups_brut.parquet`,
 `startups_non_rattaches.parquet` et les autres sorties de contrôle restent dans
 le dossier Athena et ne sont pas publiés.
 

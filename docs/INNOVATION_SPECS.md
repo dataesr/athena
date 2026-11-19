@@ -372,7 +372,7 @@ ayant des populations différentes.
 | Lot                 | Livrable                                                                                                                   | Porte de passage                                                                                                                                                                               |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0 — qualification   | Schémas et premiers profils des sources startups et Horizon ; points à résoudre documentés en §4.1                         | Compléter les mesures de rattachement startups et statuts/identifiants Horizon ; confirmer droits de redistribution                                                                            |
-| 1 — pilote startups | Un graphique d'évolution STU-01 toutes disciplines ; STU-04 hors périmètre                                                 | Résoudre chaque SIRET exact vers un ROR unique, isoler les ambiguïtés et afficher les limites de couverture ; les lignes sans lien comptent dans le total France, jamais dans un établissement |
+| 1 — pilote startups | Un graphique d'évolution STU-01 toutes disciplines ; STU-04 hors périmètre                                                 | Appliquer la règle commune d'affiliation, contrôler les SIRET non résolus et afficher les limites de couverture ; les lignes sans lien comptent dans le total France, jamais dans un établissement |
 | 2 — pilote Horizon  | PRJ-01 Pilier 2 ; PRJ-02 si `fund_eur` et le traitement des participations sont validés                                    | Définir les statuts financés, qualifier les identifiants (notamment source absente), intégrer `fund_eur` dans la normalisation et ne pas affecter de panels ERC par défaut                     |
 | 3 — enrichissements | ACK-01 et éventuellement ACK-02 ; classification ERC des brevets/projets si validée ; INTERNATIONAL Pilier 2 si comparable | Validation métier de chaque mesure et de la classification ; couverture internationale démontrée                                                                                               |
 | 4 — extensions      | Copropriété, entreprises distinctes, startups BPI, survie, Labcom/Carnot/Cifre et éventuellement brevets internationaux    | Sources et droits obtenus, définitions et contrôles validés                                                                                                                                    |
@@ -410,7 +410,7 @@ tous les modules dès le premier lot.
 | Module proposé                | Fonction et responsabilité                                                                                                                  | Entrées / sorties principales                                                                       |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `startups.py`                 | `lire_startups()` : télécharger ou relire une copie datée, vérifier le schéma et normaliser SIREN/dates/listes                              | Export ESR → Parquet brut normalisé ; alias de colonnes documentés                                  |
-| idem                          | `rattacher_startups()` : résoudre les structures et conserver liens, origine et ambiguïtés                                                  | Startups + référentiels → liens `(startup_id, ror, origine)` et non-rattachés                       |
+| idem                          | Résoudre les structures avec la règle commune et contrôler les non-rattachés                                                               | Startups + référentiels → ROR de rattachement et non-rattachés                                       |
 | idem                          | `compute_startups()` : calculer STU-01/04 et contrôles ; STU-02 à date d'observation seulement                                              | Liens dédoublonnés → effectifs et métadonnées                                                       |
 | `innovation_horizon.py`       | `compute_projets_horizon()` : exploiter `lire_horizon`, `participations`, `rattacher_structures`, filtrer lauréats Pilier 2 et dédoublonner | Données Horizon + référentiels → projets, liens et PRJ-01 ; éventuel PRJ-02 séparé                  |
 | `innovation_brevets.py`       | `lire_brevets()`, `normaliser_familles()`, `rattacher_deposants()`, `compute_brevets()`                                                     | Export qualifié → familles, documents, déposants, liens et BRE-01/04 ; dates manquantes en contrôle |
@@ -420,9 +420,9 @@ tous les modules dès le premier lot.
 
 Les fonctions d'ingestion conservent les identifiants source, dates, version,
 champs utiles, statut et origine des liens ; les données BPI restent séparées.
-Rapprocher noms et identifiants dans une table de correspondance versionnée
-avec preuve et statut (`exact`, `valide_manuellement`, `ambigu`, `absent`).
-Ne jamais transformer une correspondance ambiguë en ROR automatiquement.
+Pour les autres rapprochements à concevoir, conserver une table de correspondance
+versionnée avec preuve et statut (`exact`, `valide_manuellement`, `ambigu`, `absent`)
+et ne pas transformer une correspondance ambiguë en ROR automatiquement.
 Pour les publications, une extraction complémentaire DOI → `work_id` doit
 couvrir le même snapshot et les mêmes filtres que les works utilisés ; mesurer
 les collisions et les works absents. Prévoir un fichier de contrôle des
@@ -483,14 +483,17 @@ Le pilote ajoute **Innovation comme nouvel onglet de premier niveau**, au même
 niveau que Bibliométrie et Financements, sans sous-onglets ni autres graphiques.
 L'unique graphique est l'évolution annuelle de `INN-STU-01` : SIREN distincts
 créés depuis 2012, filtrables par année et par établissement ou France. Aucun
-panel ERC n'est présenté. Une startup multi-liée compte une fois dans chacun
-des ROR qui ont une résolution SIRET→ROR unique ; les effectifs par établissement
-ne sont donc pas additifs. France compte une fois chaque SIREN valide, y compris
-les startups sans lien exploitable.
+panel ERC n'est présenté. Une startup compte une fois par ROR auquel elle est
+rattachée, y compris les tutelles OpenAlex disponibles ; les effectifs par
+établissement ne sont donc pas additifs. France compte une fois chaque SIREN
+valide, y compris les startups sans lien exploitable.
 
 Le pipeline facultatif `startups` télécharge
-`fr-esr-startup-esr-france` via `utils_ods`, résout les SIRET dans
-`organizations-v2`, garde localement les lignes brutes et les contrôles, puis
+`fr-esr-startup-esr-france` via `utils_ods`, applique aux SIRET la règle commune
+Paysage (repli SIREN et successeurs), puis les tutelles scanR et la lignée
+OpenAlex lorsqu'elles sont disponibles. Si les fichiers de lignée manquent,
+les tutelles OpenAlex ne sont pas ajoutées et les métadonnées le signalent.
+Il garde localement les lignes brutes et les contrôles, puis
 produit des agrégats, une liste de ROR résolus et des métadonnées. Les
 collections publiables sont `innovation_effectifs`, `innovation_entites` et
 `innovation_meta`. L'API en lecture seule expose
@@ -514,9 +517,9 @@ Prévoir des jeux synthétiques et quelques contrôles manuels reproductibles :
 - Un projet avec deux participations d'un même ROR et une tutelle partagée :
   PRJ-01 = 1 par ROR, pas deux ; montants par participation distincte,
   jamais le budget global répété. Appel, pays et pilier vérifiés.
-- Une startup multi-liée, SIREN à zéro initial, date manquante ou identifiant
-  de structure ambigu : conservation des exclusions et absence d'attribution
-  hasardeuse ; statut actuel non extrapolé aux années précédentes.
+- Une startup multi-liée, SIREN à zéro initial, date manquante ou SIRET non
+  résolu : dédoublonnage par ROR et conservation des exclusions ; statut actuel
+  non extrapolé aux années précédentes.
 - Une publication avec plusieurs mentions d'une même entreprise : ACK-01 = 1 ;
   DOI ambigu, texte non observable et aucune mention traités séparément ; part
   calculée sur le même univers observable, `null` si dénominateur nul.

@@ -9,15 +9,15 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from .affiliations import rattacher_structures, tutelles_ror
 from .config import (
     DATA_DIR,
     ODS_BASE_URL,
     REFERENTIEL_DIR,
     REFERENTIEL_SOURCE,
-    SCANR_ORGANIZATIONS_URL,
     STARTUPS_ESR_DATASET,
 )
-from .referentiel import _lignes_jsonl_gz, charger_referentiel
+from .referentiel import charger_referentiel
 from .utils_ods import get_ods_data
 
 ODS_DATASET = STARTUPS_ESR_DATASET
@@ -25,7 +25,6 @@ ODS_URL = f"{ODS_BASE_URL}/explore/dataset/{ODS_DATASET}/"
 ANNEE_DEBUT = 2012
 SIREN_PATTERN = re.compile(r"^\d{9}$")
 SIRET_PATTERN = re.compile(r"^\d{14}$")
-ROR_PATTERN = re.compile(r"^0[a-z0-9]{6}[0-9]{2}$")
 COLONNES_OBLIGATOIRES = {
     "siren_startup",
     "date_creation_startup",
@@ -58,54 +57,6 @@ def _sirets(value) -> set[str]:
         if (texte := _texte(str(value).strip().strip("[]'\"")))
         and SIRET_PATTERN.fullmatch(texte)
     }
-
-
-def _ror(value):
-    texte = _texte(value)
-    if not texte:
-        return None
-    identifiant = texte.rstrip("/").split("/")[-1].lower()
-    return identifiant if ROR_PATTERN.fullmatch(identifiant) else None
-
-
-def _label(organisation):
-    labels = organisation.get("label") or {}
-    return _texte(labels.get("fr")) or _texte(labels.get("default")) or _texte(labels.get("en"))
-
-
-def _external_ids(organisation, type_id):
-    return {
-        _texte(item.get("id"))
-        for item in organisation.get("externalIds") or []
-        if isinstance(item, dict) and str(item.get("type", "")).lower() == type_id
-        and _texte(item.get("id"))
-    }
-
-
-def resolve_sirets(sirets, organisations):
-    """Résout uniquement les SIRET ayant un unique ROR distinct dans scanR."""
-    demandes = set(sirets)
-    rors_par_siret = {siret: set() for siret in demandes}
-    noms_par_ror = {}
-
-    for organisation in organisations:
-        siret_correspondant = _external_ids(organisation, "siret").intersection(demandes)
-        if not siret_correspondant:
-            continue
-        rors = {_ror(value) for value in _external_ids(organisation, "ror")}
-        rors.discard(None)
-        for siret in siret_correspondant:
-            rors_par_siret[siret].update(rors)
-        nom = _label(organisation)
-        for ror in rors:
-            if nom:
-                noms_par_ror.setdefault(ror, nom)
-
-    correspondances = {}
-    for siret, rors in rors_par_siret.items():
-        statut = "unique" if len(rors) == 1 else "ambigu" if len(rors) > 1 else "absent"
-        correspondances[siret] = {"rors": sorted(rors), "statut": statut}
-    return correspondances, noms_par_ror
 
 
 def _lignes_startups(frame):
@@ -192,17 +143,33 @@ def _source_hash(frame):
     return hashlib.sha256(values.values.tobytes()).hexdigest()
 
 
-def _entites(rors, noms_par_ror, referentiel):
+def _entites(rors, referentiel, ref_dir, data_dir):
     referentiel_par_ror = {}
     if referentiel is not None and not referentiel.empty and "ror" in referentiel.columns:
         referentiel_par_ror = referentiel.drop_duplicates("ror").set_index("ror").to_dict("index")
 
+    noms_par_ror = {}
+    if REFERENTIEL_SOURCE != "scanr":
+        scanr = charger_referentiel("scanr", ref_dir)
+        if scanr is not None and not scanr.empty:
+            noms_par_ror = scanr.drop_duplicates("ror").set_index("ror")["nom"].to_dict()
+    institutions = Path(data_dir) / "institutions.parquet"
+    if institutions.exists():
+        with duckdb.connect() as con:
+            noms = con.execute(
+                "SELECT ror, any_value(display_name) AS nom FROM read_parquet(?) GROUP BY ror",
+                [str(institutions)],
+            ).df()
+        for row in noms.itertuples(index=False):
+            if _texte(row.nom) and not _texte(noms_par_ror.get(row.ror)):
+                noms_par_ror[row.ror] = row.nom
+
     lignes = []
     for ror in sorted(rors):
         ref = referentiel_par_ror.get(ror, {})
-        nom = ref.get("nom") or noms_par_ror.get(ror) or ror
-        sigle = ref.get("sigle")
-        ville = ref.get("ville")
+        nom = _texte(ref.get("nom")) or _texte(noms_par_ror.get(ror)) or ror
+        sigle = _texte(ref.get("sigle"))
+        ville = _texte(ref.get("ville"))
         recherche = " ".join(str(value) for value in (nom, sigle, ville, ror) if value).lower()
         lignes.append({
             "entite_id": ror,
@@ -217,57 +184,34 @@ def _entites(rors, noms_par_ror, referentiel):
     ])
 
 
-def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None,
-                     referentiel=None, date_extraction: str = None, verbose: bool = True) -> dict:
-    """Calcule INN-STU-01 et écrit uniquement des agrégats destinés à tableaux.
-
-    `raw_data`, `organisations` et `referentiel` permettent de tester le calcul
-    sans télécharger les sources.
-    """
-    frame = raw_data if raw_data is not None else get_ods_data(ODS_DATASET, strict=True, dtype=str)
+def compute_startups(data_dir: str = DATA_DIR, ref_dir: str = REFERENTIEL_DIR,
+                     verbose: bool = True) -> dict:
+    """Calcule INN-STU-01 et écrit les agrégats et contrôles locaux."""
+    frame = get_ods_data(ODS_DATASET, strict=True, dtype=str)
     if frame.empty:
         raise ValueError(f"Le jeu ODS {ODS_DATASET} ne contient aucun enregistrement")
-    date_extraction = date_extraction or dt.date.today().isoformat()
+    date_extraction = dt.date.today().isoformat()
     dossier = Path(data_dir) / "innovation"
     dossier.mkdir(parents=True, exist_ok=True)
     enregistrements, observations, controles = _lignes_startups(frame)
     _ecrire_parquet(frame, dossier / "startups_brut.parquet")
     sirets = sorted({siret for row in enregistrements for siret in row["sirets"]})
-    source_organisations = organisations
-    if source_organisations is None:
-        source_organisations = _lignes_jsonl_gz(SCANR_ORGANIZATIONS_URL) if sirets else []
-    correspondances, noms_par_ror = resolve_sirets(sirets, source_organisations)
-
-    # --- PISTE (non active) : règle commune d'affiliation, comme ANR / ERC / prix ---------------
-    # Remplacerait les quatre lignes ci-dessus (rattachement par scanR organizations-v2).
-    # affiliations.rattacher_structures reconnaît ROR, Paysage, RNSR, PIC, SIRET/SIREN, UAI et
-    # renvoie toujours un ROR (structure Paysage actuelle = successeur, puis son ROR) :
-    #   - SIRET exact s'il mène à un ROR, sinon SIREN -> l'unique ROR, ou la structure de tête ;
-    #     identifiant porté par plusieurs fiches : la fiche actuelle avec ROR, puis la tête ;
-    #   - structure sans ROR dans Paysage : non rattachée (« absent ») ;
-    #   - liens « tutelle_rnsr » : établissements tutelles d'un laboratoire RNSR (sans objet ici,
-    #     les structures liées sont des SIRET) ;
-    #   - affiliations.tutelles_ror ajoute les tutelles de la lignée OpenAlex (LINEAGE_CUTS) :
-    #     une startup liée à l'Institut du cerveau compterait aussi dans ses tutelles.
-    # Mesuré sur le jeu du 2026-11-19 (195 SIRET) : 7 SIRET rattachés en plus (163 startups :
-    # Inserm, INRAE, Clermont Auvergne INP, Université Bourgogne Europe, Arvalis...), successeurs
-    # Paysage appliqués, plus de statut « ambigu ». Établissements identiques aux autres onglets.
-    #
-    # from .affiliations import rattacher_structures, tutelles_ror
-    # r, liens = rattacher_structures(pd.DataFrame({"entities_id": sirets, "rnsr": None,
-    #                                               "entities_name": None}))
-    # lien = tutelles_ror(liens["ror"], data_dir)          # (ror, entite_id) : ROR + tutelles
-    # par_siret = (liens.merge(r[["ligne", "entities_id"]], on="ligne")
-    #              .merge(lien, on="ror")                   # sans la lignée : entite_id = ror
-    #              .groupby("entities_id")["entite_id"].agg(set).to_dict())
-    # correspondances = {s: {"statut": "unique", "rors": par_siret[s]} if s in par_siret
-    #                    else {"statut": "absent", "rors": set()} for s in sirets}
-    # noms_par_ror = {}   # noms : référentiel Paysage (_entites), sinon le ROR
-    #
-    # À mettre à jour si adopté : meta["rattachement"]["source"], la phrase de méthode sur les
-    # SIRET « associés à plusieurs ROR », docs/INNOVATION_SPECS.md ; le paramètre organisations
-    # et resolve_sirets ne serviraient plus qu'à comparer les deux méthodes.
-    # ---------------------------------------------------------------------------------------------
+    lignee_disponible = all(
+        (Path(data_dir) / fichier).exists()
+        for fichier in ("inst_lineage.parquet", "institutions.parquet")
+    )
+    par_siret = {}
+    sirets_avec_tutelles = set()
+    if sirets:
+        structures = pd.DataFrame({"entities_id": sirets, "rnsr": None})
+        structures, liens = rattacher_structures(structures, ref_dir)
+        if not liens.empty:
+            lien = tutelles_ror(liens["ror"], data_dir)
+            rattachements = liens.merge(structures[["ligne", "entities_id"]], on="ligne").merge(lien, on="ror")
+            par_siret = rattachements.groupby("entities_id")["entite_id"].agg(set).to_dict()
+            sirets_avec_tutelles = set(
+                rattachements.loc[rattachements["ror"] != rattachements["entite_id"], "entities_id"]
+            )
 
     paires = set()
     non_rattaches = []
@@ -279,13 +223,12 @@ def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None
                 "motif": "aucun_siret_valide",
             })
         for siret in row["sirets"]:
-            resolution = correspondances[siret]
-            if resolution["statut"] == "unique":
-                rors_startup.update(resolution["rors"])
+            if siret in par_siret:
+                rors_startup.update(par_siret[siret])
             else:
                 non_rattaches.append({
                     "siren": row["siren"], "annee": row["annee"], "siret": siret,
-                    "motif": resolution["statut"],
+                    "motif": "absent",
                 })
         paires.update((ror, row["siren"], row["annee"]) for ror in rors_startup)
 
@@ -325,26 +268,28 @@ def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None
             })
     effectifs = pd.DataFrame(lignes_effectifs)
 
-    liens_uniques = sum(value["statut"] == "unique" for value in correspondances.values())
+    nb_sirets_rattaches = len(par_siret)
     controles.update({
         "nb_siren_comptes": len(enregistrements),
         "nb_siren_sans_siret_valide": sum(not row["sirets"] for row in enregistrements),
         "nb_sirets_distincts": len(sirets),
-        "nb_sirets_rattaches_unique": liens_uniques,
-        "nb_sirets_ambigus": sum(value["statut"] == "ambigu" for value in correspondances.values()),
-        "nb_sirets_non_resolus": sum(value["statut"] == "absent" for value in correspondances.values()),
+        "nb_sirets_rattaches": nb_sirets_rattaches,
+        "nb_sirets_avec_tutelles_openalex": len(sirets_avec_tutelles),
+        "nb_sirets_non_resolus": len(sirets) - nb_sirets_rattaches,
         "nb_siren_sans_ror_resolu": len({
             row["siren"] for row in enregistrements
             if not any(
-                correspondances[siret]["statut"] == "unique"
+                siret in par_siret
                 for siret in row["sirets"]
             )
         }),
     })
-    referentiel = referentiel if referentiel is not None else charger_referentiel(
-        REFERENTIEL_SOURCE, REFERENTIEL_DIR
-    )
-    liste_entites = _entites(rors, noms_par_ror, referentiel)
+    referentiel = charger_referentiel(REFERENTIEL_SOURCE, ref_dir)
+    liste_entites = _entites(rors, referentiel, ref_dir, data_dir)
+    nb_noms_absents = int((liste_entites["nom"] == liste_entites["entite_id"]).sum())
+    controles["nb_entites_sans_nom"] = nb_noms_absents
+    if nb_noms_absents:
+        print(f"Startups ESR : {nb_noms_absents} établissements sans nom connu, ROR affiché.")
     meta = {
         "indicateur_id": "INN-STU-01",
         "annees": annees_completes,
@@ -353,8 +298,10 @@ def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None
         "methode": [
             "Nombre de SIREN distincts par année de création, à partir de 2012.",
             "France : chaque SIREN valide compte une fois, y compris sans structure liée exploitable.",
-            "Établissement : un SIREN compte une fois par ROR lorsqu'au moins un SIRET lié se résout vers ce ROR unique.",
-            "Les SIRET absents ou associés à plusieurs ROR distincts ne sont pas attribués à un établissement.",
+            "Établissement : règle commune d'affiliation, SIRET Paysage puis SIREN si nécessaire, avec successeurs Paysage.",
+            ("Les tutelles de la lignée OpenAlex sont ajoutées." if lignee_disponible
+             else "Lignée OpenAlex absente : les tutelles OpenAlex ne sont pas ajoutées."),
+            "Les SIRET sans ROR résolu par la règle commune ne sont pas attribués à un établissement.",
             "Une startup liée à plusieurs ROR peut compter une fois dans chacun ; les comptes par établissement ne s'additionnent pas.",
             "Le recensement est incomplet et rétrospectif ; une absence de startup recensée ne prouve pas l'absence de création.",
             f"L'année {annee_provisoire} est provisoire.",
@@ -368,9 +315,10 @@ def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None
             "empreinte_sha256": _source_hash(frame),
         },
         "rattachement": {
-            "source": "scanR organizations-v2",
+            "source": "règle commune d'affiliation : Paysage, tutelles scanR et lignée OpenAlex",
             "date_extraction": date_extraction,
             "referentiel_noms": REFERENTIEL_SOURCE,
+            "lignee_openalex_disponible": lignee_disponible,
         },
         "controles": controles,
     }
@@ -385,7 +333,7 @@ def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None
     if verbose:
         print(
             f"Startups ESR : {len(enregistrements):,} SIREN comptés, "
-            f"{len(rors):,} ROR liés, {liens_uniques:,}/{len(sirets):,} SIRET résolus sans ambiguïté "
+            f"{len(rors):,} ROR liés, {nb_sirets_rattaches:,}/{len(sirets):,} SIRET rattachés "
             f"-> {dossier}"
         )
     return {
@@ -397,6 +345,6 @@ def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None
         ],
         "nb_siren": len(enregistrements),
         "nb_entites": len(rors),
-        "nb_sirets_rattaches_unique": liens_uniques,
+        "nb_sirets_rattaches": nb_sirets_rattaches,
         "annees": annees_completes,
     }
