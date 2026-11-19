@@ -429,8 +429,8 @@ PROJETS_PROVENANCES_PRIORITAIRES = ["anr_opendata", "cordis"]
 ABOUTNESS_URL = "https://api.openalex.org/text/topics"
 ABOUTNESS_VERSION = 2              # classifieur des topics actuels des works et awards (oct. 2026)
 ABOUTNESS_INTERVALLE_S = 1.05      # pause entre deux requêtes (limite : 1 requête par seconde)
-ABOUTNESS_BUDGET_USD = 300         # dépense maximale par lancement (0,01 $ par texte)
-ABOUTNESS_MARGE_USD = 50           # arrêt si le budget restant du jour (en-tête OpenAlex) passe dessous
+ABOUTNESS_BUDGET_USD = 200         # dépense maximale par lancement (0,01 $ par texte) ; clé : 200 $ par jour
+ABOUTNESS_MARGE_USD = 2            # arrêt si le budget restant du jour (en-tête OpenAlex) passe dessous
 ABOUTNESS_DIR = f"{DATA_ROOT}/aboutness"   # cache des textes déjà classés (jamais payés deux fois)
 
 # --- ANR (anr.py) ---------------------------------------------------------------------------

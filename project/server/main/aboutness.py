@@ -14,7 +14,8 @@ Limites d'OpenAlex (https://help.openalex.org/api/tag-aboutness, vérifiées le 
 
 Garde-fous :
   - cache (ABOUTNESS_DIR) : un texte déjà classé n'est jamais renvoyé (clé = empreinte de la
-    version + du texte envoyé) ; écrit au fil de l'eau, une interruption ne perd rien ;
+    version + du texte envoyé) ; écrit au fil de l'eau, une interruption ne perd rien ; garde
+    la réponse JSON complète (keywords, autres topics...), pas seulement le topic principal ;
   - budget par lancement (ABOUTNESS_BUDGET_USD) ; arrêt aussi quand le budget restant du jour,
     lu dans l'en-tête X-RateLimit-Remaining-USD, passe sous ABOUTNESS_MARGE_USD ;
   - 429 : attente (Retry-After) puis nouvel essai ; budget épuisé (402/403) : arrêt propre.
@@ -25,6 +26,7 @@ Exemple :
     t = pd.DataFrame({"cle": [...], "titre": [...], "resume": [...]})
     estimer(t)                      # nombre à envoyer, coût, durée (sans appel)
     r = classer_textes(t)           # cle, topic_id, topic_score, aboutness_note
+    lire_cache(complet=True)        # + réponse JSON complète (keywords, autres topics...)
 """
 
 import hashlib
@@ -42,8 +44,13 @@ from .config import (ABOUTNESS_BUDGET_USD, ABOUTNESS_DIR, ABOUTNESS_INTERVALLE_S
                      ABOUTNESS_URL, ABOUTNESS_VERSION, OPENALEX_API_KEY)
 
 COUT_USD = 0.01
-_TYPES = ("empreinte::VARCHAR AS empreinte, topic_id::VARCHAR AS topic_id, "
-          "topic_score::DOUBLE AS topic_score, aboutness_note::VARCHAR AS aboutness_note")
+# colonnes du cache et leur type ; « reponse » = réponse JSON complète d'OpenAlex (topics,
+# keywords, concepts, meta...), avec le texte envoyé et la date d'appel. Les lots écrits avant
+# 2026-11-19 n'ont que les quatre premières colonnes (les autres lues à NULL).
+_COLONNES = {"empreinte": "VARCHAR", "topic_id": "VARCHAR", "topic_score": "DOUBLE",
+             "aboutness_note": "VARCHAR", "titre_envoye": "VARCHAR", "resume_envoye": "VARCHAR",
+             "reponse": "VARCHAR", "date_appel": "VARCHAR"}
+_TYPES = ", ".join(f"{c}::{t} AS {c}" for c, t in _COLONNES.items())
 MIN_CAR, MAX_CAR = 20, 2000
 
 
@@ -66,12 +73,17 @@ def _cache_dir(version: int) -> Path:
     return Path(ABOUTNESS_DIR) / f"topics_v{version}"
 
 
-def lire_cache(version: int = ABOUTNESS_VERSION) -> pd.DataFrame:
+def lire_cache(version: int = ABOUTNESS_VERSION, complet: bool = False) -> pd.DataFrame:
+    """Textes déjà classés : empreinte, topic_id, topic_score, aboutness_note ; complet=True
+    ajoute titre_envoye, resume_envoye, reponse (JSON complet d'OpenAlex) et date_appel."""
+    cols = list(_COLONNES) if complet else list(_COLONNES)[:4]
     d = _cache_dir(version)
     if not d.exists() or not any(d.glob("*.parquet")):
-        return pd.DataFrame(columns=["empreinte", "topic_id", "topic_score", "aboutness_note"])
-    return (duckdb.sql(f"SELECT {_TYPES} FROM read_parquet('{d}/*.parquet', union_by_name = true)").df()
-            .drop_duplicates("empreinte"))
+        return pd.DataFrame(columns=cols)
+    src = f"read_parquet('{d}/*.parquet', union_by_name = true)"
+    presentes = set(duckdb.sql(f"SELECT * FROM {src} LIMIT 0").columns)
+    sel = ", ".join(f"{c if c in presentes else 'NULL'}::{_COLONNES[c]} AS {c}" for c in cols)
+    return duckdb.sql(f"SELECT {sel} FROM {src}").df().drop_duplicates("empreinte")
 
 
 def _preparer(textes: pd.DataFrame, version: int) -> pd.DataFrame:
@@ -164,7 +176,10 @@ def classer_textes(textes: pd.DataFrame, version: int = ABOUTNESS_VERSION,
         pt = rep.get("primary_topic") or {}
         tid = (pt.get("id") or "").rsplit("/", 1)[-1] or None
         nouveaux.append({"empreinte": r.empreinte, "topic_id": tid, "topic_score": pt.get("score"),
-                         "aboutness_note": None if tid else f"sans topic : {(rep.get('meta') or {}).get('note')}"})
+                         "aboutness_note": None if tid else f"sans topic : {(rep.get('meta') or {}).get('note')}",
+                         "titre_envoye": r.titre_envoye, "resume_envoye": r.resume_envoye,
+                         "reponse": json.dumps(rep, ensure_ascii=False),
+                         "date_appel": time.strftime("%Y-%m-%dT%H:%M:%S")})
         if len(nouveaux) >= lot:
             ecrire()
         if verbose and k % 500 == 0:
