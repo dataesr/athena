@@ -93,17 +93,17 @@ COLLECTIONS = [
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
 INDEX = {
     "entites": [[("entite_id", 1)], [("selecteur", 1), ("ordre_selecteur", 1)], [("entite_type", 1)]],
-    "biblio_disciplines": [[("classement", 1), ("discipline_code", 1)]],
+    "biblio_disciplines": [[("nomenclature_disciplinaire", 1), ("discipline_code", 1)]],
     "biblio_effectifs": [
-        [("entite_id", 1), ("perimetre", 1), ("classement", 1), ("annee_publication", 1), ("discipline_code", 1)],
+        [("entite_id", 1), ("perimetre", 1), ("nomenclature_disciplinaire", 1), ("annee_publication", 1), ("discipline_code", 1)],
         [("entite_type", 1), ("perimetre", 1), ("annee_publication", 1)],
     ],
     "biblio_copublications": [
         [("entite_id", 1), ("partenaire_type", 1), ("perimetre", 1), ("annee_publication", 1)],
         [("partenaire_id", 1)],
     ],
-    "biblio_revues_tete": [[("classement", 1), ("discipline_code", 1), ("categorie", 1), ("rang", 1)]],
-    "biblio_seuils_top10": [[("perimetre", 1), ("classement", 1), ("discipline_code", 1), ("annee_publication", 1)]],
+    "biblio_revues_tete": [[("nomenclature_disciplinaire", 1), ("discipline_code", 1), ("categorie", 1), ("rang", 1)]],
+    "biblio_seuils_top10": [[("perimetre", 1), ("nomenclature_disciplinaire", 1), ("discipline_code", 1), ("annee_publication", 1)]],
     "biblio_meta": [],
     "erc_effectifs": [
         [("entite_id", 1), ("annee_appel", 1), ("discipline_code", 1), ("type_bourse", 1)],

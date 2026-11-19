@@ -73,10 +73,18 @@ def rattacher_structures(p: pd.DataFrame, ref_dir: str = REFERENTIEL_DIR, succes
     tut = charger_tutelles_rnsr(ref_dir) if tutelles_rnsr else pd.DataFrame(columns=["rnsr", "tutelle_id"])
     tutelles = tut.groupby("rnsr")["tutelle_id"].agg(list).to_dict()
     ids = charger_siret_paysage(ref_dir)
-    uai2p = dict(zip(ids.loc[ids["type"] == "uai", "valeur"], ids.loc[ids["type"] == "uai", "paysage_id"]))
-    pic2p = (ids[ids["type"] == "pic"].drop_duplicates("valeur").set_index("valeur")["paysage_id"].to_dict())
+    # Un identifiant porté par plusieurs structures Paysage (ex. SIRET de l'Université des
+    # Antilles, porté aussi par l'ancienne Université des Antilles et de la Guyane) : la
+    # structure actuelle (sans successeur) avec un ROR d'abord, puis la structure de tête, puis
+    # l'ordre du fichier. Sans ce choix, l'ancienne structure et son successeur (ici l'Université
+    # de Guyane) pouvaient l'emporter selon l'ordre des lignes.
+    ids = (ids.assign(_actuelle=~ids["paysage_id"].isin(succ.keys()),
+                      _ror=ids["paysage_id"].isin(p2r.keys()),
+                      _tete=ids["tete"].fillna(False).astype(bool), _ordre=range(len(ids)))
+           .sort_values(["_actuelle", "_ror", "_tete", "_ordre"], ascending=[False, False, False, True]))
+    premier = lambda t: ids[ids["type"] == t].drop_duplicates("valeur").set_index("valeur")["paysage_id"].to_dict()
+    uai2p, pic2p, siret2p = premier("uai"), premier("pic"), premier("siret")
     sir = ids[ids["type"] == "siret"]
-    siret2p = dict(zip(sir["valeur"], sir["paysage_id"]))
 
     def ror_actuel(pid):
         """ROR de la structure Paysage actuelle (successeur), à défaut celui de pid."""

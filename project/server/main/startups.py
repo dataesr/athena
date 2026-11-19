@@ -238,6 +238,37 @@ def compute_startups(data_dir: str = DATA_DIR, raw_data=None, organisations=None
         source_organisations = _lignes_jsonl_gz(SCANR_ORGANIZATIONS_URL) if sirets else []
     correspondances, noms_par_ror = resolve_sirets(sirets, source_organisations)
 
+    # --- PISTE (non active) : règle commune d'affiliation, comme ANR / ERC / prix ---------------
+    # Remplacerait les quatre lignes ci-dessus (rattachement par scanR organizations-v2).
+    # affiliations.rattacher_structures reconnaît ROR, Paysage, RNSR, PIC, SIRET/SIREN, UAI et
+    # renvoie toujours un ROR (structure Paysage actuelle = successeur, puis son ROR) :
+    #   - SIRET exact s'il mène à un ROR, sinon SIREN -> l'unique ROR, ou la structure de tête ;
+    #     identifiant porté par plusieurs fiches : la fiche actuelle avec ROR, puis la tête ;
+    #   - structure sans ROR dans Paysage : non rattachée (« absent ») ;
+    #   - liens « tutelle_rnsr » : établissements tutelles d'un laboratoire RNSR (sans objet ici,
+    #     les structures liées sont des SIRET) ;
+    #   - affiliations.tutelles_ror ajoute les tutelles de la lignée OpenAlex (LINEAGE_CUTS) :
+    #     une startup liée à l'Institut du cerveau compterait aussi dans ses tutelles.
+    # Mesuré sur le jeu du 2026-11-19 (195 SIRET) : 7 SIRET rattachés en plus (163 startups :
+    # Inserm, INRAE, Clermont Auvergne INP, Université Bourgogne Europe, Arvalis...), successeurs
+    # Paysage appliqués, plus de statut « ambigu ». Établissements identiques aux autres onglets.
+    #
+    # from .affiliations import rattacher_structures, tutelles_ror
+    # r, liens = rattacher_structures(pd.DataFrame({"entities_id": sirets, "rnsr": None,
+    #                                               "entities_name": None}))
+    # lien = tutelles_ror(liens["ror"], data_dir)          # (ror, entite_id) : ROR + tutelles
+    # par_siret = (liens.merge(r[["ligne", "entities_id"]], on="ligne")
+    #              .merge(lien, on="ror")                   # sans la lignée : entite_id = ror
+    #              .groupby("entities_id")["entite_id"].agg(set).to_dict())
+    # correspondances = {s: {"statut": "unique", "rors": par_siret[s]} if s in par_siret
+    #                    else {"statut": "absent", "rors": set()} for s in sirets}
+    # noms_par_ror = {}   # noms : référentiel Paysage (_entites), sinon le ROR
+    #
+    # À mettre à jour si adopté : meta["rattachement"]["source"], la phrase de méthode sur les
+    # SIRET « associés à plusieurs ROR », docs/INNOVATION_SPECS.md ; le paramètre organisations
+    # et resolve_sirets ne serviraient plus qu'à comparer les deux méthodes.
+    # ---------------------------------------------------------------------------------------------
+
     paires = set()
     non_rattaches = []
     for row in enregistrements:
