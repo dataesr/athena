@@ -15,7 +15,9 @@ def run_worker():
     redis_connection = redis.from_url(redis_url)
     with Connection(redis_connection):
         worker = Worker(app.config['QUEUES'])
-        worker.work()
+        # with_scheduler : tâches programmées (enqueue_at), ex. relances quotidiennes
+        # d'aboutness de /compute avec "jusqu_a_complet": true (tasks.py)
+        worker.work(with_scheduler=True)
 
 
 if __name__ == '__main__':

@@ -33,7 +33,9 @@ def list_steps_compute():
 @main_blueprint.route("/compute", methods=["POST"])
 def run_task_compute():
     """Corps JSON : {} (chaîne complète), {"steps": [...]}, {"start": ..., "end": ...},
-    "params": {étape: {argument: valeur}}, "snapshot" et "snapshot_awards": "AAAA-MM-JJ" (voir tasks.py)."""
+    "params": {étape: {argument: valeur}}, "snapshot" et "snapshot_awards": "AAAA-MM-JJ",
+    "jusqu_a_complet": true (horizon_topics / anr relancées chaque jour à 06:00 UTC jusqu'à
+    « complet », au plus "relances_max" fois) (voir tasks.py)."""
     args = request.get_json(force=True, silent=True) or {}
     try:
         etapes = etapes_choisies(args)

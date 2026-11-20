@@ -117,6 +117,60 @@ def create_task_compute(args: dict) -> dict:
     d'environnement correspondantes (ATHENA_SNAPSHOT, ATHENA_SNAPSHOT_AWARDS) : les modules y
     relisent config.py, donc DATA_DIR, ERC_DIR, PRIX_DIR, VIVIERS_DIR... pointent vers ce snapshot."""
     args = dict(args or {})
+    res = _compute_snapshots(args)
+    return _relancer_si_incomplet(args, res)
+
+
+# Étapes qui appellent aboutness (0,01 $ par texte, crédit OpenAlex quotidien) : elles peuvent
+# s'arrêter avant la fin (« complet »: false) et reprennent au lancement suivant grâce au cache.
+ETAPES_A_REPRENDRE = ("horizon_topics", "anr")
+RELANCE_HEURE_UTC = 6          # relance à 06:00 UTC (crédit OpenAlex remis à zéro à minuit UTC)
+RELANCE_MARGE_MIN = 0
+RELANCES_MAX = 10              # au plus 10 jours de relance (défaut de "relances_max")
+
+
+def _relancer_si_incomplet(args: dict, res: dict) -> dict:
+    """"jusqu_a_complet": true dans le JSON de /compute : si horizon_topics ou anr s'est arrêtée
+    avant la fin (crédit aboutness du jour épuisé, plafond du lancement), la même demande, réduite
+    aux étapes incomplètes, est remise dans la file pour le lendemain 06:00 UTC, et ainsi de suite
+    jusqu'à « complet »: true partout, au plus "relances_max" fois (défaut RELANCES_MAX).
+    Nécessite le planificateur de rq dans le worker (manage.py : work(with_scheduler=True))."""
+    if not args.get("jusqu_a_complet"):
+        return res
+    incompletes = [e for e in ETAPES_A_REPRENDRE
+                   if isinstance(res.get(f"{e}_resultat"), dict) and res[f"{e}_resultat"].get("complet") is False]
+    n, n_max = int(args.get("relance") or 0), int(args.get("relances_max") or RELANCES_MAX)
+    if not incompletes:
+        res["relance"] = f"terminé (après {n} relance(s))"
+        logger.info(f"jusqu_a_complet : {', '.join(ETAPES_A_REPRENDRE)} complètes, pas de relance")
+        return res
+    if n >= n_max:
+        res["relance"] = f"ARRÊT : {n_max} relances atteintes, encore incomplet : {incompletes}"
+        logger.warning(f"jusqu_a_complet : {res['relance']}")
+        return res
+    from datetime import datetime, timedelta, timezone
+    from rq import Queue, get_current_job
+    job = get_current_job()
+    if job is None:                 # appel direct, hors worker : rien à reprogrammer
+        res["relance"] = "non reprogrammé (hors worker rq)"
+        return res
+    maintenant = datetime.now(timezone.utc)
+    quand = (maintenant + timedelta(days=1)).replace(hour=RELANCE_HEURE_UTC, minute=RELANCE_MARGE_MIN,
+                                                      second=0, microsecond=0)
+    # toujours le lendemain : une tâche finie entre 00:00 et 06:00 UTC a épuisé le crédit du jour
+    suite = {**args, "steps": incompletes, "relance": n + 1}
+    suite.pop("start", None)
+    suite.pop("end", None)
+    q = Queue(job.origin, connection=job.connection)
+    nouveau = q.enqueue_at(quand, create_task_compute, suite, job_timeout=job.timeout)
+    res["relance"] = {"task_id": nouveau.get_id(), "prevue_le": quand.isoformat(), "etapes": incompletes,
+                      "numero": n + 1, "max": n_max}
+    logger.info(f"jusqu_a_complet : {incompletes} incomplètes, relance n°{n + 1}/{n_max} "
+                f"programmée le {quand.isoformat()} (tâche {nouveau.get_id()})")
+    return res
+
+
+def _compute_snapshots(args: dict) -> dict:
     demandes = snapshots_choisis(args)
     env = {SNAPSHOTS[k][0]: d for k, d in demandes.items() if d != SNAPSHOTS[k][1]}
     if not env:
