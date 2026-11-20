@@ -225,6 +225,59 @@ le millésime consulté, pas une garantie de couverture historique ni de droits.
   effectivement obtenu. Exclure les lignes en préparation du nombre de projets
   financés ; afficher les années récentes comme provisoires.
 
+#### Qualification complémentaire Horizon (20 novembre 2026)
+
+Les résultats suivants proviennent de requêtes d'agrégation de l'[API ODS du
+jeu des lauréats](https://data.enseignementsup-recherche.gouv.fr/api/explore/v2.1/catalog/datasets/fr-esr-horizon-projects-entities/records)
+avec `pilier_code="HORIZON.2"`. Ils décrivent le jeu consulté, pas une
+garantie de couverture ni les règles sémantiques du producteur.
+
+| `status_code`       | Participations | Projets distincts indiqués par l'API |
+| ------------------- | -------------: | -----------------------------------: |
+| `SIGNED`            |         75 913 |                                4 563 |
+| `CLOSED`            |          2 932 |                                  203 |
+| `SUSPENDED`         |            285 |                                   21 |
+| `TERMINATED`        |            109 |                                    9 |
+| `UNDER_PREPARATION` |          7 703 |                                  461 |
+
+Toutes ces lignes ont `stage="successful"` : ce champ ne permet donc pas à lui
+seul de distinguer les projets en préparation. La description du champ
+`status_code` ne définit pas les codes ; notamment, ne pas déduire d'un statut
+terminé, clos ou suspendu que le financement a effectivement été perçu. La
+sélection des statuts pour PRJ-01 reste à valider avec le producteur.
+Pour le pilote, le périmètre retenu est `SIGNED` uniquement, avec un libellé
+« projets à convention signée » et un statut provisoire ; tous les types de
+participants sont comptés. Ce choix n'établit pas le versement d'un financement.
+La lecture complète de l'export CSV public consulté le 20 novembre ne révèle
+aucun projet Pilier 2 avec plusieurs statuts ou plusieurs années d'appel non
+vides ; ce contrôle sera répété par le calcul sur chaque nouvelle extraction.
+
+Les lignes `SIGNED` comprennent 65 804 participations `beneficiary`, 6 086
+`associated partner` et 4 023 `thirdparty`. Le choix des rôles à attribuer
+aux établissements doit être explicite : participer à un projet ne signifie
+pas nécessairement en être bénéficiaire financier. Les nombres de projets par
+groupe ne doivent pas être additionnés.
+
+Pour les participations françaises (`country_code="FRA"`), tous statuts
+confondus, 7 061 lignes indiquent un identifiant Paysage, 105 un SIREN, une un
+SIRET et 50 ne précisent pas la source de l'identifiant. Au total Pilier 2,
+30 198 lignes n'ont pas de source d'identifiant ; la couverture du rattachement
+effectif reste à mesurer avec les référentiels, sans deviner le type de ces
+identifiants.
+Dans l'export complet consulté, le périmètre provisoire `SIGNED` comprend
+6 285 lignes de participation françaises (outre-mer inclus), pour 2 514
+projets distincts avec une année d'appel valide ; 29 de ces lignes comportent
+un identifiant numérique à neuf chiffres sans source. Ces chiffres précèdent
+le rattachement aux établissements et évolueront avec les données.
+
+Les [métadonnées ODS](https://data.enseignementsup-recherche.gouv.fr/api/explore/v2.1/catalog/datasets/fr-esr-horizon-projects-entities)
+indiquent la Licence Ouverte v2.0 et `visibility="domain"` ; l'API répondait
+sans clé lors de la consultation, sans garantie de pérennité de cet accès.
+La date `modified` indiquée est le 19 septembre 2026, mais les métadonnées
+précisent qu'elle n'est pas actualisée automatiquement lors des changements
+de données ou de métadonnées : ne pas l'utiliser comme date certaine du
+millésime des enregistrements.
+
 Pour les startups, la pièce jointe décrit `structures_liees` comme champ
 d'analyse, séparateur `|`, et `structures_liees_id` comme identifiants sans
 en préciser la nature. Un enregistrement public consulté présente un identifiant
@@ -507,7 +560,30 @@ ou déploiement n'est faite par ce pilote. L'exécution sur le jeu complet et la
 validation humaine du tableau restent à faire après génération locale des
 agrégats.
 
-### 8.6 Tests et recette
+### 8.6 Pilote Horizon Pilier 2
+
+L'étape facultative `innovation_horizon` calcule `INN-PRJ-01` sur les projets
+Pilier 2 au statut `SIGNED`, année d'appel et tous rôles confondus. La France
+est calculée sur les projets ayant au moins une participation française ;
+les établissements sont rattachés à partir de ces seules participations, par
+la règle commune et, lorsqu'elle est disponible, la lignée OpenAlex. Un projet
+ne compte qu'une fois par entité et année. Les identifiants numériques à neuf
+chiffres dont la source est absente ne sont pas interprétés comme SIREN ou PIC ;
+les éventuels RNSR de ces participations restent exploitables.
+
+Le calcul échoue si un même projet Pilier 2 `SIGNED` a des statuts ou années d'appel
+contradictoires. Les projets signés sans année valide sont exclus des séries et
+comptés dans les contrôles. Les résultats sont provisoires, sans ventilation
+disciplinaire ni montant financier ; seules les combinaisons observées sont
+écrites. Les sorties sont `innovation/horizon_effectifs.parquet`,
+`horizon_entites.parquet`, `horizon_meta.json` et, localement,
+`horizon_non_rattaches.parquet`. La publication Athena crée trois collections
+séparées `innovation_horizon_effectifs`, `innovation_horizon_entites` et
+`innovation_horizon_meta`, sans modifier les collections du pilote startups.
+Leur exposition dans l'API et les vues du dépôt tableaux reste à réaliser ;
+aucune publication MongoDB ni activation n'est faite automatiquement.
+
+### 8.7 Tests et recette
 
 Prévoir des jeux synthétiques et quelques contrôles manuels reproductibles :
 

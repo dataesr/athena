@@ -14,7 +14,8 @@ from project.server.main.prix_disciplines import compute_prix_disciplines
 from project.server.main.publications_auteurs import extraire_publications
 from project.server.main.export_dashboard import build_dashboard
 from project.server.main.extract_works import extract_snapshot, summary, check_duplicates
-from project.server.main.pipeline import step_anr, step_awards, step_horizon_topics, step_projets_scanr
+from project.server.main.pipeline import (step_anr, step_awards, step_horizon_topics,
+                                          step_innovation_horizon, step_projets_scanr)
 from project.server.main.indicators import compute_indicators
 from project.server.main.startups import compute_startups
 from project.server.main.logger import get_logger
@@ -46,9 +47,9 @@ logger = get_logger(__name__)
 ETAPES = ["diagnose_daily", "referentiel", "tutelles_rnsr", "extract_snapshot", "summary",
           "check_duplicates", "disciplines", "top_journals", "top10", "erc", "prix", "indicators",
           "publications", "prix_disciplines", "viviers", "copublications", "awards",
-          "projets_scanr", "horizon_topics", "anr", "startups", "publish", "publish_mongo", "dashboard"]
+          "projets_scanr", "horizon_topics", "anr", "startups", "innovation_horizon", "publish", "publish_mongo", "dashboard"]
 # Lancées seulement si demandées explicitement dans "steps" (contrôles, chargement en base)
-HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "awards", "projets_scanr", "horizon_topics", "anr", "startups", "publish_mongo"]
+HORS_DEFAUT = ["diagnose_daily", "summary", "check_duplicates", "awards", "projets_scanr", "horizon_topics", "anr", "startups", "innovation_horizon", "publish_mongo"]
 PAR_DEFAUT = [e for e in ETAPES if e not in HORS_DEFAUT]
 
 
@@ -445,6 +446,11 @@ def _compute(args: dict) -> dict:
 #             startups_meta.json et startups_non_rattaches.parquet
 # ---------------------------------------------------------------------------
     etape("startups", compute_startups)
+
+# 6g. Innovation Horizon : Pilier 2 SIGNED, tous les participants (facultatif).
+#     Écrit innovation/horizon_effectifs, horizon_entites, horizon_non_rattaches
+#     (.parquet) et horizon_meta.json ; ne calcule aucun montant financier.
+    etape("innovation_horizon", step_innovation_horizon)
 
 # ---------------------------------------------------------------------------
 # 7. Publication pour l'application tableaux (une à deux minutes)
