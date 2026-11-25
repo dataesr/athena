@@ -326,6 +326,22 @@ Si les fichiers de lignée manquent, seules les affiliations directes et les
 `startups_non_rattaches.parquet` et les autres sorties de contrôle restent dans
 le dossier Athena et ne sont pas publiés.
 
+### `innovation_horizon_effectifs` — projets Horizon Pilier 2 signés (pilote)
+
+Publiée si l'étape facultative `innovation_horizon` a été exécutée.
+`INN-PRJ-01` compte les `project_id` distincts au statut `SIGNED`, tous rôles
+de participation confondus, par année d'appel et entité. France est calculée
+à partir des participations françaises ; les établissements et leurs tutelles
+suivent la règle commune. Les établissements ne s'additionnent pas.
+
+Chaque document contient `indicateur_id`, `entite_type`, `entite_id`, `annee`,
+`discipline_code` (null), `nb_projets`, `unite` (`nombre`) et `statut`
+(`provisoire`). Seules les combinaisons observées sont écrites. Aucun montant
+ni panel ERC n'est calculé. `innovation_horizon_entites` contient les ROR
+rattachés et leurs noms ; `innovation_horizon_meta` décrit la source, la
+méthode et les contrôles. Les non-rattachés restent locaux. Le statut SIGNED
+ne prouve pas qu'un financement a été versé.
+
 ### `prix_laureats` — un document par lauréat
 
 Liste nominative (données ouvertes de Paysage), pour afficher les lauréats d'un

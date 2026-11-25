@@ -88,6 +88,9 @@ COLLECTIONS = [
     "innovation_effectifs",
     "innovation_entites",
     "innovation_meta",
+    "innovation_horizon_effectifs",
+    "innovation_horizon_entites",
+    "innovation_horizon_meta",
 ]
 
 # Index créés dans Mongo (champs dans l'ordre des filtres des routes)
@@ -124,6 +127,9 @@ INDEX = {
     "innovation_effectifs": [[("indicateur_id", 1), ("entite_id", 1), ("annee", 1)], [("entite_type", 1), ("annee", 1)]],
     "innovation_entites": [[("entite_id", 1)]],
     "innovation_meta": [],
+    "innovation_horizon_effectifs": [[("indicateur_id", 1), ("entite_id", 1), ("annee", 1)]],
+    "innovation_horizon_entites": [[("entite_id", 1)]],
+    "innovation_horizon_meta": [],
 }
 
 
@@ -311,6 +317,17 @@ def _tables(nomenclature: str, data_dir: Path, etabs_path: str, verbose: bool,
         tables["innovation_meta"] = _json(innovation / "startups_meta.json")
     elif verbose:
         print(f"{f_innovation} absent : volet Innovation non publié (lancer startups())")
+    f_horizon = innovation / "horizon_effectifs.parquet"
+    if f_horizon.exists():
+        attendus = [f_horizon, innovation / "horizon_entites.parquet", innovation / "horizon_meta.json"]
+        absents = [path for path in attendus if not path.exists()]
+        if absents:
+            raise FileNotFoundError("Sorties Innovation Horizon incomplètes : " + ", ".join(str(p) for p in absents))
+        tables["innovation_horizon_effectifs"] = sql(f"SELECT * FROM read_parquet('{f_horizon}')")
+        tables["innovation_horizon_entites"] = sql(f"SELECT * FROM read_parquet('{innovation / 'horizon_entites.parquet'}')")
+        tables["innovation_horizon_meta"] = _json(innovation / "horizon_meta.json")
+    elif verbose:
+        print(f"{f_horizon} absent : Innovation Horizon non publiée (lancer innovation_horizon)")
     return tables
 
 

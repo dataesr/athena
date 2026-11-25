@@ -96,6 +96,7 @@ from .extract_sources_institutions import extract_sources_institutions
 from .projets_scanr import build_projets_scanr
 from .anr import compute_anr
 from .horizon_topics import compute_horizon_topics
+from .innovation_horizon import compute_innovation_horizon
 from .indicators import compute_indicators
 from .prix import compute_prix
 from .prix_disciplines import compute_prix_disciplines
@@ -108,7 +109,7 @@ from .top_journals import compute_top_journals, top_journals_from_review
 from .viviers import compute_viviers
 
 STEPS = ["referentiel", "sources_institutions", "disciplines", "top_journals", "top10", "erc", "prix",
-         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "awards", "projets_scanr", "horizon_topics", "anr", "startups", "publish"]
+         "indicators", "publications", "prix_disciplines", "viviers", "copublications", "awards", "projets_scanr", "horizon_topics", "anr", "startups", "innovation_horizon", "publish"]
 
 
 # --- Étapes individuelles ------------------------------------------------------
@@ -223,6 +224,11 @@ def step_startups(data_dir: str = DATA_DIR, **kw):
     return compute_startups(data_dir=data_dir, **kw)
 
 
+def step_innovation_horizon(data_dir: str = DATA_DIR, **kw):
+    """Projets Horizon Pilier 2 signés : France et établissements."""
+    return compute_innovation_horizon(data_dir=data_dir, **kw)
+
+
 def step_publish(nomenclature: str = NOMENCLATURE_DISCIPLINAIRE, data_dir: str = DATA_DIR, **kw):
     """Étape 7 : fichiers de publication (le chargement Mongo reste manuel : publish_mongo())."""
     return publish(nomenclature, data_dir=data_dir, **kw)
@@ -260,7 +266,7 @@ def run(steps=None, start: str = None, end: str = None,
         i1 = STEPS.index(end) if end else len(STEPS) - 1
         steps = STEPS[i0:i1 + 1]
         if not start and not end:
-            steps = [step for step in steps if step != "startups"]
+            steps = [step for step in steps if step not in ("startups", "innovation_horizon")]
     inconnues = set(steps) - set(STEPS) - {"review"}
     if inconnues:
         raise ValueError(f"étapes inconnues : {sorted(inconnues)} ; disponibles : {STEPS + ['review']}")
@@ -286,6 +292,7 @@ def run(steps=None, start: str = None, end: str = None,
         "horizon_topics": lambda: step_horizon_topics(data_dir, nomenclature),
         "anr": lambda: step_anr(data_dir, nomenclature),
         "startups": lambda: step_startups(data_dir),
+        "innovation_horizon": lambda: step_innovation_horizon(data_dir),
         "publish": lambda: step_publish(nomenclature, data_dir),
     }
     if "review" in steps and not reviewed_csv:

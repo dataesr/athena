@@ -18,8 +18,15 @@ Garde-fous :
     la réponse JSON complète (keywords, autres topics...), pas seulement le topic principal ;
   - budget par lancement (ABOUTNESS_BUDGET_USD) ; arrêt aussi quand le budget restant du jour,
     lu dans l'en-tête X-RateLimit-Remaining-USD, passe sous ABOUTNESS_MARGE_USD ;
-  - 429 : attente (Retry-After) puis nouvel essai ; budget épuisé (402/403) : arrêt propre.
-  Ce qui n'a pas été classé faute de budget le sera au lancement suivant.
+  - 429 : attente (Retry-After) puis nouvel essai ; budget épuisé (401/402/403) : arrêt propre ;
+  - erreur passagère (5xx, réseau, délai dépassé) : nouveaux essais espacés (ABOUTNESS_ATTENTES_S),
+    puis le texte est sauté (non mis en cache, repris au lancement suivant) et on continue ;
+  - texte refusé (autre 4xx, ex. 400) : mis en cache comme « rejeté : HTTP 400 : <message> »
+    (pas renvoyé à chaque lancement), mais seulement après un succès qui suit, preuve que l'API
+    fonctionne (sinon une panne côté OpenAlex ferait rejeter des textes valides) ;
+  - ABOUTNESS_ECHECS_MAX textes de suite en échec : arrêt (OpenAlex en panne).
+  Ce qui n'a pas été classé (budget, panne, texte sauté) le sera au lancement suivant ;
+  attrs["complet"] dit s'il reste des textes à reprendre.
 
 Exemple :
     from project.server.main.aboutness import estimer, classer_textes
@@ -40,8 +47,9 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-from .config import (ABOUTNESS_BUDGET_USD, ABOUTNESS_DIR, ABOUTNESS_INTERVALLE_S, ABOUTNESS_MARGE_USD,
-                     ABOUTNESS_URL, ABOUTNESS_VERSION, OPENALEX_API_KEY)
+from .config import (ABOUTNESS_ATTENTES_S, ABOUTNESS_BUDGET_USD, ABOUTNESS_DIR, ABOUTNESS_ECHECS_MAX,
+                     ABOUTNESS_INTERVALLE_S, ABOUTNESS_MARGE_USD, ABOUTNESS_URL, ABOUTNESS_VERSION,
+                     OPENALEX_API_KEY)
 
 COUT_USD = 0.01
 # colonnes du cache et leur type ; « reponse » = réponse JSON complète d'OpenAlex (topics,
@@ -108,7 +116,9 @@ def estimer(textes: pd.DataFrame, version: int = ABOUTNESS_VERSION) -> dict:
 
 
 def _appel(titre: str, resume: str, version: int) -> tuple:
-    """(réponse JSON, budget restant du jour en $ ou None, statut)."""
+    """(réponse JSON, budget restant du jour en $ ou None, statut) ; statut 0 = erreur réseau ou
+    délai dépassé ; en cas d'erreur, la réponse porte « retry_after » et « message » (début du
+    corps de la réponse d'erreur, jamais l'URL qui contient la clé)."""
     q = {"api_key": OPENALEX_API_KEY} if OPENALEX_API_KEY else {}
     if version != 2:
         q["version"] = str(version)
@@ -120,7 +130,17 @@ def _appel(titre: str, resume: str, version: int) -> tuple:
             reste = r.headers.get("X-RateLimit-Remaining-USD")
             return json.load(r), (float(reste) if reste else None), 200
     except urllib.error.HTTPError as e:     # message sans l'URL, qui contient la clé
-        return {"retry_after": e.headers.get("Retry-After")}, None, e.code
+        try:
+            msg = " ".join(e.read(500).decode("utf-8", "replace").split())[:200]
+        except Exception:
+            msg = ""
+        return {"retry_after": e.headers.get("Retry-After"), "message": msg}, None, e.code
+    except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
+        return {"retry_after": None, "message": type(e).__name__}, None, 0
+
+
+def _passagere(statut: int) -> bool:
+    return statut == 429 or statut == 0 or statut >= 500
 
 
 def classer_textes(textes: pd.DataFrame, version: int = ABOUTNESS_VERSION,
@@ -143,6 +163,9 @@ def classer_textes(textes: pd.DataFrame, version: int = ABOUTNESS_VERSION,
               f"(~{e['cout_usd']} $, ~{e['duree_heures']} h) ; budget du lancement : {budget_usd} $")
 
     nouveaux, depense, arret = [], 0.0, None
+    rejets_en_attente = []          # 4xx : écrits seulement après un succès (l'API fonctionne)
+    sautes = {}                     # empreinte -> motif (erreur passagère persistante)
+    echecs_de_suite, reste = 0, None
 
     def ecrire():
         if nouveaux:
@@ -150,36 +173,59 @@ def classer_textes(textes: pd.DataFrame, version: int = ABOUTNESS_VERSION,
             duckdb.from_df(pd.DataFrame(nouveaux)).project(_TYPES).write_parquet(str(f))
             nouveaux.clear()
 
+    def ligne(r, rep, tid=None, score=None, note=None):
+        return {"empreinte": r.empreinte, "topic_id": tid, "topic_score": score, "aboutness_note": note,
+                "titre_envoye": r.titre_envoye, "resume_envoye": r.resume_envoye,
+                "reponse": json.dumps(rep, ensure_ascii=False),
+                "date_appel": time.strftime("%Y-%m-%dT%H:%M:%S")}
+
     t0 = time.time()
     for k, r in enumerate(a_faire.itertuples(), 1):
         if depense + COUT_USD > budget_usd + 1e-9:
             arret = f"budget du lancement atteint ({budget_usd} $)"
             break
-        for essai in range(5):
+        for essai in range(len(ABOUTNESS_ATTENTES_S) + 1):
             debut = time.time()
-            rep, reste, statut = _appel(r.titre_envoye, r.resume_envoye, version)
+            rep, reste_appel, statut = _appel(r.titre_envoye, r.resume_envoye, version)
             time.sleep(max(0.0, intervalle_s - (time.time() - debut)))
-            if statut == 429:
-                time.sleep(float(rep.get("retry_after") or 5 * (essai + 1)))
-                continue
-            if statut >= 500:
-                time.sleep(5 * (essai + 1))
-                continue
-            break
+            if not _passagere(statut) or essai == len(ABOUTNESS_ATTENTES_S):
+                break
+            attente = ABOUTNESS_ATTENTES_S[essai]
+            if statut == 429 and rep.get("retry_after"):
+                try:
+                    attente = max(attente, float(rep["retry_after"]))
+                except ValueError:
+                    pass
+            if verbose and essai >= 2:
+                print(f"  OpenAlex HTTP {statut or 'réseau'} ({rep.get('message')}) : "
+                      f"essai {essai + 2} dans {attente:.0f} s")
+            time.sleep(attente)
+        if reste_appel is not None:
+            reste = reste_appel
         if statut in (401, 402, 403):
             arret = f"refus OpenAlex (HTTP {statut}) : clé ou budget du jour épuisé"
             break
-        if statut != 200:
-            arret = f"erreur OpenAlex persistante (HTTP {statut})"
-            break
-        depense += COUT_USD
-        pt = rep.get("primary_topic") or {}
-        tid = (pt.get("id") or "").rsplit("/", 1)[-1] or None
-        nouveaux.append({"empreinte": r.empreinte, "topic_id": tid, "topic_score": pt.get("score"),
-                         "aboutness_note": None if tid else f"sans topic : {(rep.get('meta') or {}).get('note')}",
-                         "titre_envoye": r.titre_envoye, "resume_envoye": r.resume_envoye,
-                         "reponse": json.dumps(rep, ensure_ascii=False),
-                         "date_appel": time.strftime("%Y-%m-%dT%H:%M:%S")})
+        if statut == 200:
+            echecs_de_suite = 0
+            depense += COUT_USD
+            nouveaux.extend(rejets_en_attente)      # l'API répond : les rejets sont bien dus au texte
+            rejets_en_attente.clear()
+            pt = rep.get("primary_topic") or {}
+            tid = (pt.get("id") or "").rsplit("/", 1)[-1] or None
+            nouveaux.append(ligne(r, rep, tid, pt.get("score"),
+                                  None if tid else f"sans topic : {(rep.get('meta') or {}).get('note')}"))
+        else:
+            echecs_de_suite += 1
+            motif = f"HTTP {statut or 'réseau'}" + (f" : {rep['message']}" if rep.get("message") else "")
+            if _passagere(statut):
+                sautes[r.empreinte] = f"erreur OpenAlex ({motif})"
+            else:
+                rejets_en_attente.append(ligne(r, rep, note=f"rejeté : {motif}"))
+            if verbose:
+                print(f"  texte {r.cle} sauté : {motif}")
+            if echecs_de_suite >= ABOUTNESS_ECHECS_MAX:
+                arret = f"{echecs_de_suite} textes de suite en erreur OpenAlex (dernière : {motif})"
+                break
         if len(nouveaux) >= lot:
             ecrire()
         if verbose and k % 500 == 0:
@@ -188,16 +234,21 @@ def classer_textes(textes: pd.DataFrame, version: int = ABOUTNESS_VERSION,
         if reste is not None and reste < marge_usd:
             arret = f"budget restant du jour sous la marge ({reste:.0f} $ < {marge_usd} $)"
             break
-    ecrire()
+    ecrire()            # les rejets encore en attente (non confirmés par un succès) sont oubliés
+    for x in rejets_en_attente:
+        sautes[x["empreinte"]] = f"erreur OpenAlex ({x['aboutness_note'].removeprefix('rejeté : ')})"
     if verbose:
         print(f"Aboutness : {depense:.2f} $ dépensés en {(time.time() - t0) / 60:.0f} min"
-              + (f" ; ARRÊT : {arret} (relancer pour la suite)" if arret else ""))
+              + (f" ; {len(sautes):,} textes sautés (erreur OpenAlex)" if sautes else "")
+              + (f" ; ARRÊT : {arret}" if arret else "")
+              + (" (relancer pour la suite)" if arret or sautes else ""))
 
     cache = lire_cache(version)
     out = t[["cle", "empreinte"]].merge(cache, on="empreinte", how="left")
     out["aboutness_note"] = out["aboutness_note"].astype(object)
     out.loc[t["empreinte"].isna().values, "aboutness_note"] = "trop court"
-    out.loc[out["empreinte"].notna() & out["topic_score"].isna() & out["aboutness_note"].isna(),
-            "aboutness_note"] = "non classé : " + (arret or "inconnu")
-    out.attrs.update(depense_usd=round(depense, 2), arret=arret)
+    manque = out["empreinte"].notna() & out["topic_score"].isna() & out["aboutness_note"].isna()
+    out.loc[manque, "aboutness_note"] = "non classé : " + out.loc[manque, "empreinte"].map(sautes).fillna(arret or "inconnu")
+    out.attrs.update(depense_usd=round(depense, 2), arret=arret, textes_sautes=len(sautes),
+                     complet=not bool(manque.any()))
     return out[["cle", "topic_id", "topic_score", "aboutness_note"]]
