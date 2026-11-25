@@ -113,7 +113,8 @@ def compute_horizon_topics(horizon_dir: str = HORIZON_DIR, data_dir: str = DATA_
         "nb_sans_topic": int(non.sum()),
         "sans_topic_motifs": p.loc[non, "aboutness_note"].fillna("?").str.split(" :").str[0].value_counts().to_dict(),
         "depense_usd": r.attrs.get("depense_usd"), "arret": r.attrs.get("arret"),
-        "complet": bool(not r.attrs.get("arret")),
+        "textes_sautes": r.attrs.get("textes_sautes"),
+        "complet": bool(r.attrs.get("complet")),
     }
     if verbose:
         print(f"Horizon hors ERC : {res['nb_projets']:,} projets ({res['nb_soumis']:,} soumis, "

@@ -431,6 +431,8 @@ ABOUTNESS_VERSION = 2              # classifieur des topics actuels des works et
 ABOUTNESS_INTERVALLE_S = 1.05      # pause entre deux requêtes (limite : 1 requête par seconde)
 ABOUTNESS_BUDGET_USD = 200         # dépense maximale par lancement (0,01 $ par texte) ; clé : 200 $ par jour
 ABOUTNESS_MARGE_USD = 2            # arrêt si le budget restant du jour (en-tête OpenAlex) passe dessous
+ABOUTNESS_ATTENTES_S = (5, 15, 30, 60, 120)   # attentes avant les nouveaux essais (5xx, 429, réseau) : ~4 min
+ABOUTNESS_ECHECS_MAX = 10          # textes de suite en échec (après les essais) : arrêt, OpenAlex en panne
 ABOUTNESS_DIR = f"{DATA_ROOT}/aboutness"   # cache des textes déjà classés (jamais payés deux fois)
 
 # --- ANR (anr.py) ---------------------------------------------------------------------------

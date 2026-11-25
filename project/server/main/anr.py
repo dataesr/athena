@@ -171,7 +171,7 @@ def compute_anr(anr_dir: str = ANR_DIR, data_dir: str = DATA_DIR, projets_dir: s
 
     # Panel ERC
     projets, info_aboutness = panels_projets(projets, nomenclature, data_dir, verbose)
-    aboutness_complet = not info_aboutness.get("arret")
+    aboutness_complet = bool(info_aboutness.get("complet"))
 
     # Affiliations : règle commune (structure + toutes les tutelles RNSR + lignée OpenAlex)
     parts, liens = rattacher_structures(parts, ref_dir)
