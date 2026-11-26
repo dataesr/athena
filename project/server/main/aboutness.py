@@ -248,7 +248,9 @@ def classer_textes(textes: pd.DataFrame, version: int = ABOUTNESS_VERSION,
     out["aboutness_note"] = out["aboutness_note"].astype(object)
     out.loc[t["empreinte"].isna().values, "aboutness_note"] = "trop court"
     manque = out["empreinte"].notna() & out["topic_score"].isna() & out["aboutness_note"].isna()
-    out.loc[manque, "aboutness_note"] = "non classé : " + out.loc[manque, "empreinte"].map(sautes).fillna(arret or "inconnu")
+    if manque.any():
+        motifs = out.loc[manque, "empreinte"].map(sautes).astype(object).fillna(arret or "inconnu")
+        out.loc[manque, "aboutness_note"] = "non classé : " + motifs
     out.attrs.update(depense_usd=round(depense, 2), arret=arret, textes_sautes=len(sautes),
                      complet=not bool(manque.any()))
     return out[["cle", "topic_id", "topic_score", "aboutness_note"]]
